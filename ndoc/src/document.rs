@@ -504,13 +504,13 @@ impl Selection {
     pub fn areas(&self, rope: &Rope) -> Vec<(usize, usize)> {
         match self.end().line - self.start().line {
             0 => {
-                vec![(self.start().column, self.end().column - self.start().column)]
+                vec![(self.start().column, self.end().column)]
             }
             1 => {
                 vec![
                     (
                         self.start().column,
-                        line_len_char(rope, self.start().line) - self.start().column,
+                        line_len_char(rope, self.start().line),
                     ),
                     (0, self.end().column),
                 ]
@@ -519,7 +519,7 @@ impl Selection {
                 let mut v = Vec::new();
                 v.push((
                     self.start().column,
-                    line_len_char(rope, self.start().line) - self.start().column,
+                    line_len_char(rope, self.start().line),
                 ));
 
                 for l in self.start().line + 1..self.end().line {

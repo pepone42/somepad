@@ -40,7 +40,7 @@ impl StatefulWidget for TextArea {
             let mut y = (s.start().line - state.scrolly) as u16;
             for line in selection_area {
                 let xs = tab2space_char_idx(&self.rope.slice(..),y as _,4)[line.0];
-                let xe = tab2space_char_idx(&self.rope.slice(..),y as _,4)[line.0 + line.1];
+                let xe = tab2space_char_idx(&self.rope.slice(..),y as _,4)[line.1];
                 let w = xe-xs;
                 let bgarea = Rect::new( xs as _, y, w as _, 1);
                 if y<area.height {
