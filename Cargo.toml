@@ -1,0 +1,20 @@
+[workspace]
+
+members = [
+    "ndoc","ui/*"
+]
+
+resolver = "2"
+
+# [package]
+# name = "ncode"
+# version = "0.1.0"
+# edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# [dependencies]
+# ndoc = {path = "./ndoc"}
+# tui = {path = "./ui/ratatui"}
+
+

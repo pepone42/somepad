@@ -1,0 +1,18 @@
+[package]
+name = "ncode-ratatui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ncode"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ndoc = {path = "../../ndoc"}
+
+crossterm = "0.27.0"
+
+gumdrop = "0.8.1"
+ratatui = "0.24.0"

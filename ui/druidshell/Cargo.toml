@@ -1,0 +1,14 @@
+[package]
+name = "ncode-druidshell"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "xncode"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ndoc = {path = "../../ndoc"}
+druid-shell = "0.8"
