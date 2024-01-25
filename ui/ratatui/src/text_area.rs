@@ -25,7 +25,6 @@ impl StatefulWidget for TextArea {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut y = 0;
         for line in self.rope.lines().skip(state.scrolly).take(area.height as _)
-        //.map(|l| Line::raw(get_line_info(&l,0,4)))
         {
             let line = Line::raw(get_line_info(&line, 0, self.indent_len));
             buf.set_line(0, y, &line, area.width);

@@ -18,7 +18,7 @@ impl Default for FileInfo {
             encoding: encoding_rs::UTF_8,
             bom: None,
             linefeed: Default::default(),
-            indentation: Indentation::Tab(4),
+            indentation: Indentation::Space(4),
             syntax: "txt".to_owned(),
         }
     }
