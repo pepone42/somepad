@@ -62,6 +62,7 @@ fn main() -> Result<()> {
                 TextArea {
                     rope: document.rope.clone(),
                     sel: document.selections.clone(),
+                    indent_len: document.file_info.indentation.len()
                 },
                 chunks[0],
                 &mut text_area_state,
