@@ -4,6 +4,9 @@ use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
 use ropey::{Rope, RopeSlice};
 
+#[cfg(feature = "vizia")]
+use vizia::prelude::*;
+
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
@@ -12,13 +15,26 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Document {
     pub rope: Rope,
     edit_stack: Vec<(Rope, Vec<Selection>)>,
     edit_stack_top: usize,
     pub file_info: FileInfo,
     pub selections: Vec<Selection>,
+}
+
+#[cfg(feature = "vizia")]
+impl Data for Document {
+    fn same(&self, other: &Self) -> bool {
+        *self == *other
+    }
+}
+
+impl PartialEq for Document {
+    fn eq(&self, other: &Self) -> bool {
+        self.rope == other.rope && self.edit_stack == other.edit_stack && self.edit_stack_top == other.edit_stack_top && self.file_info == other.file_info && self.selections == other.selections
+    }
 }
 
 impl Default for Document {

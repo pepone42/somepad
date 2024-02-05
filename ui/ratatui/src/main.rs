@@ -1,9 +1,9 @@
 mod text_area;
 
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseEvent, KeyEvent},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
+    ExecutableCommand, execute,
 };
 use ndoc::{Document, MoveDirection};
 use gumdrop::Options;
@@ -16,7 +16,7 @@ use ratatui::{
 };
 use std::{
     fs,
-    io::{stdout, Result},
+    io::{stdout, Result, self},
 };
 use text_area::{TextArea, TextAreaState};
 
@@ -38,10 +38,15 @@ fn main() -> Result<()> {
 
     let mut text_area_state = TextAreaState::default();
 
-    stdout().execute(EnterAlternateScreen)?;
+    let mut stdout = io::stdout();
+    
     enable_raw_mode()?;
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
     terminal.clear()?;
+
+
 
     loop {
         let mut area = Default::default();
@@ -111,64 +116,64 @@ fn main() -> Result<()> {
             frame.render_widget(Paragraph::new(s), chunks[3]);
         })?;
 
-        if let event::Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
+
+        match event::read()? {
+        
+            event::Event::Key(KeyEvent {kind: KeyEventKind::Press, code, modifiers, ..}) => {
+                match code {
                     KeyCode::Esc => break,
 
                     KeyCode::Up
-                        if key
-                            .modifiers
+                        if modifiers
                             .contains(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
                     {
                         document.duplicate_selection(MoveDirection::Up)
                     }
                     KeyCode::Down
-                        if key
-                            .modifiers
+                        if modifiers
                             .contains(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
                     {
                         document.duplicate_selection(MoveDirection::Down)
                     }
                     KeyCode::Up => document.move_selections(
                         MoveDirection::Up,
-                        key.modifiers.contains(KeyModifiers::SHIFT),
+                        modifiers.contains(KeyModifiers::SHIFT),
                     ),
                     KeyCode::Down => document.move_selections(
                         MoveDirection::Down,
-                        key.modifiers.contains(KeyModifiers::SHIFT),
+                        modifiers.contains(KeyModifiers::SHIFT),
                     ),
-                    KeyCode::Left if key.modifiers.contains(KeyModifiers::CONTROL) => document
+                    KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => document
                         .move_selections_word(
                             MoveDirection::Left,
-                            key.modifiers.contains(KeyModifiers::SHIFT),
+                            modifiers.contains(KeyModifiers::SHIFT),
                         ),
                     KeyCode::Left => document.move_selections(
                         MoveDirection::Left,
-                        key.modifiers.contains(KeyModifiers::SHIFT),
+                        modifiers.contains(KeyModifiers::SHIFT),
                     ),
-                    KeyCode::Right if key.modifiers.contains(KeyModifiers::CONTROL) => document
+                    KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => document
                         .move_selections_word(
                             MoveDirection::Right,
-                            key.modifiers.contains(KeyModifiers::SHIFT),
+                            modifiers.contains(KeyModifiers::SHIFT),
                         ),
                     KeyCode::Right => document.move_selections(
                         MoveDirection::Right,
-                        key.modifiers.contains(KeyModifiers::SHIFT),
+                        modifiers.contains(KeyModifiers::SHIFT),
                     ),
                     KeyCode::PageUp => {
                         // shift only work if the terminal don't intercep it
                         document.page_up(
                             area.height as _,
-                            key.modifiers.contains(KeyModifiers::SHIFT),
+                            modifiers.contains(KeyModifiers::SHIFT),
                         );
                     }
                     KeyCode::PageDown => document.page_down(
                         area.height as _,
-                        key.modifiers.contains(KeyModifiers::SHIFT),
+                        modifiers.contains(KeyModifiers::SHIFT),
                     ),
-                    KeyCode::Home => document.home(key.modifiers.contains(KeyModifiers::SHIFT)),
-                    KeyCode::End => document.end(key.modifiers.contains(KeyModifiers::SHIFT)),
+                    KeyCode::Home => document.home(modifiers.contains(KeyModifiers::SHIFT)),
+                    KeyCode::End => document.end(modifiers.contains(KeyModifiers::SHIFT)),
                     KeyCode::Backspace => {
                         document.backspace();
                     }
@@ -179,18 +184,25 @@ fn main() -> Result<()> {
                     KeyCode::Tab => document.indent(false),
 
                     KeyCode::BackTab => document.deindent(),
-                    KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => document.undo(),
-                    KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => document.redo(),
+                    KeyCode::Char('z') if modifiers.contains(KeyModifiers::CONTROL) => document.undo(),
+                    KeyCode::Char('y') if modifiers.contains(KeyModifiers::CONTROL) => document.redo(),
                     KeyCode::Char(c) => {
                         document.insert(&c.to_string());
-                    }
+                    },
+                    
                     _ => (),
                 }
-            }
+            },
+            // event::Event::Mouse(MouseEvent { kind, column, row, modifiers }) => (
+            //     match kind {
+            //         event::MouseEventKind::ScrollDown => 
+            //     }
+            // ),
+            _ => (),
         }
     }
 
-    stdout().execute(LeaveAlternateScreen)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen,DisableMouseCapture)?;
     disable_raw_mode()?;
     Ok(())
 }

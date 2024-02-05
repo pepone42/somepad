@@ -3,7 +3,7 @@ use std::fmt::Display;
 use encoding_rs::Encoding;
 use ropey::RopeSlice;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileInfo {
     pub encoding: &'static Encoding,
     pub bom: Option<Vec<u8>>,
