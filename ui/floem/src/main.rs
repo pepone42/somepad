@@ -172,31 +172,36 @@ impl View for TextEditor {
             .skip(first_line)
             .take(total_line)
         {
+            layout.set_tab_width(self.doc.get().file_info.indentation.len());
             layout.set_text(&l.to_string(), attr_list.clone());
-            cx.draw_text(&layout, Point::new(0.5, y.ceil() + 0.5));
 
             if let Some(sel) = selection_areas.get(&i) {
                 let start = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.0))));
                 let end = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.1))));
 
 
-                let r = Rect::new(start.point.x, y, end.point.x, y + self.line_height);
-                let b = Brush::Solid(Color::BLACK.with_alpha_factor(0.5));
+                let r = Rect::new(start.point.x.ceil(), y.ceil(), end.point.x.ceil(), (y + self.line_height).ceil()+1.);
+                let b = Brush::Solid(Color::GRAY);
 
-                cx.fill(&r, &b, 1.);
+                cx.fill(&r, &b, 0.);
             }
+
+            
+            cx.draw_text(&layout, Point::new(0., y.ceil()  ));
+
+
             if let Some(sel) = selections.get(&i) {
                 //let idx = dbg!(NextGraphemeIdxIterator::new(&self.doc.get().rope.line(i)).nth(dbg!(*sel)));
                 let pos = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(*sel))));
                 //let pos = layout.hit_position(*sel);
                 let r = Rect::new(
-                    pos.point.x.ceil() + 0.5,
-                    y.ceil() - 0.5,
-                    pos.point.x.ceil() + 0.5,
-                    (y + self.line_height).ceil() + 0.5,
+                    pos.point.x.ceil() ,
+                    y.ceil(),
+                    pos.point.x.ceil() ,
+                    (y + self.line_height).ceil(),
                 );
                 let b = Brush::Solid(Color::BLACK);
-                cx.stroke(&r, &b, 1.);
+                cx.stroke(&r, &b, 2.);
             }
 
             y += self.line_height;
