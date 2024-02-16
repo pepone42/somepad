@@ -1,4 +1,10 @@
-use std::{borrow::Cow, fs, io::Read, io::Result, path::Path};
+use std::{
+    borrow::Cow,
+    fs,
+    io::Read,
+    io::Result,
+    path::{Path, PathBuf},
+};
 
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
@@ -10,8 +16,8 @@ use vizia::prelude::*;
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
-        get_line_start_boundary, next_grapheme_boundary, next_word_boundary,
-        prev_grapheme_boundary, prev_word_boundary,
+        char_to_grapheme, get_line_start_boundary, grapheme_to_byte, grapheme_to_char,
+        next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary,
     },
 };
 
@@ -22,6 +28,7 @@ pub struct Document {
     edit_stack_top: usize,
     pub file_info: FileInfo,
     pub selections: Vec<Selection>,
+    pub file_name: Option<PathBuf>,
 }
 
 #[cfg(feature = "vizia")]
@@ -33,7 +40,11 @@ impl Data for Document {
 
 impl PartialEq for Document {
     fn eq(&self, other: &Self) -> bool {
-        self.rope == other.rope && self.edit_stack == other.edit_stack && self.edit_stack_top == other.edit_stack_top && self.file_info == other.file_info && self.selections == other.selections
+        self.rope == other.rope
+            && self.edit_stack == other.edit_stack
+            && self.edit_stack_top == other.edit_stack_top
+            && self.file_info == other.file_info
+            && self.selections == other.selections
     }
 }
 
@@ -46,6 +57,7 @@ impl Default for Document {
             edit_stack_top: 0,
             file_info: Default::default(),
             selections: vec![Selection::default()],
+            file_name: None,
         }
     }
 }
@@ -81,6 +93,7 @@ impl Document {
                         syntax: "txt".to_owned(),
                     },
                     selections: vec![Selection::default()],
+                    file_name: Some(path.as_ref().to_path_buf()),
                 })
             }
             Some((encoding, bom_size)) => {
@@ -105,6 +118,7 @@ impl Document {
                         syntax: "txt".to_owned(),
                     },
                     selections: vec![Selection::default()],
+                    file_name: Some(path.as_ref().to_path_buf()),
                 })
             }
         }
@@ -249,11 +263,11 @@ impl Document {
             match dir {
                 MoveDirection::Up => {
                     s.head.line = s.head.line.saturating_sub(1);
-                    s.head.column = s.head.vcol.min(line_len_char(&self.rope, s.head.line));
+                    s.head.column = s.head.vcol.min(line_len_grapheme(&self.rope, s.head.line));
                 }
                 MoveDirection::Down => {
                     s.head.line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
-                    s.head.column = s.head.vcol.min(line_len_char(&self.rope, s.head.line));
+                    s.head.column = s.head.vcol.min(line_len_grapheme(&self.rope, s.head.line));
                 }
                 MoveDirection::Left => {
                     let start = s.head.char_idx(&self.rope.slice(..));
@@ -266,8 +280,9 @@ impl Document {
                     let start = s.head.char_idx(&self.rope.slice(..));
                     s.head = Position::from_char_idx(
                         &self.rope.slice(..),
-                        next_grapheme_boundary(&self.rope.slice(..), start),
+                        dbg!(next_grapheme_boundary(&self.rope.slice(..), start)),
                     );
+                    dbg!(s.head);
                 }
             }
             if !expand {
@@ -309,7 +324,10 @@ impl Document {
                 let s = *self.selections.iter().max().unwrap();
                 let mut news = s;
                 news.head.line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
-                news.head.column = s.head.vcol.min(line_len_char(&self.rope, news.head.line));
+                news.head.column = s
+                    .head
+                    .vcol
+                    .min(line_len_grapheme(&self.rope, news.head.line));
                 news.tail = news.head;
                 if news.head.line > s.head.line {
                     self.selections.push(news);
@@ -319,7 +337,10 @@ impl Document {
                 let s = *self.selections.iter().min().unwrap();
                 let mut news = s;
                 news.head.line = s.head.line.saturating_sub(1);
-                news.head.column = s.head.vcol.min(line_len_char(&self.rope, news.head.line));
+                news.head.column = s
+                    .head
+                    .vcol
+                    .min(line_len_grapheme(&self.rope, news.head.line));
                 news.tail = news.head;
                 if news.head.line < s.head.line {
                     self.selections.push(news);
@@ -334,7 +355,7 @@ impl Document {
     pub fn page_up(&mut self, amount: usize, expand: bool) {
         for s in &mut self.selections {
             s.head.line = s.head.line.saturating_sub(amount);
-            s.head.column = s.head.vcol.min(line_len_char(&self.rope, s.head.line));
+            s.head.column = s.head.vcol.min(line_len_grapheme(&self.rope, s.head.line));
             if !expand {
                 s.tail = s.head;
             }
@@ -345,7 +366,7 @@ impl Document {
     pub fn page_down(&mut self, amount: usize, expand: bool) {
         for s in &mut self.selections {
             s.head.line = usize::min(s.head.line + amount, self.rope.len_lines() - 1);
-            s.head.column = s.head.vcol.min(line_len_char(&self.rope, s.head.line));
+            s.head.column = s.head.vcol.min(line_len_grapheme(&self.rope, s.head.line));
             if !expand {
                 s.tail = s.head;
             }
@@ -359,6 +380,7 @@ impl Document {
                 c if c == get_line_start_boundary(&self.rope.slice(..), s.head.line) => 0,
                 _ => get_line_start_boundary(&self.rope.slice(..), s.head.line),
             };
+            s.head.vcol = s.head.column;
             if !expand {
                 s.tail = s.head;
             }
@@ -367,8 +389,10 @@ impl Document {
         self.merge_selections();
     }
     pub fn end(&mut self, expand: bool) {
+        dbg!(expand);
         for s in &mut self.selections {
-            s.head.column = line_len_char(&self.rope, s.head.line);
+            s.head.column = line_len_grapheme(&self.rope, s.head.line);
+            s.head.vcol = s.head.column;
             if !expand {
                 s.tail = s.head;
             }
@@ -468,7 +492,7 @@ impl PartialOrd for Position {
             Some(core::cmp::Ordering::Equal) => {}
             ord => return ord,
         }
-        self.vcol.partial_cmp(&other.column)
+        self.column.partial_cmp(&other.column)
     }
 }
 
@@ -517,32 +541,34 @@ impl Selection {
             self.tail
         }
     }
-    pub fn areas(&self, rope: &Rope) -> Vec<(usize, usize)> {
+    pub fn areas(&self, rope: &Rope) -> Vec<(usize, usize, usize)> {
         match self.end().line - self.start().line {
             0 => {
-                vec![(self.start().column, self.end().column)]
+                vec![(self.start().column, self.end().column, self.start().line)]
             }
             1 => {
                 vec![
                     (
                         self.start().column,
-                        line_len_char(rope, self.start().line),
+                        line_len_grapheme(rope, self.start().line),
+                        self.start().line,
                     ),
-                    (0, self.end().column),
+                    (0, self.end().column, self.end().line),
                 ]
             }
             _ => {
                 let mut v = Vec::new();
                 v.push((
                     self.start().column,
-                    line_len_char(rope, self.start().line),
+                    line_len_grapheme(rope, self.start().line),
+                    self.start().line,
                 ));
 
                 for l in self.start().line + 1..self.end().line {
-                    v.push((0, line_len_char(rope, l)));
+                    v.push((0, line_len_grapheme(rope, l), l));
                 }
 
-                v.push((0, self.end().column));
+                v.push((0, self.end().column, self.end().line));
                 v
             }
         }
@@ -566,6 +592,10 @@ impl Selection {
     pub fn collide_with(&self, other: Selection) -> bool {
         self.end() > other.start() || (self.head == self.tail && self.head == other.head)
     }
+
+    pub fn is_single_line(&self) -> bool {
+        self.head.line == self.tail.line
+    }
 }
 
 // TODO: Unoptimal
@@ -581,9 +611,9 @@ pub fn line_len_char(rope: &Rope, line_idx: usize) -> usize {
     r.len() - linefeed_len
 }
 
-pub fn position_to_char(rope: &RopeSlice, position: Position) -> usize {
-    let l = rope.line_to_char(position.line);
-    l + position.column
+pub fn position_to_char(slice: &RopeSlice, position: Position) -> usize {
+    let l = slice.line_to_char(position.line);
+    l + dbg!(grapheme_to_char(&slice.line(position.line), dbg!(position.column)))
 }
 
 #[test]
@@ -593,28 +623,56 @@ fn test_position_to_char() {
     assert_eq!(position_to_char(&r.slice(..), Position::new(3, 0)), 10);
 }
 
+#[test]
+fn test_position_from_char_idx() {
+    let source = include_str!("../test_assets/utf8-demo.txt");
+    let expected = include_str!("../test_assets/expected.txt");
+    let expected = expected
+        .lines()
+        .map(|l| l.split(' '))
+        .map(|mut l| {
+            //dbg!(l.nth(0),l.nth(0),l.nth(0));
+            (
+                
+                l.nth(0).unwrap().parse::<usize>().unwrap(),
+                l.nth(0).unwrap().parse::<usize>().unwrap(),
+                l.nth(0).unwrap().parse::<usize>().unwrap(),
+            )
+        })
+        .collect::<Vec<(usize, usize, usize)>>();
+    let rope = Rope::from(source);
+    let slice = rope.slice(..);
+    
+    for e in expected {
+        dbg!(e.0,e.1,e.2,slice.line(e.1).to_string());
+        assert_eq!(
+            Position::from_char_idx(&slice, rope.byte_to_char(e.0)),
+            Position::new(e.1, e.2),"testing byte index {} (char {}) for line {}",e.0,rope.byte_to_char(e.0),slice.line(e.1).to_string()
+        );
+    }
+}
+
+// #[test]
+// fn test_position_from_char_idx_point() {
+//     let rope = Rope::from("  Misc Sm Circles:  ｡ ⋄ ° ﾟ ˚ ﹾ");
+//     assert_eq!(char_to_position(&rope.slice(..), 27), Position::new(0, 27));
+// }
+
+#[test]
+fn test_char_to_grapheme() {
+    let rope = Rope::from("  Diamonds:         ⋄ ᛜ ⌔ ◇ ⟐ ◈ ◆   ◊");
+    let column = char_to_grapheme(&rope.slice(..), 27);
+    assert_eq!(column ,27);
+}
+
 pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
     let line = rope.char_to_line(char_idx.min(rope.len_chars()));
-    let column = char_idx - rope.line_to_char(line);
+    //let column = print_positions::print_positions(&rope.line(line).chars().take(char_idx).collect::<String>()).count();
+    let column = char_to_grapheme(&rope.line(line), char_idx - rope.line_to_char(line));
     Position::new(line, column)
 }
 
 pub fn line_len_grapheme(rope: &Rope, line_idx: usize) -> usize {
-    let line = rope.line(line_idx);
-    let mut idx = 0;
-    let mut last_idx = 0;
-    let mut grapheme_count = 0;
-    while idx < line.len_chars() {
-        last_idx = idx;
-        idx = next_grapheme_boundary(&line, idx);
-        grapheme_count += 1;
-    }
-    let last = line.slice(last_idx..idx).to_string();
-    grapheme_count
-        - match last.as_str() {
-            "\r\n" | "\n" | "\r" => 1,
-            _ => 0,
-        }
+    line_len_char(rope, line_idx)
+    //char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
 }
-
-

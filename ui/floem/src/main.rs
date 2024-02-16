@@ -15,6 +15,7 @@ use floem::view::{View, ViewData};
 use floem::views::{container, h_stack, label, scroll, stack, v_stack, Decorators};
 use floem::widgets::button;
 use floem::{EventPropagation, Renderer};
+use ndoc::rope_utils::{grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator};
 use ndoc::{Document, Indentation};
 
 enum TextEditorCommand {
@@ -50,7 +51,6 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         page_len: 0,
     }
 }
-
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
         self.id()
@@ -82,7 +82,9 @@ impl View for TextEditor {
                             &self.doc.get().rope.line(sel.line).to_string(),
                             AttrsList::new(attrs),
                         );
-                        let hit = t.hit_position(sel.column);
+                        // let idx = NextGraphemeIdxIterator::new(&self.doc.get().rope.line(sel.line)).nth(sel.column);
+                        // let hit = t.hit_position(idx.unwrap());
+                        let hit = t.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(sel.line),dbg!(sel.column))));
                         let rect = Rect::new(
                             hit.point.x - 25.,
                             self.line_height * (sel.line as f64) - 25.,
@@ -100,7 +102,7 @@ impl View for TextEditor {
         cx.layout_node(self.id(), true, |cx| {
             let (width, height) = (
                 1024.,
-                self.line_height * self.doc.get().rope.len_lines() as f64,
+                dbg!(self.line_height * self.doc.get().rope.len_lines() as f64),
             ); //attrs.line_height. * self.rope.len_lines());
 
             if self.text_node.is_none() {
@@ -123,7 +125,8 @@ impl View for TextEditor {
     }
 
     fn compute_layout(&mut self, cx: &mut floem::context::ComputeLayoutCx) -> Option<Rect> {
-        self.viewport = cx.current_viewport();
+
+        self.viewport = dbg!(cx.current_viewport());
         self.page_len = (self.viewport.height() / self.line_height).ceil() as usize;
         None
     }
@@ -138,7 +141,7 @@ impl View for TextEditor {
         let attr_list = AttrsList::new(attrs);
 
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
-        let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
+        let total_line = ((dbg!(self.viewport.height()) / self.line_height).ceil() as usize) + 1;
 
         let selections = self
             .doc
@@ -173,8 +176,9 @@ impl View for TextEditor {
             cx.draw_text(&layout, Point::new(0.5, y.ceil() + 0.5));
 
             if let Some(sel) = selection_areas.get(&i) {
-                let start = layout.hit_position(sel.0);
-                let end = layout.hit_position(sel.1);
+                let start = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.0))));
+                let end = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.1))));
+
 
                 let r = Rect::new(start.point.x, y, end.point.x, y + self.line_height);
                 let b = Brush::Solid(Color::BLACK.with_alpha_factor(0.5));
@@ -182,7 +186,9 @@ impl View for TextEditor {
                 cx.fill(&r, &b, 1.);
             }
             if let Some(sel) = selections.get(&i) {
-                let pos = layout.hit_position(*sel);
+                //let idx = dbg!(NextGraphemeIdxIterator::new(&self.doc.get().rope.line(i)).nth(dbg!(*sel)));
+                let pos = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(*sel))));
+                //let pos = layout.hit_position(*sel);
                 let r = Rect::new(
                     pos.point.x.ceil() + 0.5,
                     y.ceil() - 0.5,
@@ -211,7 +217,7 @@ impl View for TextEditor {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
                         self.doc.update(|d| d.insert(txt));
                         self.scroll_to_main_cursor();
-                        cx.request_paint(self.id());
+                        cx.request_all(self.id());
                         EventPropagation::Stop
                     }
                     _ => match e.key.logical_key {
@@ -220,7 +226,7 @@ impl View for TextEditor {
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Down));
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp)
@@ -228,7 +234,7 @@ impl View for TextEditor {
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Up));
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowLeft) if e.modifiers.control_key() => {
@@ -239,7 +245,7 @@ impl View for TextEditor {
                                 )
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowRight) if e.modifiers.control_key() => {
@@ -250,7 +256,7 @@ impl View for TextEditor {
                                 )
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowLeft) => {
@@ -261,7 +267,7 @@ impl View for TextEditor {
                                 )
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowRight) => {
@@ -272,7 +278,7 @@ impl View for TextEditor {
                                 )
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowDown) => {
@@ -283,7 +289,7 @@ impl View for TextEditor {
                                 )
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp) => {
@@ -291,25 +297,25 @@ impl View for TextEditor {
                                 d.move_selections(ndoc::MoveDirection::Up, e.modifiers.shift_key())
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Delete) => {
                             self.doc.update(|d| d.delete());
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Backspace) => {
                             self.doc.update(|d| d.backspace());
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Tab) if e.modifiers.shift_key() => {
                             self.doc.update(|d| d.deindent());
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Tab)
@@ -317,35 +323,36 @@ impl View for TextEditor {
                         {
                             self.doc.update(|d| d.indent(false));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Tab) => {
                             //dbg!(self.doc.file_info.indentation);
                             self.doc.update(|d| d.indent(true));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::End) => {
                             self.doc.update(|d| d.end(e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Home) => {
                             self.doc.update(|d| d.home(e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
 
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Enter) => {
+                            let line_feed = self.doc.get().file_info.linefeed.to_string();
                             self.doc.update(|d| {
-                                d.insert(&self.doc.get().file_info.linefeed.to_string())
+                                d.insert(&line_feed)
                             });
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
 
                             EventPropagation::Stop
                         }
@@ -353,7 +360,7 @@ impl View for TextEditor {
                             self.doc
                                 .update(|d| d.page_up(self.page_len, e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
 
                             EventPropagation::Stop
                         }
@@ -361,7 +368,7 @@ impl View for TextEditor {
                             self.doc
                                 .update(|d| d.page_down(self.page_len, e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
-                            cx.request_paint(self.id());
+                            cx.request_all(self.id());
 
                             EventPropagation::Stop
                         }
@@ -452,7 +459,7 @@ fn app_view() -> impl View {
     .style(|s| s.width_full().height_full().font_size(14.))
     .window_title(|| "xncode".to_string());
 
-    v.id().inspect();
+    //v.id().inspect();
 
     v
 }

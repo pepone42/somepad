@@ -77,6 +77,41 @@ pub fn next_grapheme_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     }
 }
 
+/// Finds the next grapheme boundary after the given char position.
+pub fn next_grapheme_boundary_byte<U: Into<usize>>(slice: &RopeSlice, byte_idx: U) -> usize {
+    let byte_idx = byte_idx.into();
+    // Bounds check
+    debug_assert!(byte_idx <= slice.len_bytes());
+
+    // Get the chunk with our byte index in it.
+    let (mut chunk, mut chunk_byte_idx, _, _) = slice.chunk_at_byte(byte_idx);
+
+    // Set up the grapheme cursor.
+    let mut gc = GraphemeCursor::new(byte_idx, slice.len_bytes(), true);
+
+    // Find the next grapheme cluster boundary.
+    loop {
+        match gc.next_boundary(chunk, chunk_byte_idx) {
+            Ok(None) => return slice.len_bytes(),
+            Ok(Some(n)) => {
+                let tmp = n - chunk_byte_idx;
+                return chunk_byte_idx + tmp;
+            }
+            Err(GraphemeIncomplete::NextChunk) => {
+                chunk_byte_idx += chunk.len();
+                let (a, b, _, _) = slice.chunk_at_byte(chunk_byte_idx);
+                chunk = a;
+                chunk_byte_idx = b;
+            }
+            Err(GraphemeIncomplete::PreContext(n)) => {
+                let ctx_chunk = slice.chunk_at_byte(n - 1).0;
+                gc.provide_context(ctx_chunk, n - ctx_chunk.len());
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Returns whether the given char position is a grapheme boundary.
 pub fn is_grapheme_boundary(slice: &RopeSlice, char_idx: usize) -> bool {
     // Bounds check
@@ -249,11 +284,7 @@ pub fn get_line_info<'a>(rope: &'a RopeSlice, line_idx: usize, indent_len: usize
     }
 }
 
-pub fn tab2space_char_idx(
-    rope: &RopeSlice,
-    line_idx: usize,
-    indent_len: usize,
-) -> Vec<usize> {
+pub fn tab2space_char_idx(rope: &RopeSlice, line_idx: usize, indent_len: usize) -> Vec<usize> {
     let mut offset = 0;
     let mut v = Vec::with_capacity(rope.line(line_idx).len_chars());
     v.push(0);
@@ -270,6 +301,61 @@ pub fn tab2space_char_idx(
         v.push(offset);
     }
     v
+}
+
+pub fn grapheme_to_byte(slice: &RopeSlice, grapheme_idx: usize) -> usize {
+    slice.char_to_byte(grapheme_to_char(slice,grapheme_idx))
+}
+pub fn grapheme_to_char(slice: &RopeSlice, grapheme_idx: usize) -> usize {
+    let mut idx= 0;
+    for count in 0 .. grapheme_idx {
+        if count >= grapheme_idx {
+            break;
+        }
+        idx = next_grapheme_boundary(slice, idx)
+    }
+    idx
+}
+
+pub fn char_to_grapheme(slice: &RopeSlice, char_idx: usize) -> usize {
+    let mut idx= 0;
+    let mut count = 0;
+    //let char_idx = slice.char_to_byte(char_idx);
+    while idx<char_idx {
+        idx = next_grapheme_boundary(slice, idx);
+        count += 1;
+    }
+    count
+}
+
+pub struct NextGraphemeIdxIterator<'slice> {
+    slice: &'slice RopeSlice<'slice>,
+    index: Option<usize>,
+}
+
+impl<'slice> NextGraphemeIdxIterator<'slice> {
+    pub fn new(slice: &'slice RopeSlice) -> Self {
+        Self { slice, index: None }
+    }
+}
+
+impl<'slice> Iterator for NextGraphemeIdxIterator<'slice> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(old_idx) = self.index {
+            let idx = next_grapheme_boundary(&self.slice, old_idx);
+            if idx == old_idx {
+                None
+            } else {
+                self.index = Some(idx);
+                Some(idx)//self.slice.char_to_byte(idx))
+            }
+        } else {
+            self.index = Some(0);
+            Some(0)
+        }
+    }
 }
 
 mod test {

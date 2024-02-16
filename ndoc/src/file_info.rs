@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{format, Display};
 
 use encoding_rs::Encoding;
 use ropey::RopeSlice;
@@ -61,6 +61,15 @@ impl Indentation {
         match self {
             Self::Tab(i) => *i,
             Self::Space(i) => *i,
+        }
+    }
+}
+
+impl ToString for Indentation {
+    fn to_string(&self) -> String {
+        match *self {
+            Indentation::Tab(len) => format!("Tab ({len})"),
+            Indentation::Space(len) => format!("Space ({len})"),
         }
     }
 }

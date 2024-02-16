@@ -11,11 +11,11 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=ncode",
-                    "--package=ncode"
+                    "--bin=xncode",
+                    "--package=ncode-floem"
                 ],
                 "filter": {
-                    "name": "ncode",
+                    "name": "xncode",
                     "kind": "bin"
                 }
             },
@@ -30,8 +30,8 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=ncode",
-                    "--package=ncode"
+                    "--bin=xncode",
+                    "--package=ncode-floem"
                 ],
                 "filter": {
                     "name": "ncode",
