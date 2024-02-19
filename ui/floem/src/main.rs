@@ -2,8 +2,10 @@
 use std::collections::HashMap;
 use std::env::{self, Args};
 use std::fmt::format;
+use std::iter::empty;
 
-use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, TextLayout, Wrap};
+use floem::cosmic_text::fontdb::Database;
+use floem::cosmic_text::{Attrs, AttrsList, Family, FamilyOwned, TextLayout, Wrap};
 use floem::event::Event;
 use floem::id::Id;
 use floem::keyboard::{Key, NamedKey};
@@ -11,12 +13,16 @@ use floem::kurbo::{Point, Rect};
 use floem::menu::{Menu, MenuEntry, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
+use floem::taffy::layout::{self, Layout};
 use floem::view::{View, ViewData};
-use floem::views::{container, h_stack, label, scroll, stack, v_stack, Decorators};
+use floem::views::{
+    container, h_stack, label, list, scroll, stack, text, v_stack, virtual_list, virtual_stack,
+    Decorators, VirtualItemSize,
+};
 use floem::widgets::button;
 use floem::{EventPropagation, Renderer};
-use ndoc::rope_utils::{grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator};
-use ndoc::{Document, Indentation};
+use ndoc::rope_utils::{byte_to_grapheme, char_to_grapheme, grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator};
+use ndoc::{Document, Indentation, Selection};
 
 enum TextEditorCommand {
     FocusMainCursor,
@@ -29,6 +35,50 @@ pub struct TextEditor {
     viewport: Rect,
     line_height: f64,
     page_len: usize,
+    char_base_width: f64,
+}
+
+pub struct Gutter {
+    data: ViewData,
+    doc: RwSignal<Document>,
+    text_node: Option<floem::taffy::prelude::Node>,
+    line_height: f64,
+}
+
+impl View for Gutter {
+    fn view_data(&self) -> &ViewData {
+        &self.data
+    }
+
+    fn view_data_mut(&mut self) -> &mut ViewData {
+        &mut self.data
+    }
+
+    fn layout(&mut self, cx: &mut floem::context::LayoutCx) -> floem::taffy::prelude::Node {
+        cx.layout_node(self.id(), true, |cx| {
+            let (width, height) = (
+                100.,
+                dbg!(self.line_height * self.doc.get().rope.len_lines() as f64),
+            ); //attrs.line_height. * self.rope.len_lines());
+
+            if self.text_node.is_none() {
+                self.text_node = Some(
+                    cx.app_state_mut()
+                        .taffy
+                        .new_leaf(floem::taffy::style::Style::DEFAULT)
+                        .unwrap(),
+                );
+            }
+            let text_node = self.text_node.unwrap();
+            let style = floem::style::Style::new()
+                .width(width)
+                .height(height)
+                .to_taffy_style();
+            let _ = cx.app_state_mut().taffy.set_style(text_node, style);
+
+            vec![text_node]
+        })
+    }
 }
 
 pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor {
@@ -38,9 +88,11 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         .font_size(14.);
 
     let mut t = TextLayout::new();
-    t.set_text(" ", AttrsList::new(attrs));
+    t.set_text("8", AttrsList::new(attrs));
     let line_height = (t.lines[0].layout_opt().as_ref().unwrap()[0].line_ascent
         + t.lines[0].layout_opt().as_ref().unwrap()[0].line_descent) as f64;
+
+    let char_base_width = t.lines[0].layout_opt().as_ref().unwrap()[0].w as f64;
     id.request_focus();
     TextEditor {
         data: ViewData::new(id),
@@ -49,12 +101,13 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         viewport: Rect::default(),
         line_height,
         page_len: 0,
+        char_base_width,
     }
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
         self.id()
-            .update_state(TextEditorCommand::FocusMainCursor, false);
+            .update_state(TextEditorCommand::FocusMainCursor, true);
     }
 }
 
@@ -84,7 +137,10 @@ impl View for TextEditor {
                         );
                         // let idx = NextGraphemeIdxIterator::new(&self.doc.get().rope.line(sel.line)).nth(sel.column);
                         // let hit = t.hit_position(idx.unwrap());
-                        let hit = t.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(sel.line),dbg!(sel.column))));
+                        let hit = t.hit_position(dbg!(grapheme_to_byte(
+                            &self.doc.get().rope.line(sel.line),
+                            dbg!(sel.column)
+                        )));
                         let rect = Rect::new(
                             hit.point.x - 25.,
                             self.line_height * (sel.line as f64) - 25.,
@@ -125,7 +181,6 @@ impl View for TextEditor {
     }
 
     fn compute_layout(&mut self, cx: &mut floem::context::ComputeLayoutCx) -> Option<Rect> {
-
         self.viewport = dbg!(cx.current_viewport());
         self.page_len = (self.viewport.height() / self.line_height).ceil() as usize;
         None
@@ -176,28 +231,37 @@ impl View for TextEditor {
             layout.set_text(&l.to_string(), attr_list.clone());
 
             if let Some(sel) = selection_areas.get(&i) {
-                let start = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.0))));
-                let end = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(sel.1))));
+                let start = layout.hit_position(dbg!(grapheme_to_byte(
+                    &self.doc.get().rope.line(i),
+                    dbg!(sel.0)
+                )));
+                let end = layout.hit_position(dbg!(grapheme_to_byte(
+                    &self.doc.get().rope.line(i),
+                    dbg!(sel.1)
+                )));
 
-
-                let r = Rect::new(start.point.x.ceil(), y.ceil(), end.point.x.ceil(), (y + self.line_height).ceil()+1.);
+                let r = Rect::new(
+                    start.point.x.ceil(),
+                    y.ceil(),
+                    end.point.x.ceil(),
+                    (y + self.line_height).ceil() + 1.,
+                );
                 let b = Brush::Solid(Color::GRAY);
 
                 cx.fill(&r, &b, 0.);
             }
 
-            
-            cx.draw_text(&layout, Point::new(0., y.ceil()  ));
-
+            cx.draw_text(&layout, Point::new(0., y.ceil()));
 
             if let Some(sel) = selections.get(&i) {
-                //let idx = dbg!(NextGraphemeIdxIterator::new(&self.doc.get().rope.line(i)).nth(dbg!(*sel)));
-                let pos = layout.hit_position(dbg!(grapheme_to_byte(&self.doc.get().rope.line(i),dbg!(*sel))));
-                //let pos = layout.hit_position(*sel);
+                let pos = layout.hit_position(dbg!(grapheme_to_byte(
+                    &self.doc.get().rope.line(i),
+                    dbg!(*sel)
+                )));
                 let r = Rect::new(
-                    pos.point.x.ceil() ,
+                    pos.point.x.ceil(),
                     y.ceil(),
-                    pos.point.x.ceil() ,
+                    pos.point.x.ceil(),
                     (y + self.line_height).ceil(),
                 );
                 let b = Brush::Solid(Color::BLACK);
@@ -353,9 +417,8 @@ impl View for TextEditor {
                         }
                         Key::Named(NamedKey::Enter) => {
                             let line_feed = self.doc.get().file_info.linefeed.to_string();
-                            self.doc.update(|d| {
-                                d.insert(&line_feed)
-                            });
+                            self.doc.update(|d| d.insert(&line_feed));
+
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
 
@@ -382,7 +445,25 @@ impl View for TextEditor {
                 }
             }
             Event::PointerDown(p) => {
-                dbg!(p);
+
+                let line = ((p.pos.y / self.line_height) as usize).min(self.doc.get().rope.len_lines());
+
+
+
+                let mut layout = TextLayout::new();
+                let attrs = Attrs::new()
+                    .color(Color::BLACK)
+                    .family(&[FamilyOwned::Monospace])
+                    .font_size(14.);
+
+                let attr_list = AttrsList::new(attrs);
+                layout.set_tab_width(self.doc.get().file_info.indentation.len());
+                layout.set_text(&self.doc.get().rope.line(line).to_string(), attr_list);
+
+                let col = layout.hit_point(Point::new(p.pos.x, self.line_height/2.0));
+                let col = byte_to_grapheme(&self.doc.get().rope.line(line), col.index);
+                dbg!(line,col);
+                self.doc.update( |d| d.selections = vec![Selection::new(line, col)]);
                 EventPropagation::Continue
             }
             _ => EventPropagation::Continue,
@@ -391,24 +472,57 @@ impl View for TextEditor {
 }
 
 fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
-    let text_editor = text_editor(move || doc());
+    let ndoc = doc(); //.clone();
+    let text_editor = text_editor(move || ndoc);
     let text_editor_id = text_editor.id();
+    let (line_number_width, line_number_width_set) = create_signal(
+        (ndoc.get().rope.len_lines().to_string().len() + 2) as f64 * text_editor.char_base_width,
+    );
+    let (line_numbers, line_numbers_set) =
+        create_signal((0..(ndoc.get().rope.len_lines() + 1)).collect::<im::Vector<usize>>());
+    create_effect(move |_| {
+        line_numbers_set.set((0..ndoc.get().rope.len_lines()).collect::<im::Vector<usize>>());
+        line_number_width_set.set(
+            (ndoc.get().rope.len_lines().to_string().len() + 2) as f64
+                * text_editor.char_base_width,
+        );
+    });
 
     container(
         scroll(
-            stack((text_editor
-                .keyboard_navigatable()
-                .on_click_stop(|e| {
-                    dbg!(e.point());
-                })
-                .style(|s| s.size_full()),))
+            h_stack((
+                //    list((0..dbg!(line_len.get())).map(|i| label(move || format!(" {} ", i.to_string())).style(|s| s.font_family("Monospace".to_string()).font_size(14.)))),
+                virtual_stack(
+                    floem::views::VirtualDirection::Vertical,
+                    VirtualItemSize::Fixed(Box::new(move || text_editor.line_height)),
+                    move || line_numbers.get(),
+                    move |item| *item,
+                    |i| label(move || format!(" {} ", dbg!((i + 1).to_string()))), // .style(|s| {
+                                                                                   //     s.color(Color::BLACK)
+                                                                                   //         .font_family("Monospace".to_string())
+                                                                                   //         .font_size(14.)
+                                                                                   // })
+                )
+                .style(move |s| {
+                    s.color(Color::BLACK)
+                        .font_family("Monospace".to_string())
+                        .font_size(14.)
+                        .width(line_number_width.get())
+                }),
+                floem::views::empty().style(|s| s.width(1.0).background(Color::BLACK)),
+                text_editor
+                    .keyboard_navigatable()
+                    .on_click_stop(|e| {
+                        dbg!(e.point());
+                    })
+                    .style(|s| s.size_full().margin_left(5.)),
+            ))
             .style(|s| s.padding(6.0)),
         )
-        
-        .style(|s| s.absolute().size_pct(100.0, 100.0)),
+        .style(|s| s.padding(1.0).absolute().size_pct(100.0, 100.0)),
     )
     .on_click_cont(move |_| text_editor_id.request_focus())
-    .style(move |s| s.border(1.0).border_radius(6.0).size_full())
+    .style(move |s| s.border(1.0).border_radius(1.0).size_full())
 }
 
 fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {

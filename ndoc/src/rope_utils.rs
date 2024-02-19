@@ -317,12 +317,16 @@ pub fn grapheme_to_char(slice: &RopeSlice, grapheme_idx: usize) -> usize {
     idx
 }
 
+pub fn byte_to_grapheme(slice: &RopeSlice, byte_idx: usize) -> usize {
+    return char_to_grapheme(slice,slice.byte_to_char(byte_idx))
+}
+
 pub fn char_to_grapheme(slice: &RopeSlice, char_idx: usize) -> usize {
     let mut idx= 0;
     let mut count = 0;
     //let char_idx = slice.char_to_byte(char_idx);
-    while idx<char_idx {
-        idx = next_grapheme_boundary(slice, idx);
+    while idx<dbg!(char_idx) {
+        idx = dbg!(next_grapheme_boundary(slice, idx));
         count += 1;
     }
     count

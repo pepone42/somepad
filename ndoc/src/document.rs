@@ -527,6 +527,12 @@ impl PartialOrd for Selection {
 }
 
 impl Selection {
+    pub fn new(line: usize,col:usize) -> Self {
+        Self {
+            head: Position::new(line, col),
+            tail: Position::new(line, col),
+        }
+    }
     pub fn start(&self) -> Position {
         if self.head <= self.tail {
             self.head
