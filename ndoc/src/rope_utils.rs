@@ -240,6 +240,33 @@ pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     i
 }
 
+pub fn word_end(slice: &RopeSlice, char_idx: usize) -> usize {
+    if char_idx >= slice.len_chars() {
+        return slice.len_chars()
+    }
+    let mut i: usize = char_idx.into();
+    let current_char = slice.char(i);
+    i += slice.chars_at(i).take_while(|c| !is_boundary(*c, current_char)).count();
+    i
+}
+
+pub fn word_start(slice: &RopeSlice, char_idx: usize) -> usize {
+    if char_idx >= slice.len_chars() {
+        return slice.len_chars()
+    }
+    let mut i: usize = char_idx;
+    let current_char = slice.char(i);
+    let mut iter = slice.chars_at(i);
+    let mut count = 0;
+    i -= loop {
+        match iter.prev() {
+            Some(c) if !is_boundary(c, current_char) => count += 1,
+            _ => break count,
+        }
+    };
+    i
+}
+
 pub fn get_line_start_boundary(slice: &RopeSlice, line_idx: usize) -> usize {
     slice
         .line(line_idx)
@@ -325,8 +352,8 @@ pub fn char_to_grapheme(slice: &RopeSlice, char_idx: usize) -> usize {
     let mut idx= 0;
     let mut count = 0;
     //let char_idx = slice.char_to_byte(char_idx);
-    while idx<dbg!(char_idx) {
-        idx = dbg!(next_grapheme_boundary(slice, idx));
+    while idx<char_idx {
+        idx = next_grapheme_boundary(slice, idx);
         count += 1;
     }
     count

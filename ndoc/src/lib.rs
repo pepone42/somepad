@@ -7,4 +7,5 @@ pub use file_info::FileInfo;
 pub use file_info::Indentation;
 pub use document::MoveDirection;
 pub use document::Selection;
+pub use document::Position;
 pub use ropey::Rope;
