@@ -619,19 +619,19 @@ impl Selection {
             self.tail
         }
     }
-    pub fn areas(&self, rope: &Rope) -> Vec<(usize, usize, usize)> {
+    pub fn areas(&self, rope: &Rope) -> Vec<(usize, usize, usize, bool)> {
         match self.end().line - self.start().line {
             0 => {
-                vec![(self.start().column, self.end().column, self.start().line)]
+                vec![(self.start().column, self.end().column, self.start().line, false)]
             }
             1 => {
                 vec![
                     (
                         self.start().column,
                         line_len_grapheme(&rope.slice(..), self.start().line),
-                        self.start().line,
+                        self.start().line, true
                     ),
-                    (0, self.end().column, self.end().line),
+                    (0, self.end().column, self.end().line, false),
                 ]
             }
             _ => {
@@ -639,14 +639,14 @@ impl Selection {
                 v.push((
                     self.start().column,
                     line_len_grapheme(&rope.slice(..), self.start().line),
-                    self.start().line,
+                    self.start().line,true
                 ));
 
                 for l in self.start().line + 1..self.end().line {
-                    v.push((0, line_len_grapheme(&rope.slice(..), l), l));
+                    v.push((0, line_len_grapheme(&rope.slice(..), l), l, true));
                 }
 
-                v.push((0, self.end().column, self.end().line));
+                v.push((0, self.end().column, self.end().line, false));
                 v
             }
         }
@@ -687,6 +687,10 @@ pub fn line_len_char(rope: &RopeSlice, line_idx: usize) -> usize {
         (_, _) => 0,
     };
     r.len() - linefeed_len
+}
+
+pub fn line_len_char_full(rope: &RopeSlice, line_idx: usize) -> usize {
+     rope.line_to_char(line_idx + 1) - rope.line_to_char(line_idx)
 }
 
 pub fn position_to_char(slice: &RopeSlice, position: Position) -> usize {
@@ -751,6 +755,11 @@ pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
 }
 
 pub fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
-    line_len_char(rope, line_idx)
-    //char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
+    //line_len_char(rope, line_idx)
+    char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
+}
+
+pub fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
+    //line_len_char(rope, line_idx)
+    char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
 }

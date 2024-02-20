@@ -19,6 +19,7 @@ use std::{
     io::{stdout, Result, self},
 };
 use text_area::{TextArea, TextAreaState};
+use ndoc::position_to_char;
 
 #[derive(Options, Debug)]
 
@@ -100,8 +101,8 @@ fn main() -> Result<()> {
                 .iter()
                 .flat_map(|s| {
                     vec![
-                        s.start().char_idx(&document.rope.slice(..)),
-                        s.end().char_idx(&document.rope.slice(..)),
+                        position_to_char(&document.rope.slice(..),s.start()),
+                        position_to_char(&document.rope.slice(..),s.end()),
                     ]
                 })
                 .collect::<Vec<usize>>();

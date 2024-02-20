@@ -5,15 +5,15 @@ use std::fmt::format;
 use std::iter::empty;
 
 use floem::cosmic_text::fontdb::Database;
-use floem::cosmic_text::{Attrs, AttrsList, Family, FamilyOwned, TextLayout, Wrap};
+use floem::cosmic_text::{Attrs, AttrsList, Family, FamilyOwned, Font, TextLayout, Wrap};
 use floem::event::Event;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
-use floem::kurbo::{Point, Rect};
+use floem::kurbo::{BezPath, PathEl, Point, Rect};
 use floem::menu::{Menu, MenuEntry, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
-use floem::style::Position;
+use floem::style::{FontFamily, Position, StyleProp};
 use floem::taffy::layout::{self, Layout};
 use floem::view::{View, ViewData};
 use floem::views::{
@@ -99,6 +99,173 @@ impl TextEditor {
         let col = byte_to_grapheme(&self.doc.get().rope.line(line), col.index);
         ndoc::Position::new(line, col)
     }
+}
+
+fn make_selection_path(aera: &[Rect]) -> floem::kurbo::BezPath {
+    let mut path = BezPath::new();
+    let bevel: f64 = 3.0;
+    let epsilon: f64 = 0.0001;
+
+    match aera {
+        [] => {}
+        [r] => {
+            path.push(PathEl::MoveTo(Point::new(r.x0, r.y1 - bevel)));
+            path.push(PathEl::QuadTo(
+                Point::new(r.x0, r.y0 + bevel),
+                Point::new(r.x0, r.y0 + bevel),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(r.x0, r.y0),
+                Point::new(r.x0 + bevel, r.y0),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(r.x1 - bevel, r.y0),
+                Point::new(r.x1 - bevel, r.y0),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(r.x1, r.y0),
+                Point::new(r.x1, r.y0 + bevel),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(r.x1, r.y1 - bevel),
+                Point::new(r.x1, r.y1 - bevel),
+            ));
+
+            path.push(PathEl::QuadTo(
+                Point::new(r.x1, r.y1),
+                Point::new(r.x1 - bevel, r.y1),
+            ));
+
+            path.push(PathEl::QuadTo(
+                Point::new(r.x0 + bevel, r.y1),
+                Point::new(r.x0 + bevel, r.y1),
+            ));
+
+            path.push(PathEl::QuadTo(
+                Point::new(r.x0 , r.y1),
+                Point::new(r.x0 , r.y1 - bevel),
+            ));
+
+            path.push(PathEl::QuadTo(
+                Point::new(r.x0, r.y1 - bevel),
+                Point::new(r.x0, r.y1 - bevel),
+            ));
+
+        }
+        [f, aera @ ..] => {
+            path.push(PathEl::MoveTo(Point::new(f.x0, f.y1 - bevel)));
+            path.push(PathEl::QuadTo(
+                Point::new(f.x0, f.y0 + bevel),
+                Point::new(f.x0, f.y0 + bevel),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(f.x0, f.y0),
+                Point::new(f.x0 + bevel, f.y0),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(f.x1 - bevel, f.y0),
+                Point::new(f.x1 - bevel, f.y0),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(f.x1, f.y0),
+                Point::new(f.x1, f.y0 + bevel),
+            ));
+            path.push(PathEl::QuadTo(
+                Point::new(f.x1, f.y1 - bevel),
+                Point::new(f.x1, f.y1 - bevel),
+            ));
+
+            let mut last = (f.x1, f.y1, f.y0);
+
+            for r in aera {
+                let delta = if r.x1 < last.0 {
+                    -bevel
+                } else if r.x1 - last.0 < epsilon {
+                    0.0
+                } else {
+                    bevel
+                };
+
+                path.push(PathEl::QuadTo(
+                    Point::new(last.0, r.y0),
+                    Point::new(last.0 + delta, r.y0),
+                ));
+
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1 - delta, r.y0),
+                    Point::new(r.x1 - delta, r.y0),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1, r.y0),
+                    Point::new(r.x1, r.y0 + bevel),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1, r.y1 - bevel),
+                    Point::new(r.x1, r.y1 - bevel),
+                ));
+
+                last = (r.x1, r.y1, r.y0);
+            }
+
+            if last.0 < epsilon {
+                path.pop();
+                path.pop();
+
+                path.push(PathEl::QuadTo(
+                    Point::new(bevel, last.2),
+                    Point::new(bevel, last.2),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(0., last.2),
+                    Point::new(0., last.2 - bevel),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(0., f.y1 + bevel),
+                    Point::new(0., f.y1 + bevel),
+                ));
+            } else {
+                path.push(PathEl::QuadTo(
+                    Point::new(last.0, last.1),
+                    Point::new(last.0 - bevel, last.1),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(bevel, last.1),
+                    Point::new(bevel, last.1),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(0., last.1),
+                    Point::new(0., last.1 - bevel),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(0., f.y1 + bevel),
+                    Point::new(0., f.y1 + bevel),
+                ));
+            }
+            if f.x0 > epsilon {
+                path.push(PathEl::QuadTo(
+                    Point::new(0., f.y1),
+                    Point::new(bevel, f.y1),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(f.x0 - bevel, f.y1),
+                    Point::new(f.x0 - bevel, f.y1),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(f.x0, f.y1),
+                    Point::new(f.x0, f.y1 - bevel),
+                ));
+            } else {
+                path.push(PathEl::QuadTo(
+                    Point::new(f.x0, f.y1 - bevel),
+                    Point::new(f.x0, f.y1 - bevel),
+                ));
+            }
+
+            path.close_path();
+        }
+    }
+
+    path
 }
 
 impl View for TextEditor {
@@ -188,16 +355,34 @@ impl View for TextEditor {
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
-        let selections = self
-            .doc
-            .get()
-            .selections
-            .iter()
-            .flat_map(|s| s.areas(&self.doc.get().rope))
-            .collect::<Vec<(usize, usize, usize)>>();
+        // for sel in self.doc.get().selections.iter().map(|s| s.areas(&self.doc.get().rope)) {
+        //     let start =
+        //             layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(sel.), sel.0));
+        //         let end =
+        //             layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.1));
+
+        //         let r = Rect::new(
+        //             start.point.x.ceil(),
+        //             y.ceil(),
+        //             end.point.x.ceil(),
+        //             (y + self.line_height).ceil() + 1.,
+        //         );
+        // }
+
+        // let selections = self
+        //     .doc
+        //     .get()
+        //     .selections
+        //     .iter()
+        //     .enumerate()
+        //     .map(|s| (s.0,s.1.areas(&self.doc.get().rope)))
+        //     .collect::<HashMap<usize,(usize, usize, usize, bool)>>();
         let mut selection_areas = HashMap::new();
-        for s in selections {
-            selection_areas.insert(s.2, (s.0, s.1));
+        for sel in self.doc.get().selections.iter().enumerate() {
+            let aera = sel.1.areas(&self.doc.get().rope);
+            for a in aera {
+                selection_areas.insert(a.2, (a.0, a.1, a.3, sel.0));
+            }
         }
         let selections = self
             .doc
@@ -206,6 +391,8 @@ impl View for TextEditor {
             .iter()
             .map(|s| (s.head.line, s.head.column))
             .collect::<HashMap<usize, usize>>();
+
+        let mut sel_rects = HashMap::new();
 
         let mut y = (first_line as f64) * self.line_height;
         for (i, l) in self
@@ -229,12 +416,17 @@ impl View for TextEditor {
                 let r = Rect::new(
                     start.point.x.ceil(),
                     y.ceil(),
-                    end.point.x.ceil(),
+                    end.point.x.ceil() + if sel.2 { self.char_base_width } else { 0.0 },
                     (y + self.line_height).ceil() + 1.,
                 );
-                let b = Brush::Solid(Color::GRAY);
+                // let b = Brush::Solid(Color::GRAY);
 
-                cx.fill(&r, &b, 0.);
+                // cx.fill(&r, &b, 0.);
+                //if sel.0 != sel.1 {
+                sel_rects.entry(sel.3).and_modify(|s: &mut Vec<Rect>| s.push(r)).or_insert(vec![r]);
+                
+                //sel_rects.entr(sel.3, r);
+                //}
             }
 
             cx.draw_text(&layout, Point::new(0., y.ceil()));
@@ -252,6 +444,16 @@ impl View for TextEditor {
             }
 
             y += self.line_height;
+        }
+        let b = Brush::Solid(Color::DARK_BLUE.with_alpha_factor(0.25));
+        let f = Brush::Solid(Color::DARK_BLUE);
+        for r in sel_rects {
+            let path = make_selection_path(&r.1);
+            if !path.is_empty() {
+                //if !dbg!(&sel_rects).is_empty() {
+                cx.fill(&path, &b, 0.);
+                cx.stroke(&path, &f, 1.);
+            }
         }
     }
 
@@ -470,7 +672,7 @@ impl View for TextEditor {
                         }
                         SelectionKind::Line => {
                             self.doc.update(|d| d.expand_selection_by_line(position));
-                        },
+                        }
                     }
 
                     self.scroll_to_main_cursor();
@@ -590,8 +792,11 @@ fn app_view() -> impl View {
 
     let id = v.id();
 
-    v.keyboard_navigatable().on_key_down(Key::Named(NamedKey::F10), ModifiersState::empty(), move |_| id.inspect() )
-
+    v.keyboard_navigatable().on_key_down(
+        Key::Named(NamedKey::F10),
+        ModifiersState::empty(),
+        move |_| id.inspect(),
+    )
 }
 
 fn main() {
