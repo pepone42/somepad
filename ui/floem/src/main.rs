@@ -8,7 +8,7 @@ use floem::cosmic_text::fontdb::Database;
 use floem::cosmic_text::{Attrs, AttrsList, Family, FamilyOwned, TextLayout, Wrap};
 use floem::event::Event;
 use floem::id::Id;
-use floem::keyboard::{Key, NamedKey};
+use floem::keyboard::{Key, ModifiersState, NamedKey};
 use floem::kurbo::{Point, Rect};
 use floem::menu::{Menu, MenuEntry, MenuItem};
 use floem::peniko::{Brush, Color};
@@ -41,49 +41,6 @@ pub struct TextEditor {
     char_base_width: f64,
     selection_kind: SelectionKind,
 }
-
-// pub struct Gutter {
-//     data: ViewData,
-//     doc: RwSignal<Document>,
-//     text_node: Option<floem::taffy::prelude::Node>,
-//     line_height: f64,
-// }
-
-// impl View for Gutter {
-//     fn view_data(&self) -> &ViewData {
-//         &self.data
-//     }
-
-//     fn view_data_mut(&mut self) -> &mut ViewData {
-//         &mut self.data
-//     }
-
-//     fn layout(&mut self, cx: &mut floem::context::LayoutCx) -> floem::taffy::prelude::Node {
-//         cx.layout_node(self.id(), true, |cx| {
-//             let (width, height) = (
-//                 100.,
-//                 self.line_height * self.doc.get().rope.len_lines() as f64,
-//             ); //attrs.line_height. * self.rope.len_lines());
-
-//             if self.text_node.is_none() {
-//                 self.text_node = Some(
-//                     cx.app_state_mut()
-//                         .taffy
-//                         .new_leaf(floem::taffy::style::Style::DEFAULT)
-//                         .unwrap(),
-//                 );
-//             }
-//             let text_node = self.text_node.unwrap();
-//             let style = floem::style::Style::new()
-//                 .width(width)
-//                 .height(height)
-//                 .to_taffy_style();
-//             let _ = cx.app_state_mut().taffy.set_style(text_node, style);
-
-//             vec![text_node]
-//         })
-//     }
-// }
 
 pub enum SelectionKind {
     Char,
@@ -496,7 +453,7 @@ impl View for TextEditor {
                     }
 
                     cx.update_active(self.id());
-                    EventPropagation::Stop
+                    EventPropagation::Continue // EventPropagation::Stop here stop all keyboard event to occur ...
                 } else {
                     EventPropagation::Continue
                 }
@@ -626,14 +583,15 @@ fn app_view() -> impl View {
                 }),
             label(move || doc.get().file_info.encoding.name().to_string()),
         ))
-        .style(|s| s.padding(6.)), //.flex().gap(10.,0.)),//.height(24.).min_height(24.)),
+        .style(|s| s.padding(6.)),
     ))
-    .style(|s| s.width_full().height_full().font_size(14.))
+    .style(|s| s.width_full().height_full().font_size(12.))
     .window_title(|| "xncode".to_string());
 
-    //v.id().inspect();
+    let id = v.id();
 
-    v
+    v.keyboard_navigatable().on_key_down(Key::Named(NamedKey::F10), ModifiersState::empty(), move |_| id.inspect() )
+
 }
 
 fn main() {

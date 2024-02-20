@@ -132,8 +132,8 @@ impl Document {
                 .iter()
                 .map(|s| {
                     (
-                        s.head.char_idx(&self.rope.slice(..)),
-                        s.tail.char_idx(&self.rope.slice(..)),
+                        position_to_char(&self.rope.slice(..),s.head),
+                        position_to_char(&self.rope.slice(..),s.tail),
                     )
                 })
                 .collect::<Vec<(usize, usize)>>();
@@ -143,11 +143,11 @@ impl Document {
             for i in 0..self.selections.len() {
                 if sel_idx[i].0 >= end {
                     self.selections[i].head =
-                        Position::from_char_idx(&self.rope.slice(..), sel_idx[i].0 - to_sub);
+                        char_to_position(&self.rope.slice(..), sel_idx[i].0 - to_sub);
                 }
                 if sel_idx[i].1 >= end {
                     self.selections[i].tail =
-                        Position::from_char_idx(&self.rope.slice(..), sel_idx[i].1 - to_sub);
+                    char_to_position(&self.rope.slice(..), sel_idx[i].1 - to_sub);
                 }
             }
             changed = true;
@@ -159,8 +159,8 @@ impl Document {
                 .iter()
                 .map(|s| {
                     (
-                        s.head.char_idx(&self.rope.slice(..)),
-                        s.tail.char_idx(&self.rope.slice(..)),
+                        position_to_char(&self.rope.slice(..),s.head),
+                        position_to_char(&self.rope.slice(..),s.tail),
                     )
                 })
                 .collect::<Vec<(usize, usize)>>();
@@ -171,11 +171,11 @@ impl Document {
             for i in 0..self.selections.len() {
                 if sel_idx[i].0 >= start {
                     self.selections[i].head =
-                        Position::from_char_idx(&self.rope.slice(..), sel_idx[i].0 + to_add);
+                        char_to_position(&self.rope.slice(..), sel_idx[i].0 + to_add);
                 }
                 if sel_idx[i].1 >= start {
                     self.selections[i].tail =
-                        Position::from_char_idx(&self.rope.slice(..), sel_idx[i].1 + to_add);
+                    char_to_position(&self.rope.slice(..), sel_idx[i].1 + to_add);
                 }
             }
             changed = true;
@@ -269,15 +269,15 @@ impl Document {
                     s.head.column = s.head.vcol.min(line_len_grapheme(&self.rope.slice(..), s.head.line));
                 }
                 MoveDirection::Left => {
-                    let start = s.head.char_idx(&self.rope.slice(..));
-                    s.head = Position::from_char_idx(
+                    let start = position_to_char(&self.rope.slice(..),s.head);
+                    s.head = char_to_position(
                         &self.rope.slice(..),
                         prev_grapheme_boundary(&self.rope.slice(..), start),
                     );
                 }
                 MoveDirection::Right => {
-                    let start = s.head.char_idx(&self.rope.slice(..));
-                    s.head = Position::from_char_idx(
+                    let start = position_to_char(&self.rope.slice(..),s.head);
+                    s.head = char_to_position(
                         &self.rope.slice(..),
                         next_grapheme_boundary(&self.rope.slice(..), start),
                     );
@@ -295,15 +295,15 @@ impl Document {
         for s in &mut self.selections {
             match dir {
                 MoveDirection::Left => {
-                    let start = s.head.char_idx(&self.rope.slice(..));
-                    s.head = Position::from_char_idx(
+                    let start = position_to_char(&self.rope.slice(..),s.head);
+                    s.head = char_to_position(
                         &self.rope.slice(..),
                         prev_word_boundary(&self.rope.slice(..), start),
                     );
                 }
                 MoveDirection::Right => {
-                    let start = s.head.char_idx(&self.rope.slice(..));
-                    s.head = Position::from_char_idx(
+                    let start = position_to_char(&self.rope.slice(..),s.head);
+                    s.head = char_to_position(
                         &self.rope.slice(..),
                         next_word_boundary(&self.rope.slice(..), start),
                     );
@@ -487,7 +487,7 @@ impl Document {
             }
         } else {
             for s in self.selections.clone() {
-                let index = s.head.char_idx(&self.rope.slice(..));
+                let index = position_to_char(&self.rope.slice(..),s.head);
                 match self.file_info.indentation {
                     Indentation::Tab(_) => self.insert_at("\t", index, index),
                     Indentation::Space(x) => {
@@ -577,13 +577,13 @@ impl Position {
         }
     }
 
-    pub fn from_char_idx(rope: &RopeSlice, char_idx: usize) -> Self {
-        char_to_position(&rope, char_idx)
-    }
+    // pub fn from_char_idx(rope: &RopeSlice, char_idx: usize) -> Self {
+    //     char_to_position(&rope, char_idx)
+    // }
 
-    pub fn char_idx(&self, rope: &RopeSlice) -> usize {
-        position_to_char(&rope, *self)
-    }
+    // pub fn char_idx(&self, rope: &RopeSlice) -> usize {
+    //     position_to_char(&rope, *self)
+    // }
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord)]
@@ -724,7 +724,7 @@ fn test_position_from_char_idx() {
     for e in expected {
         //dbg!(e.0,e.1,e.2,slice.line(e.1).to_string());
         assert_eq!(
-            Position::from_char_idx(&slice, rope.byte_to_char(e.0)),
+            char_to_position(&slice, rope.byte_to_char(e.0)),
             Position::new(e.1, e.2),"testing byte index {} (char {}) for line {}",e.0,rope.byte_to_char(e.0),slice.line(e.1).to_string()
         );
     }
