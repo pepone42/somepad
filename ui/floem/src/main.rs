@@ -374,9 +374,10 @@ impl Widget for TextEditor {
         for sel in self.doc.get().selections.iter().enumerate() {
             let aera = sel.1.areas(&self.doc.get().rope);
             for a in aera {
-                selection_areas.insert(a.2, (a.0, a.1, a.3, sel.0));
+                selection_areas.insert(a.line, a);
             }
         }
+        
         let selections = self
             .doc
             .get()
@@ -402,27 +403,21 @@ impl Widget for TextEditor {
 
             if let Some(sel) = selection_areas.get(&i) {
                 let start =
-                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.0));
+                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.col_start));
                 let end =
-                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.1));
+                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.col_end));
 
                 let r = Rect::new(
                     start.point.x.ceil(),
                     y.ceil(),
-                    end.point.x.ceil() + if sel.2 { self.char_base_width } else { 0.0 },
+                    end.point.x.ceil() + if sel.include_eol { self.char_base_width.ceil() } else { 0.0 },
                     (y + self.line_height).ceil(),
                 );
-                // let b = Brush::Solid(Color::GRAY);
 
-                // cx.fill(&r, &b, 0.);
-                //if sel.0 != sel.1 {
                 sel_rects
-                    .entry(sel.3)
+                    .entry(sel.line)
                     .and_modify(|s: &mut Vec<Rect>| s.push(r))
                     .or_insert(vec![r]);
-
-                //sel_rects.entr(sel.3, r);
-                //}
             }
 
             cx.draw_text(&layout, Point::new(0., y.ceil()));

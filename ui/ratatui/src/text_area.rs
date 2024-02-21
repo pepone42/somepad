@@ -35,8 +35,8 @@ impl StatefulWidget for TextArea {
             let selection_area = s.areas(&self.rope);
             let mut y = (s.start().line - state.scrolly) as u16;
             for line in selection_area {
-                let xs = tab2space_char_idx(&self.rope.slice(..), y as _, self.indent_len)[line.0];
-                let xe = tab2space_char_idx(&self.rope.slice(..), y as _, self.indent_len)[line.1];
+                let xs = tab2space_char_idx(&self.rope.slice(..), y as _, self.indent_len)[line.col_start];
+                let xe = tab2space_char_idx(&self.rope.slice(..), y as _, self.indent_len)[line.col_end];
                 let w = xe - xs;
                 let bgarea = Rect::new(xs as _, y, w as _, 1);
                 if y < area.height {
