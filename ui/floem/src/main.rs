@@ -109,48 +109,49 @@ fn make_selection_path(aera: &[Rect]) -> floem::kurbo::BezPath {
     match aera {
         [] => {}
         [r] => {
-            path.push(PathEl::MoveTo(Point::new(r.x0, r.y1 - bevel)));
-            path.push(PathEl::QuadTo(
-                Point::new(r.x0, r.y0 + bevel),
-                Point::new(r.x0, r.y0 + bevel),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(r.x0, r.y0),
-                Point::new(r.x0 + bevel, r.y0),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(r.x1 - bevel, r.y0),
-                Point::new(r.x1 - bevel, r.y0),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(r.x1, r.y0),
-                Point::new(r.x1, r.y0 + bevel),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(r.x1, r.y1 - bevel),
-                Point::new(r.x1, r.y1 - bevel),
-            ));
+            if r.x1 - r.x0 > epsilon {
+                path.push(PathEl::MoveTo(Point::new(r.x0, r.y1 - bevel)));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x0, r.y0 + bevel),
+                    Point::new(r.x0, r.y0 + bevel),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x0, r.y0),
+                    Point::new(r.x0 + bevel, r.y0),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1 - bevel, r.y0),
+                    Point::new(r.x1 - bevel, r.y0),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1, r.y0),
+                    Point::new(r.x1, r.y0 + bevel),
+                ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1, r.y1 - bevel),
+                    Point::new(r.x1, r.y1 - bevel),
+                ));
 
-            path.push(PathEl::QuadTo(
-                Point::new(r.x1, r.y1),
-                Point::new(r.x1 - bevel, r.y1),
-            ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x1, r.y1),
+                    Point::new(r.x1 - bevel, r.y1),
+                ));
 
-            path.push(PathEl::QuadTo(
-                Point::new(r.x0 + bevel, r.y1),
-                Point::new(r.x0 + bevel, r.y1),
-            ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x0 + bevel, r.y1),
+                    Point::new(r.x0 + bevel, r.y1),
+                ));
 
-            path.push(PathEl::QuadTo(
-                Point::new(r.x0 , r.y1),
-                Point::new(r.x0 , r.y1 - bevel),
-            ));
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x0, r.y1),
+                    Point::new(r.x0, r.y1 - bevel),
+                ));
 
-            path.push(PathEl::QuadTo(
-                Point::new(r.x0, r.y1 - bevel),
-                Point::new(r.x0, r.y1 - bevel),
-            ));
-
+                path.push(PathEl::QuadTo(
+                    Point::new(r.x0, r.y1 - bevel),
+                    Point::new(r.x0, r.y1 - bevel),
+                ));
+            }
         }
         [f, aera @ ..] => {
             path.push(PathEl::MoveTo(Point::new(f.x0, f.y1 - bevel)));
@@ -417,14 +418,17 @@ impl View for TextEditor {
                     start.point.x.ceil(),
                     y.ceil(),
                     end.point.x.ceil() + if sel.2 { self.char_base_width } else { 0.0 },
-                    (y + self.line_height).ceil() + 1.,
+                    (y + self.line_height).ceil(),
                 );
                 // let b = Brush::Solid(Color::GRAY);
 
                 // cx.fill(&r, &b, 0.);
                 //if sel.0 != sel.1 {
-                sel_rects.entry(sel.3).and_modify(|s: &mut Vec<Rect>| s.push(r)).or_insert(vec![r]);
-                
+                sel_rects
+                    .entry(sel.3)
+                    .and_modify(|s: &mut Vec<Rect>| s.push(r))
+                    .or_insert(vec![r]);
+
                 //sel_rects.entr(sel.3, r);
                 //}
             }
@@ -452,7 +456,7 @@ impl View for TextEditor {
             if !path.is_empty() {
                 //if !dbg!(&sel_rects).is_empty() {
                 cx.fill(&path, &b, 0.);
-                cx.stroke(&path, &f, 1.);
+                cx.stroke(&path, &f, 0.5);
             }
         }
     }
