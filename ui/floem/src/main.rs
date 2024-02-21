@@ -15,7 +15,7 @@ use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
 use floem::style::{FontFamily, Position, StyleProp};
 use floem::taffy::layout::{self, Layout};
-use floem::view::{View, ViewData};
+use floem::view::{View, ViewData, Widget};
 use floem::views::{
     container, h_stack, label, list, scroll, stack, text, v_stack, virtual_list, virtual_stack,
     Decorators, VirtualItemSize,
@@ -75,7 +75,7 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
         self.id()
-            .update_state(TextEditorCommand::FocusMainCursor, true);
+            .update_state_deferred(TextEditorCommand::FocusMainCursor);
     }
 
     pub fn layout_line(&self, line: usize) -> TextLayout {
@@ -278,6 +278,20 @@ impl View for TextEditor {
         &mut self.data
     }
 
+    fn build(self) -> floem::view::AnyWidget {
+        Box::new(self)
+    }
+}
+
+impl Widget for TextEditor {
+    fn view_data(&self) -> &ViewData {
+        &self.data
+    }
+
+    fn view_data_mut(&mut self) -> &mut ViewData {
+        &mut self.data
+    }
+
     fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
         if let Ok(cmd) = state.downcast::<TextEditorCommand>() {
             match *cmd {
@@ -356,28 +370,6 @@ impl View for TextEditor {
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
-        // for sel in self.doc.get().selections.iter().map(|s| s.areas(&self.doc.get().rope)) {
-        //     let start =
-        //             layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(sel.), sel.0));
-        //         let end =
-        //             layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.1));
-
-        //         let r = Rect::new(
-        //             start.point.x.ceil(),
-        //             y.ceil(),
-        //             end.point.x.ceil(),
-        //             (y + self.line_height).ceil() + 1.,
-        //         );
-        // }
-
-        // let selections = self
-        //     .doc
-        //     .get()
-        //     .selections
-        //     .iter()
-        //     .enumerate()
-        //     .map(|s| (s.0,s.1.areas(&self.doc.get().rope)))
-        //     .collect::<HashMap<usize,(usize, usize, usize, bool)>>();
         let mut selection_areas = HashMap::new();
         for sel in self.doc.get().selections.iter().enumerate() {
             let aera = sel.1.areas(&self.doc.get().rope);
