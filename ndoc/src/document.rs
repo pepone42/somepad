@@ -568,7 +568,7 @@ pub enum MoveDirection {
     Right,
 }
 
-#[derive(Default, Debug, Clone, Copy, Eq, Ord)]
+#[derive(Default, Debug, Clone, Copy, Eq, Ord, Hash)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
@@ -614,20 +614,22 @@ pub struct SelectionAera {
     pub col_end: usize,
     pub line: usize,
     pub include_eol: bool,
+    pub id: Selection
 }
 
 impl SelectionAera {
-    pub fn new(col_start: usize, col_end: usize, line: usize, include_eol: bool) -> Self {
+    pub fn new(col_start: usize, col_end: usize, line: usize, include_eol: bool, id: Selection) -> Self {
         Self {
             col_start,
             col_end,
             line,
             include_eol,
+            id
         }
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Ord, Hash)]
 pub struct Selection {
     pub head: Position,
     pub tail: Position,
@@ -668,6 +670,7 @@ impl Selection {
                     self.end().column,
                     self.start().line,
                     false,
+                    *self,
                 )]
             }
             1 => {
@@ -676,9 +679,9 @@ impl Selection {
                         self.start().column,
                         line_len_grapheme(&rope.slice(..), self.start().line),
                         self.start().line,
-                        true,
+                        true,*self
                     ),
-                    SelectionAera::new(0, self.end().column, self.end().line, false),
+                    SelectionAera::new(0, self.end().column, self.end().line, false,*self),
                 ]
             }
             _ => {
@@ -687,14 +690,14 @@ impl Selection {
                     self.start().column,
                     line_len_grapheme(&rope.slice(..), self.start().line),
                     self.start().line,
-                    true,
+                    true,*self
                 ));
 
                 for l in self.start().line + 1..self.end().line {
-                    v.push(SelectionAera::new(0, line_len_grapheme(&rope.slice(..), l), l, true));
+                    v.push(SelectionAera::new(0, line_len_grapheme(&rope.slice(..), l), l, true,*self));
                 }
 
-                v.push(SelectionAera::new(0, self.end().column, self.end().line, false));
+                v.push(SelectionAera::new(0, self.end().column, self.end().line, false,*self));
                 v
             }
         }

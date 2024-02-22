@@ -415,7 +415,7 @@ impl Widget for TextEditor {
                 );
 
                 sel_rects
-                    .entry(sel.line)
+                    .entry(sel.id)
                     .and_modify(|s: &mut Vec<Rect>| s.push(r))
                     .or_insert(vec![r]);
             }
