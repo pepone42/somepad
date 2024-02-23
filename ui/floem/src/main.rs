@@ -5,7 +5,9 @@ use std::fmt::format;
 use std::iter::empty;
 
 use floem::cosmic_text::fontdb::Database;
-use floem::cosmic_text::{Attrs, AttrsList, Family, FamilyOwned, Font, TextLayout, Wrap};
+use floem::cosmic_text::{
+    Attrs, AttrsList, Family, FamilyOwned, Font, HitPosition, TextLayout, Wrap,
+};
 use floem::event::Event;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
@@ -25,7 +27,7 @@ use floem::{EventPropagation, Renderer};
 use ndoc::rope_utils::{
     byte_to_grapheme, char_to_grapheme, grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator,
 };
-use ndoc::{Document, Indentation, Selection};
+use ndoc::{Document, Indentation, Rope, Selection, SelectionAera};
 
 enum TextEditorCommand {
     FocusMainCursor,
@@ -98,6 +100,55 @@ impl TextEditor {
         let col = layout.hit_point(Point::new(point.x, self.line_height / 2.0));
         let col = byte_to_grapheme(&self.doc.get().rope.line(line), col.index);
         ndoc::Position::new(line, col)
+    }
+
+    fn get_selection_shape(
+        &self,
+        selection: Selection,
+        layouts: &HashMap<usize, TextLayout>,
+    ) -> floem::kurbo::BezPath {
+        let rope = &self.doc.get().rope;
+
+        let rects = selection
+            .areas(rope)
+            .iter()
+            .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
+            .map(|a| {
+                let start = self.hit_position(&layouts[&a.line], a.line, a.col_start);
+                let end = self.hit_position(&layouts[&a.line], a.line, a.col_end);
+                let y = a.line as f64 * self.line_height;
+
+                Rect::new(
+                    start.point.x.ceil(),
+                    y.ceil(),
+                    end.point.x.ceil()
+                        + if a.include_eol {
+                            self.char_base_width.ceil()
+                        } else {
+                            0.0
+                        },
+                    (y + self.line_height).ceil(),
+                )
+            })
+            .collect::<Vec<Rect>>();
+
+        make_selection_path(&rects)
+    }
+
+    fn get_selections_shapes(
+        &self,
+        layouts: &HashMap<usize, TextLayout>,
+    ) -> Vec<floem::kurbo::BezPath> {
+        self.doc
+            .get()
+            .selections
+            .iter()
+            .map(|s| self.get_selection_shape(*s, layouts))
+            .collect()
+    }
+
+    fn hit_position(&self, layout: &TextLayout, line: usize, col: usize) -> HitPosition {
+        layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(line), col))
     }
 }
 
@@ -307,12 +358,9 @@ impl Widget for TextEditor {
                             &self.doc.get().rope.line(sel.line).to_string(),
                             AttrsList::new(attrs),
                         );
-                        // let idx = NextGraphemeIdxIterator::new(&self.doc.get().rope.line(sel.line)).nth(sel.column);
-                        // let hit = t.hit_position(idx.unwrap());
-                        let hit = t.hit_position(grapheme_to_byte(
-                            &self.doc.get().rope.line(sel.line),
-                            sel.column,
-                        ));
+
+                        let hit = self.hit_position(&t, sel.line, sel.column);
+
                         let rect = Rect::new(
                             hit.point.x - 25.,
                             self.line_height * (sel.line as f64) - 25.,
@@ -370,14 +418,21 @@ impl Widget for TextEditor {
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
-        let mut selection_areas = HashMap::new();
-        for sel in self.doc.get().selections.iter().enumerate() {
-            let aera = sel.1.areas(&self.doc.get().rope);
-            for a in aera {
-                selection_areas.insert(a.line, a);
-            }
-        }
-        
+        layout.set_tab_width(self.doc.get().file_info.indentation.len());
+        let layouts = self
+            .doc
+            .get()
+            .rope
+            .lines()
+            .enumerate()
+            .skip(first_line)
+            .take(total_line)
+            .map(|(i, l)| {
+                layout.set_text(&l.to_string(), attr_list.clone());
+                (i, layout.clone())
+            })
+            .collect::<HashMap<usize, TextLayout>>();
+
         let selections = self
             .doc
             .get()
@@ -386,44 +441,24 @@ impl Widget for TextEditor {
             .map(|s| (s.head.line, s.head.column))
             .collect::<HashMap<usize, usize>>();
 
-        let mut sel_rects = HashMap::new();
-
-        let mut y = (first_line as f64) * self.line_height;
-        for (i, l) in self
-            .doc
-            .get()
-            .rope
-            .lines()
-            .enumerate()
-            .skip(first_line)
-            .take(total_line)
-        {
-            layout.set_tab_width(self.doc.get().file_info.indentation.len());
-            layout.set_text(&l.to_string(), attr_list.clone());
-
-            if let Some(sel) = selection_areas.get(&i) {
-                let start =
-                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.col_start));
-                let end =
-                    layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), sel.col_end));
-
-                let r = Rect::new(
-                    start.point.x.ceil(),
-                    y.ceil(),
-                    end.point.x.ceil() + if sel.include_eol { self.char_base_width.ceil() } else { 0.0 },
-                    (y + self.line_height).ceil(),
-                );
-
-                sel_rects
-                    .entry(sel.id)
-                    .and_modify(|s: &mut Vec<Rect>| s.push(r))
-                    .or_insert(vec![r]);
+        // Draw Selections
+        for path in self.get_selections_shapes(&layouts) {
+            let bg = Brush::Solid(Color::DARK_BLUE.with_alpha_factor(0.25));
+            let fg = Brush::Solid(Color::DARK_BLUE);
+            if !path.is_empty() {
+                cx.fill(&path, &bg, 0.);
+                cx.stroke(&path, &fg, 0.5);
             }
+        }
 
+        for (i, layout) in layouts {
+            let y = i as f64 * self.line_height;
+            // Draw Text
             cx.draw_text(&layout, Point::new(0., y.ceil()));
 
+            // Draw Cursor
             if let Some(sel) = selections.get(&i) {
-                let pos = layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(i), *sel));
+                let pos = self.hit_position(&layout, i, *sel);
                 let r = Rect::new(
                     pos.point.x.ceil(),
                     y.ceil(),
@@ -432,18 +467,6 @@ impl Widget for TextEditor {
                 );
                 let b = Brush::Solid(Color::BLACK);
                 cx.stroke(&r, &b, 2.);
-            }
-
-            y += self.line_height;
-        }
-        let b = Brush::Solid(Color::DARK_BLUE.with_alpha_factor(0.25));
-        let f = Brush::Solid(Color::DARK_BLUE);
-        for r in sel_rects {
-            let path = make_selection_path(&r.1);
-            if !path.is_empty() {
-                //if !dbg!(&sel_rects).is_empty() {
-                cx.fill(&path, &b, 0.);
-                cx.stroke(&path, &f, 0.5);
             }
         }
     }

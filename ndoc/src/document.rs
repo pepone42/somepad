@@ -609,6 +609,7 @@ impl Position {
     // }
 }
 
+#[derive(Debug,Clone,Copy)]
 pub struct SelectionAera {
     pub col_start: usize,
     pub col_end: usize,
