@@ -10,9 +10,6 @@ use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
 use ropey::{Rope, RopeBuilder, RopeSlice};
 
-#[cfg(feature = "vizia")]
-use vizia::prelude::*;
-
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
@@ -30,13 +27,6 @@ pub struct Document {
     pub file_info: FileInfo,
     pub selections: Vec<Selection>,
     pub file_name: Option<PathBuf>,
-}
-
-#[cfg(feature = "vizia")]
-impl Data for Document {
-    fn same(&self, other: &Self) -> bool {
-        *self == *other
-    }
 }
 
 impl PartialEq for Document {
