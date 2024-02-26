@@ -11,4 +11,4 @@ path = "src/main.rs"
 [dependencies]
 floem = {git = "https://github.com/lapce/floem"}
 im = "15.1.0"
-ndoc = {path = "../../ndoc", features = ["vizia"]}
+ndoc = {path = "../../ndoc"}
