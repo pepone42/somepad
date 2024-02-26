@@ -236,8 +236,8 @@ impl Document {
     }
 
     pub fn insert_many(&mut self, input: &str) {
-        if self.selections.len()>1 && input.lines().count() == self.selections.len() {
-            for (i,l) in input.lines().enumerate() {
+        if self.selections.len() > 1 && input.lines().count() == self.selections.len() {
+            for (i, l) in input.lines().enumerate() {
                 self.insert_at_selection(l, self.selections[i]);
             }
         } else {
@@ -247,13 +247,7 @@ impl Document {
 
     pub fn insert(&mut self, input: &str) {
         for i in 0..self.selections.len() {
-            let start = position_to_char(&self.rope.slice(..), self.selections[i].start());
-            let end = position_to_char(&self.rope.slice(..), self.selections[i].end());
-
-            self.selections[i].head.vcol = self.selections[i].head.column;
-            self.selections[i].tail = self.selections[i].head;
-
-            self.insert_at(input, start, end);
+            self.insert_at_selection(input, self.selections[i]);
         }
         self.merge_selections();
     }
