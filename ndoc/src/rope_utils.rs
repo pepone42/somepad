@@ -182,11 +182,11 @@ pub fn next_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
         .count();
     i += fp;
     if i >= slice.len_chars() {
-        return slice.len_bytes();
+        return slice.len_chars();
     }
     let current_char = slice.char(i);
     if fp > 1 || (fp == 1 && char_type(current_char) != CharType::Other) {
-        return slice.char_to_byte(i);
+        return i;
     }
 
     i += slice
@@ -225,7 +225,7 @@ pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
 
     let current_char = slice.char(i - 1);
     if fp > 1 || (fp == 1 && char_type(current_char) != CharType::Other) {
-        return slice.char_to_byte(i);
+        return i;
     }
 
     let mut iter = slice.chars_at(i);

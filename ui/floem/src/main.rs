@@ -668,7 +668,7 @@ impl Widget for TextEditor {
                     match p.count {
                         1 => {
                             self.doc.update(|d| {
-                                d.selections = vec![Selection::new(position.line, position.column)]
+                                d.selections = vec![Selection::new(position, position)]
                             });
                             self.selection_kind = SelectionKind::Char;
                         }

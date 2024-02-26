@@ -255,20 +255,11 @@ impl Document {
     pub fn backspace(&mut self) {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
-                let start = position_to_char(&self.rope.slice(..), self.selections[i].start());
-
-                self.insert_at(
-                    "",
-                    prev_grapheme_boundary(&self.rope.slice(..), start),
-                    start,
-                );
+                let start = self.selections[i].start();
+                self.insert_at_position("", self.prev_position(start), start);
             } else {
-                let start = position_to_char(&self.rope.slice(..), self.selections[i].start());
-                let end = position_to_char(&self.rope.slice(..), self.selections[i].end());
-                self.insert_at("", start, end);
+                self.insert_at_selection("", self.selections[i]);
             }
-            self.selections[i].head.vcol = self.selections[i].head.column;
-            self.selections[i].tail = self.selections[i].head;
         }
         self.merge_selections();
     }
@@ -276,87 +267,108 @@ impl Document {
     pub fn delete(&mut self) {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
-                let start = position_to_char(&self.rope.slice(..), self.selections[i].start());
-
-                self.insert_at(
-                    "",
-                    start,
-                    next_grapheme_boundary(&self.rope.slice(..), start),
-                );
+                let start = self.selections[i].start();
+                self.insert_at_position("", start, self.next_position(start));
             } else {
-                let start = position_to_char(&self.rope.slice(..), self.selections[i].start());
-                let end = position_to_char(&self.rope.slice(..), self.selections[i].end());
-                self.insert_at("", start, end);
+                self.insert_at_selection("", self.selections[i]);
             }
-            self.selections[i].head.vcol = self.selections[i].head.column;
-            self.selections[i].tail = self.selections[i].head;
         }
         self.merge_selections();
     }
 
     pub fn move_selections(&mut self, dir: MoveDirection, expand: bool) {
-        for s in &mut self.selections {
-            match dir {
-                MoveDirection::Up => {
-                    s.head.line = s.head.line.saturating_sub(1);
-                    s.head.column = s
-                        .head
-                        .vcol
-                        .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
+        // for s in &mut self.selections {
+        //     match dir {
+        //         MoveDirection::Up => {
+        //             s.head.line = s.head.line.saturating_sub(1);
+        //             s.head.column = s
+        //                 .head
+        //                 .vcol
+        //                 .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
+        //         }
+        //         MoveDirection::Down => {
+        //             s.head.line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
+        //             s.head.column = s
+        //                 .head
+        //                 .vcol
+        //                 .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
+        //         }
+        //         MoveDirection::Left => {
+        //             let start = position_to_char(&self.rope.slice(..), s.head);
+        //             s.head = char_to_position(
+        //                 &self.rope.slice(..),
+        //                 prev_grapheme_boundary(&self.rope.slice(..), start),
+        //             );
+        //         }
+        //         MoveDirection::Right => {
+        //             let start = position_to_char(&self.rope.slice(..), s.head);
+        //             s.head = char_to_position(
+        //                 &self.rope.slice(..),
+        //                 next_grapheme_boundary(&self.rope.slice(..), start),
+        //             );
+        //             s.head;
+        //         }
+        //     }
+        //     if !expand {
+        //         s.tail = s.head;
+        //     }
+        // }
+
+        self.selections = self
+            .selections
+            .iter()
+            .map(|s| {
+                let vcol = s.head.vcol;
+                let mut head = match dir {
+                    MoveDirection::Up => {
+                        let line = s.head.line.saturating_sub(1);
+                        Position::new(
+                            line,
+                            s.head
+                                .vcol
+                                .min(line_len_grapheme(&self.rope.slice(..), line)),
+                        )
+                    }
+                    MoveDirection::Down => {
+                        let line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
+                        Position::new(
+                            line,
+                            s.head
+                                .vcol
+                                .min(line_len_grapheme(&self.rope.slice(..), line)),
+                        )
+                    }
+                    MoveDirection::Left => self.prev_position(s.head),
+                    MoveDirection::Right => self.next_position(s.head),
+                };
+                if matches!(dir, MoveDirection::Down | MoveDirection::Up) {
+                    head.vcol = vcol;
                 }
-                MoveDirection::Down => {
-                    s.head.line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
-                    s.head.column = s
-                        .head
-                        .vcol
-                        .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
-                }
-                MoveDirection::Left => {
-                    let start = position_to_char(&self.rope.slice(..), s.head);
-                    s.head = char_to_position(
-                        &self.rope.slice(..),
-                        prev_grapheme_boundary(&self.rope.slice(..), start),
-                    );
-                }
-                MoveDirection::Right => {
-                    let start = position_to_char(&self.rope.slice(..), s.head);
-                    s.head = char_to_position(
-                        &self.rope.slice(..),
-                        next_grapheme_boundary(&self.rope.slice(..), start),
-                    );
-                    s.head;
-                }
-            }
-            if !expand {
-                s.tail = s.head;
-            }
-        }
+                let tail = if !expand { head } else { s.tail };
+
+                Selection::new(head, tail)
+            })
+            .collect();
+
         self.merge_selections();
     }
 
     pub fn move_selections_word(&mut self, dir: MoveDirection, expand: bool) {
-        for s in &mut self.selections {
-            match dir {
+        self.selections = self.selections.iter().map(|s| {
+            let head = match dir {
                 MoveDirection::Left => {
-                    let start = position_to_char(&self.rope.slice(..), s.head);
-                    s.head = char_to_position(
-                        &self.rope.slice(..),
-                        prev_word_boundary(&self.rope.slice(..), start),
-                    );
+                    self.prev_word_boundary(s.head)
                 }
                 MoveDirection::Right => {
-                    let start = position_to_char(&self.rope.slice(..), s.head);
-                    s.head = char_to_position(
-                        &self.rope.slice(..),
-                        next_word_boundary(&self.rope.slice(..), start),
-                    );
+                    self.next_word_boundary(s.head)
                 }
-                _ => (),
-            }
-            if !expand {
-                s.tail = s.head;
-            }
-        }
+                _ => s.head,
+            };
+
+            let tail = if !expand { head } else { s.tail };
+            Selection::new(head, tail)
+        }).collect();
+
         self.merge_selections();
     }
 
@@ -374,6 +386,16 @@ impl Document {
             slice,
             prev_word_boundary(slice, position_to_char(slice, position)),
         )
+    }
+
+    pub fn prev_position(&self, position: Position) -> Position {
+        let char_idx = self.position_to_char(position);
+        self.char_to_position(prev_grapheme_boundary(&self.rope.slice(..), char_idx))
+    }
+
+    pub fn next_position(&self, position: Position) -> Position {
+        let char_idx = self.position_to_char(position);
+        self.char_to_position(next_grapheme_boundary(&self.rope.slice(..), char_idx))
     }
 
     pub fn word_start(&self, position: Position) -> Position {
@@ -684,11 +706,8 @@ impl PartialOrd for Selection {
 }
 
 impl Selection {
-    pub fn new(line: usize, col: usize) -> Self {
-        Self {
-            head: Position::new(line, col),
-            tail: Position::new(line, col),
-        }
+    pub fn new(head: Position, tail: Position) -> Self {
+        Self { head, tail }
     }
     pub fn start(&self) -> Position {
         if self.head <= self.tail {
