@@ -656,14 +656,6 @@ impl Position {
             vcol: column_idx,
         }
     }
-
-    // pub fn from_char_idx(rope: &RopeSlice, char_idx: usize) -> Self {
-    //     char_to_position(&rope, char_idx)
-    // }
-
-    // pub fn char_idx(&self, rope: &RopeSlice) -> usize {
-    //     position_to_char(&rope, *self)
-    // }
 }
 
 #[derive(Debug, Clone, Copy)]
