@@ -31,6 +31,7 @@ use ndoc::{Document, Indentation, Rope, Selection, SelectionAera};
 
 enum TextEditorCommand {
     FocusMainCursor,
+    SelectLine(usize),
 }
 
 pub struct TextEditor {
@@ -369,6 +370,9 @@ impl Widget for TextEditor {
                         );
                         self.id().scroll_to(Some(rect));
                     }
+                }
+                TextEditorCommand::SelectLine(line) => {
+                    self.doc.update(|d| d.select_line(line));
                 }
             }
         }
@@ -720,17 +724,20 @@ fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     container(
         scroll(
             h_stack((
-                //    list((0..dbg!(line_len.get())).map(|i| label(move || format!(" {} ", i.to_string())).style(|s| s.font_family("Monospace".to_string()).font_size(14.)))),
                 virtual_stack(
                     floem::views::VirtualDirection::Vertical,
                     VirtualItemSize::Fixed(Box::new(move || text_editor.line_height)),
                     move || line_numbers.get(),
                     move |item| *item,
-                    |i| label(move || format!(" {} ", (i + 1).to_string())), // .style(|s| {
-                                                                             //     s.color(Color::BLACK)
-                                                                             //         .font_family("Monospace".to_string())
-                                                                             //         .font_size(14.)
-                                                                             // })
+                    move |i| {
+                        label(move || format!(" {} ", (i + 1).to_string())).on_event_cont(
+                            floem::event::EventListener::PointerDown,
+                            move |_| {
+                                text_editor_id
+                                    .update_state_deferred(TextEditorCommand::SelectLine(i))
+                            },
+                        )
+                    },
                 )
                 .style(move |s| {
                     s.color(Color::BLACK)
