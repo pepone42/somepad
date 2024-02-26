@@ -346,7 +346,7 @@ impl Document {
                 }
                 let tail = if !expand { head } else { s.tail };
 
-                Selection::new(head, tail)
+                Selection::new(head, tail, s.is_clone)
             })
             .collect();
 
@@ -366,7 +366,7 @@ impl Document {
             };
 
             let tail = if !expand { head } else { s.tail };
-            Selection::new(head, tail)
+            Selection::new(head, tail, s.is_clone)
         }).collect();
 
         self.merge_selections();
@@ -411,7 +411,7 @@ impl Document {
     pub fn select_word(&mut self, position: Position) {
         let tail = self.word_start(position);
         let head = self.word_end(position);
-        self.selections = vec![Selection { head, tail }]
+        self.selections = vec![Selection { head, tail, is_clone : false }]
     }
 
     pub fn expand_selection_by_word(&mut self, position: Position) {
@@ -456,13 +456,21 @@ impl Document {
     pub fn select_line(&mut self, line: usize) {
         let tail = self.line_start(line);
         let head = self.line_end_full(line);
-        self.selections = vec![Selection { head, tail }]
+        self.selections = vec![Selection { head, tail, is_clone: false }]
     }
 
     pub fn select_all(&mut self) {
         let tail = char_to_position(&self.rope.slice(..), 0);
         let head = char_to_position(&self.rope.slice(..), self.rope.len_chars());
-        self.selections = vec![Selection { head, tail }]
+        self.selections = vec![Selection { head, tail, is_clone: false }]
+    }
+
+    pub fn set_main_selection(&mut self, head: Position, tail: Position) {
+        self.selections = vec![Selection { head, tail, is_clone: false }]
+    }
+
+    pub fn cancel_multi_cursor(&mut self) {
+        self.selections = self.selections.iter().filter(|s| !s.is_clone).map(|s| *s).collect();
     }
 
     pub fn duplicate_selection(&mut self, direction: MoveDirection) {
@@ -476,6 +484,7 @@ impl Document {
                     .vcol
                     .min(line_len_grapheme(&self.rope.slice(..), news.head.line));
                 news.tail = news.head;
+                news.is_clone = true;
                 if news.head.line > s.head.line {
                     self.selections.push(news);
                 }
@@ -489,6 +498,7 @@ impl Document {
                     .vcol
                     .min(line_len_grapheme(&self.rope.slice(..), news.head.line));
                 news.tail = news.head;
+                news.is_clone = true;
                 if news.head.line < s.head.line {
                     self.selections.push(news);
                 }
@@ -689,6 +699,7 @@ impl SelectionAera {
 pub struct Selection {
     pub head: Position,
     pub tail: Position,
+    is_clone: bool,
 }
 
 impl PartialOrd for Selection {
@@ -698,8 +709,8 @@ impl PartialOrd for Selection {
 }
 
 impl Selection {
-    pub fn new(head: Position, tail: Position) -> Self {
-        Self { head, tail }
+    pub fn new(head: Position, tail: Position, is_clone: bool) -> Self {
+        Self { head, tail, is_clone }
     }
     pub fn start(&self) -> Position {
         if self.head <= self.tail {

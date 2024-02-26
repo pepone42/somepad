@@ -657,6 +657,14 @@ impl Widget for TextEditor {
 
                             EventPropagation::Stop
                         }
+                        Key::Named(NamedKey::Escape) => {
+                            self.doc.update(|d| {
+                                d.cancel_multi_cursor();
+                            });
+                            cx.request_all(self.id());
+
+                            EventPropagation::Stop
+                        }
                         _ => EventPropagation::Continue,
                     },
                 }
@@ -668,7 +676,7 @@ impl Widget for TextEditor {
                     match p.count {
                         1 => {
                             self.doc.update(|d| {
-                                d.selections = vec![Selection::new(position, position)]
+                                d.set_main_selection(position, position);
                             });
                             self.selection_kind = SelectionKind::Char;
                         }
