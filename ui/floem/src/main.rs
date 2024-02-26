@@ -23,7 +23,7 @@ use floem::views::{
     Decorators, VirtualItemSize,
 };
 use floem::widgets::button;
-use floem::{EventPropagation, Renderer};
+use floem::{Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{
     byte_to_grapheme, char_to_grapheme, grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator,
 };
@@ -483,9 +483,23 @@ impl Widget for TextEditor {
                 //dbg!(&e);
                 match e.key.text {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
-                        self.doc.update(|d| d.insert(txt));
-                        self.scroll_to_main_cursor();
-                        cx.request_all(self.id());
+                        match txt.as_str() {
+                            "c" if e.modifiers.control_key() => {
+                                let _ =
+                                    Clipboard::set_contents(self.doc.get().get_selection_content());
+                                cx.request_all(self.id());
+                            }
+                            "v" if e.modifiers.control_key() => {
+                                if let Ok(s) = Clipboard::get_contents() {
+                                    self.doc.update(|d| d.insert_many(&s));
+                                }
+                            }
+                            _ => {
+                                self.doc.update(|d| d.insert(txt));
+                                self.scroll_to_main_cursor();
+                                cx.request_all(self.id());
+                            }
+                        }
                         EventPropagation::Stop
                     }
                     _ => match e.key.logical_key {

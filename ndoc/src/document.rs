@@ -8,7 +8,7 @@ use std::{
 
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
-use ropey::{Rope, RopeSlice};
+use ropey::{Rope, RopeBuilder, RopeSlice};
 
 #[cfg(feature = "vizia")]
 use vizia::prelude::*;
@@ -125,6 +125,16 @@ impl Document {
         }
     }
 
+    pub fn insert_at_position(&mut self, input: &str, start: Position, end: Position) {
+        let start = self.position_to_char(start);
+        let end = self.position_to_char(end);
+        self.insert_at(input, start, end);
+    }
+
+    pub fn insert_at_selection(&mut self, input: &str, selection: Selection) {
+        self.insert_at_position(input, selection.start(), selection.end());
+    }
+
     pub fn insert_at(&mut self, input: &str, start: usize, end: usize) {
         let mut changed = false;
 
@@ -201,6 +211,37 @@ impl Document {
         if self.edit_stack_top < self.edit_stack.len() - 1 {
             self.edit_stack_top += 1;
             (self.rope, self.selections) = self.edit_stack[self.edit_stack_top].clone();
+        }
+    }
+
+    pub fn position_to_char(&self, position: Position) -> usize {
+        position_to_char(&self.rope.slice(..), position)
+    }
+
+    pub fn char_to_position(&self, char_idx: usize) -> Position {
+        char_to_position(&self.rope.slice(..), char_idx)
+    }
+
+    pub fn get_selection_content(&self) -> String {
+        let r = self
+            .selections
+            .iter()
+            .map(|s| {
+                self.rope
+                    .slice(self.position_to_char(s.start())..self.position_to_char(s.end()))
+                    .to_string()
+            })
+            .collect::<Vec<String>>();
+        r.join(&LineFeed::default().to_string())
+    }
+
+    pub fn insert_many(&mut self, input: &str) {
+        if self.selections.len()>1 && input.lines().count() == self.selections.len() {
+            for (i,l) in input.lines().enumerate() {
+                self.insert_at_selection(l, self.selections[i]);
+            }
+        } else {
+            self.insert(input);
         }
     }
 
@@ -609,23 +650,29 @@ impl Position {
     // }
 }
 
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct SelectionAera {
     pub col_start: usize,
     pub col_end: usize,
     pub line: usize,
     pub include_eol: bool,
-    pub id: Selection
+    pub id: Selection,
 }
 
 impl SelectionAera {
-    pub fn new(col_start: usize, col_end: usize, line: usize, include_eol: bool, id: Selection) -> Self {
+    pub fn new(
+        col_start: usize,
+        col_end: usize,
+        line: usize,
+        include_eol: bool,
+        id: Selection,
+    ) -> Self {
         Self {
             col_start,
             col_end,
             line,
             include_eol,
-            id
+            id,
         }
     }
 }
@@ -680,9 +727,10 @@ impl Selection {
                         self.start().column,
                         line_len_grapheme(&rope.slice(..), self.start().line),
                         self.start().line,
-                        true,*self
+                        true,
+                        *self,
                     ),
-                    SelectionAera::new(0, self.end().column, self.end().line, false,*self),
+                    SelectionAera::new(0, self.end().column, self.end().line, false, *self),
                 ]
             }
             _ => {
@@ -691,14 +739,27 @@ impl Selection {
                     self.start().column,
                     line_len_grapheme(&rope.slice(..), self.start().line),
                     self.start().line,
-                    true,*self
+                    true,
+                    *self,
                 ));
 
                 for l in self.start().line + 1..self.end().line {
-                    v.push(SelectionAera::new(0, line_len_grapheme(&rope.slice(..), l), l, true,*self));
+                    v.push(SelectionAera::new(
+                        0,
+                        line_len_grapheme(&rope.slice(..), l),
+                        l,
+                        true,
+                        *self,
+                    ));
                 }
 
-                v.push(SelectionAera::new(0, self.end().column, self.end().line, false,*self));
+                v.push(SelectionAera::new(
+                    0,
+                    self.end().column,
+                    self.end().line,
+                    false,
+                    *self,
+                ));
                 v
             }
         }
