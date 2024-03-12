@@ -498,6 +498,12 @@ impl Widget for TextEditor {
                                     self.doc.update(|d| d.insert_many(&s));
                                 }
                             }
+                            "z" if e.modifiers.control_key() => {
+                                self.doc.update(|d| d.undo());
+                            }
+                            "y" if e.modifiers.control_key() => {
+                                self.doc.update(|d| d.redo());
+                            }
                             _ => {
                                 self.doc.update(|d| d.insert(txt));
                                 self.scroll_to_main_cursor();
@@ -817,7 +823,7 @@ fn app_view() -> impl View {
             label(move || match doc.get().file_name {
                 Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
                 None => "[Untilted]".to_string(),
-            })
+            }),label(move|| if doc.get().is_dirty() {"*".to_string()} else {"".to_string()})
             .style(|s| s.width_full()), //.height(24.)),
             label(move || indentation.get().to_string())
                 .popout_menu(move || indentation_menu(move |indent| set_indentation.set(indent)))

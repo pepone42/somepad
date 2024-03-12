@@ -125,6 +125,10 @@ impl Document {
         self.insert_at_position(input, selection.start(), selection.end());
     }
 
+    pub fn is_dirty(&self) -> bool {
+        self.edit_stack_top > 0 
+    }
+
     pub fn insert_at(&mut self, input: &str, start: usize, end: usize) {
         let mut changed = false;
 
@@ -195,7 +199,7 @@ impl Document {
         if self.edit_stack_top > 0 {
             self.edit_stack_top -= 1;
             (self.rope, self.selections) = self.edit_stack[self.edit_stack_top].clone();
-        }
+        } 
     }
     pub fn redo(&mut self) {
         if self.edit_stack_top < self.edit_stack.len() - 1 {
@@ -267,43 +271,6 @@ impl Document {
     }
 
     pub fn move_selections(&mut self, dir: MoveDirection, expand: bool) {
-        // for s in &mut self.selections {
-        //     match dir {
-        //         MoveDirection::Up => {
-        //             s.head.line = s.head.line.saturating_sub(1);
-        //             s.head.column = s
-        //                 .head
-        //                 .vcol
-        //                 .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
-        //         }
-        //         MoveDirection::Down => {
-        //             s.head.line = usize::min(s.head.line + 1, self.rope.len_lines() - 1);
-        //             s.head.column = s
-        //                 .head
-        //                 .vcol
-        //                 .min(line_len_grapheme(&self.rope.slice(..), s.head.line));
-        //         }
-        //         MoveDirection::Left => {
-        //             let start = position_to_char(&self.rope.slice(..), s.head);
-        //             s.head = char_to_position(
-        //                 &self.rope.slice(..),
-        //                 prev_grapheme_boundary(&self.rope.slice(..), start),
-        //             );
-        //         }
-        //         MoveDirection::Right => {
-        //             let start = position_to_char(&self.rope.slice(..), s.head);
-        //             s.head = char_to_position(
-        //                 &self.rope.slice(..),
-        //                 next_grapheme_boundary(&self.rope.slice(..), start),
-        //             );
-        //             s.head;
-        //         }
-        //     }
-        //     if !expand {
-        //         s.tail = s.head;
-        //     }
-        // }
-
         self.selections = self
             .selections
             .iter()
