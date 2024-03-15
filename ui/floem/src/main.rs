@@ -160,6 +160,23 @@ impl TextEditor {
     fn hit_position(&self, layout: &TextLayout, line: usize, col: usize) -> HitPosition {
         layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(line), col))
     }
+    
+    fn save_as(&mut self) {
+        self.disable.set(true);
+        let doc = self.doc.clone();
+        let disable = self.disable.clone();
+        save_as(
+            FileDialogOptions::new()
+                .default_name("new.txt")
+                .title("Save file"),
+            move |file_info| {
+                if let Some(file) = file_info {
+                    doc.update(|d| d.save_as(&file.path[0]).unwrap());
+                    disable.set(false);
+                }
+            },
+        );
+    }
 }
 
 fn make_selection_path(aera: &[Rect]) -> floem::kurbo::BezPath {
@@ -513,24 +530,14 @@ impl Widget for TextEditor {
                             "y" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.redo());
                             }
+                            "S" if e.modifiers.control_key() => {
+                                self.save_as();
+                            }
                             "s" if e.modifiers.control_key() => {
                                 if let Some(ref file_name) = self.doc.get().file_name {
                                     self.doc.update(|d| d.save_as(file_name).unwrap());
                                 } else {
-                                    self.disable.set(true);
-                                    let doc = self.doc.clone();
-                                    let disable = self.disable.clone();
-                                    save_as(
-                                        FileDialogOptions::new()
-                                            .default_name("new.txt")
-                                            .title("Save file"),
-                                        move |file_info| {
-                                            if let Some(file) = file_info {
-                                                doc.update(|d| d.save_as(&file.path[0]).unwrap());
-                                                disable.set(false);
-                                            }
-                                        },
-                                    );
+                                    self.save_as();
                                 }
                             }
                             _ => {
