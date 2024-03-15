@@ -1,8 +1,7 @@
 use std::{
     borrow::Cow,
     fs,
-    io::Read,
-    io::Result,
+    io::{Error, ErrorKind, Read, Result, Write},
     path::{Path, PathBuf},
 };
 
@@ -113,6 +112,38 @@ impl Document {
                 })
             }
         }
+    }
+
+    fn reset_edit_stack(&mut self) {
+        self.edit_stack = vec![(self.rope.clone(), vec![Selection::default()])];
+        self.edit_stack_top = 0;
+    }
+
+    pub fn save_as(&mut self, path: &Path) -> Result<()> {
+        let mut file = fs::File::create(path)?;
+        let input = self.rope.to_string();
+        let encoded_output = match self.file_info.encoding.name() {
+            "UTF-16LE" => {
+                let mut v = Vec::new();
+                input.encode_utf16().for_each(|i| v.extend_from_slice(&i.to_le_bytes()));
+                Cow::from(v)
+            }
+            "UTF-16BE" => {
+                let mut v = Vec::new();
+                input.encode_utf16().for_each(|i| v.extend_from_slice(&i.to_be_bytes()));
+                Cow::from(v)
+            }
+            _ => self.file_info.encoding.encode(&input).0,
+        };
+
+        if let Some(bom) = &self.file_info.bom {
+            file.write_all(bom)?;
+        }
+        file.write_all(&encoded_output)?;
+
+        self.reset_edit_stack();
+        self.file_name = Some(path.to_owned());
+        Ok(())
     }
 
     pub fn insert_at_position(&mut self, input: &str, start: Position, end: Position) {

@@ -4,11 +4,13 @@ use std::env::{self, Args};
 use std::fmt::format;
 use std::iter::empty;
 
+use floem::action::save_as;
 use floem::cosmic_text::fontdb::Database;
 use floem::cosmic_text::{
     Attrs, AttrsList, Family, FamilyOwned, Font, HitPosition, TextLayout, Wrap,
 };
 use floem::event::Event;
+use floem::file::FileDialogOptions;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
 use floem::kurbo::{BezPath, PathEl, Point, Rect};
@@ -16,7 +18,7 @@ use floem::menu::{Menu, MenuEntry, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
 use floem::style::{FontFamily, Position, StyleProp};
-use floem::taffy::layout::{self, Layout};
+use floem::taffy::Layout;
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
     container, h_stack, label, list, scroll, stack, text, v_stack, virtual_list, virtual_stack,
@@ -37,12 +39,13 @@ enum TextEditorCommand {
 pub struct TextEditor {
     data: ViewData,
     doc: RwSignal<Document>,
-    text_node: Option<floem::taffy::prelude::Node>,
+    text_node: Option<floem::taffy::tree::NodeId>,
     viewport: Rect,
     line_height: f64,
     page_len: usize,
     char_base_width: f64,
     selection_kind: SelectionKind,
+    disable: RwSignal<bool>,
 }
 
 pub enum SelectionKind {
@@ -64,6 +67,10 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     let char_base_width = t.lines[0].layout_opt().as_ref().unwrap()[0].w as f64;
     id.request_focus();
+
+    let disable = RwSignal::new(false);
+    
+
     TextEditor {
         data: ViewData::new(id),
         doc: doc(),
@@ -73,7 +80,9 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         page_len: 0,
         char_base_width,
         selection_kind: SelectionKind::Char,
-    }
+        disable,
+    }.disabled(move || disable.get())
+
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
@@ -378,7 +387,7 @@ impl Widget for TextEditor {
         }
     }
 
-    fn layout(&mut self, cx: &mut floem::context::LayoutCx) -> floem::taffy::prelude::Node {
+    fn layout(&mut self, cx: &mut floem::context::LayoutCx) -> floem::taffy::tree::NodeId {
         cx.layout_node(self.id(), true, |cx| {
             let (width, height) = (
                 1024.,
@@ -503,6 +512,26 @@ impl Widget for TextEditor {
                             }
                             "y" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.redo());
+                            }
+                            "s" if e.modifiers.control_key() => {
+                                if let Some(ref file_name) = self.doc.get().file_name {
+                                    self.doc.update(|d| d.save_as(file_name).unwrap());
+                                } else {
+                                    self.disable.set(true);
+                                    let doc = self.doc.clone();
+                                    let disable = self.disable.clone();
+                                    save_as(
+                                        FileDialogOptions::new()
+                                            .default_name("new.txt")
+                                            .title("Save file"),
+                                        move |file_info| {
+                                            if let Some(file) = file_info {
+                                                doc.update(|d| d.save_as(&file.path[0]).unwrap());
+                                                disable.set(false);
+                                            }
+                                        },
+                                    );
+                                }
                             }
                             _ => {
                                 self.doc.update(|d| d.insert(txt));
@@ -823,7 +852,14 @@ fn app_view() -> impl View {
             label(move || match doc.get().file_name {
                 Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
                 None => "[Untilted]".to_string(),
-            }),label(move|| if doc.get().is_dirty() {"*".to_string()} else {"".to_string()})
+            }),
+            label(move || {
+                if doc.get().is_dirty() {
+                    "●".to_string()
+                } else {
+                    "".to_string()
+                }
+            })
             .style(|s| s.width_full()), //.height(24.)),
             label(move || indentation.get().to_string())
                 .popout_menu(move || indentation_menu(move |indent| set_indentation.set(indent)))
