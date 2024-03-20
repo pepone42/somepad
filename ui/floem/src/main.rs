@@ -13,7 +13,7 @@ use floem::event::Event;
 use floem::file::FileDialogOptions;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
-use floem::kurbo::{BezPath, PathEl, Point, Rect};
+use floem::kurbo::{BezPath, Circle, PathEl, Point, Rect, Vec2};
 use floem::menu::{Menu, MenuEntry, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
@@ -69,7 +69,6 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
     id.request_focus();
 
     let disable = RwSignal::new(false);
-    
 
     TextEditor {
         data: ViewData::new(id),
@@ -81,8 +80,8 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         char_base_width,
         selection_kind: SelectionKind::Char,
         disable,
-    }.disabled(move || disable.get())
-
+    }
+    .disabled(move || disable.get())
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
@@ -116,7 +115,7 @@ impl TextEditor {
         &self,
         selection: Selection,
         layouts: &HashMap<usize, TextLayout>,
-    ) -> floem::kurbo::BezPath {
+    ) -> Option<floem::kurbo::BezPath> {
         let rope = &self.doc.get().rope;
 
         let rects = selection
@@ -153,14 +152,14 @@ impl TextEditor {
             .get()
             .selections
             .iter()
-            .map(|s| self.get_selection_shape(*s, layouts))
+            .filter_map(|s| self.get_selection_shape(*s, layouts))
             .collect()
     }
 
     fn hit_position(&self, layout: &TextLayout, line: usize, col: usize) -> HitPosition {
         layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(line), col))
     }
-    
+
     fn save_as(&mut self) {
         self.disable.set(true);
         let doc = self.doc.clone();
@@ -179,172 +178,61 @@ impl TextEditor {
     }
 }
 
-fn make_selection_path(aera: &[Rect]) -> floem::kurbo::BezPath {
-    let mut path = BezPath::new();
+fn make_selection_path(rects: &[Rect]) -> Option<floem::kurbo::BezPath> {
     let bevel: f64 = 3.0;
     let epsilon: f64 = 0.0001;
 
-    match aera {
-        [] => {}
-        [r] => {
-            if r.x1 - r.x0 > epsilon {
-                path.push(PathEl::MoveTo(Point::new(r.x0, r.y1 - bevel)));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x0, r.y0 + bevel),
-                    Point::new(r.x0, r.y0 + bevel),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x0, r.y0),
-                    Point::new(r.x0 + bevel, r.y0),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1 - bevel, r.y0),
-                    Point::new(r.x1 - bevel, r.y0),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1, r.y0),
-                    Point::new(r.x1, r.y0 + bevel),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1, r.y1 - bevel),
-                    Point::new(r.x1, r.y1 - bevel),
-                ));
+    let mut left = Vec::with_capacity(rects.len() * 2);
+    let mut right = Vec::with_capacity(rects.len() * 2);
+    for r in rects.iter().filter(|r| r.x1 - r.x0 > epsilon) {
+        right.push(Point::new(r.x1, r.y0));
+        right.push(Point::new(r.x1, r.y1));
+        left.push(Point::new(r.x0, r.y0));
+        left.push(Point::new(r.x0, r.y1));
+    }
+    left.reverse();
 
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1, r.y1),
-                    Point::new(r.x1 - bevel, r.y1),
-                ));
+    let points = [right, left].concat();
+    let mut path = BezPath::new();
 
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x0 + bevel, r.y1),
-                    Point::new(r.x0 + bevel, r.y1),
-                ));
+    for i in 0..points.len() {
+        let p1 = if i == 0 {
+            points[points.len() - 1]
+        } else {
+            points[i - 1]
+        };
+        let p2 = points[i];
+        let p3 = if i == points.len() - 1 {
+            points[0]
+        } else {
+            points[i + 1]
+        };
 
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x0, r.y1),
-                    Point::new(r.x0, r.y1 - bevel),
-                ));
-
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x0, r.y1 - bevel),
-                    Point::new(r.x0, r.y1 - bevel),
-                ));
-            }
-        }
-        [f, aera @ ..] => {
-            path.push(PathEl::MoveTo(Point::new(f.x0, f.y1 - bevel)));
-            path.push(PathEl::QuadTo(
-                Point::new(f.x0, f.y0 + bevel),
-                Point::new(f.x0, f.y0 + bevel),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(f.x0, f.y0),
-                Point::new(f.x0 + bevel, f.y0),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(f.x1 - bevel, f.y0),
-                Point::new(f.x1 - bevel, f.y0),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(f.x1, f.y0),
-                Point::new(f.x1, f.y0 + bevel),
-            ));
-            path.push(PathEl::QuadTo(
-                Point::new(f.x1, f.y1 - bevel),
-                Point::new(f.x1, f.y1 - bevel),
-            ));
-
-            let mut last = (f.x1, f.y1, f.y0);
-
-            for r in aera {
-                let delta = if r.x1 < last.0 {
-                    -bevel
-                } else if r.x1 - last.0 < epsilon {
-                    0.0
-                } else {
-                    bevel
-                };
-
-                path.push(PathEl::QuadTo(
-                    Point::new(last.0, r.y0),
-                    Point::new(last.0 + delta, r.y0),
-                ));
-
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1 - delta, r.y0),
-                    Point::new(r.x1 - delta, r.y0),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1, r.y0),
-                    Point::new(r.x1, r.y0 + bevel),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(r.x1, r.y1 - bevel),
-                    Point::new(r.x1, r.y1 - bevel),
-                ));
-
-                last = (r.x1, r.y1, r.y0);
-            }
-
-            if last.0 < epsilon {
-                path.pop();
-                path.pop();
-
-                path.push(PathEl::QuadTo(
-                    Point::new(bevel, last.2),
-                    Point::new(bevel, last.2),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(0., last.2),
-                    Point::new(0., last.2 - bevel),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(0., f.y1 + bevel),
-                    Point::new(0., f.y1 + bevel),
-                ));
+        let v1 = p2 - p1;
+        let v2 = p2 - p3;
+        if v1.cross(v2).abs() > epsilon {
+            if path.is_empty() {
+                path.push(PathEl::MoveTo(p2 + (v1.normalize() * -bevel)));
             } else {
                 path.push(PathEl::QuadTo(
-                    Point::new(last.0, last.1),
-                    Point::new(last.0 - bevel, last.1),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(bevel, last.1),
-                    Point::new(bevel, last.1),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(0., last.1),
-                    Point::new(0., last.1 - bevel),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(0., f.y1 + bevel),
-                    Point::new(0., f.y1 + bevel),
+                    p2 + (v1.normalize() * -bevel),
+                    p2 + (v1.normalize() * -bevel),
                 ));
             }
-            if f.x0 > epsilon {
-                path.push(PathEl::QuadTo(
-                    Point::new(0., f.y1),
-                    Point::new(bevel, f.y1),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(f.x0 - bevel, f.y1),
-                    Point::new(f.x0 - bevel, f.y1),
-                ));
-                path.push(PathEl::QuadTo(
-                    Point::new(f.x0, f.y1),
-                    Point::new(f.x0, f.y1 - bevel),
-                ));
-            } else {
-                path.push(PathEl::QuadTo(
-                    Point::new(f.x0, f.y1 - bevel),
-                    Point::new(f.x0, f.y1 - bevel),
-                ));
-            }
-
-            path.close_path();
+            path.push(PathEl::QuadTo(p2, p2 + (v2.normalize() * -bevel)));
         }
     }
-
-    path
+    if path.is_empty() {
+        return None;
+    } else {
+        if let PathEl::MoveTo(p) = path.elements()[0] {
+            path.push(PathEl::QuadTo(p, p));
+            path.close_path();
+            return Some(path);
+        } else {
+            return None;
+        }
+    }
 }
 
 impl View for TextEditor {
@@ -479,6 +367,18 @@ impl Widget for TextEditor {
                 cx.fill(&path, &bg, 0.);
                 cx.stroke(&path, &fg, 0.5);
             }
+            // for n in path.elements() {
+            //     match n {
+            //         PathEl::QuadTo(p1, p2) => {
+            //             let bg = Brush::Solid(Color::BLACK);
+            //             let p = Circle::new(Point::new(p1.x, p1.y), 1.5);
+            //             cx.fill(&p, &bg, 1.0);
+            //             let p = Circle::new(Point::new(p2.x, p2.y), 1.5);
+            //             cx.fill(&p, &bg, 1.0);
+            //         }
+            //         _ => (),
+            //     }
+            // }
         }
 
         for (i, layout) in layouts {
