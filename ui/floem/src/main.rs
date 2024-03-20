@@ -210,10 +210,13 @@ fn make_selection_path(rects: &[Rect]) -> Option<floem::kurbo::BezPath> {
 
         let v1 = p2 - p1;
         let v2 = p2 - p3;
+
         if v1.cross(v2).abs() > epsilon {
+            // this is not a straight line
             if path.is_empty() {
                 path.push(PathEl::MoveTo(p2 + (v1.normalize() * -bevel)));
             } else {
+                // vger_renderer doesn't implement LineTo ...
                 path.push(PathEl::QuadTo(
                     p2 + (v1.normalize() * -bevel),
                     p2 + (v1.normalize() * -bevel),
@@ -222,16 +225,14 @@ fn make_selection_path(rects: &[Rect]) -> Option<floem::kurbo::BezPath> {
             path.push(PathEl::QuadTo(p2, p2 + (v2.normalize() * -bevel)));
         }
     }
-    if path.is_empty() {
-        return None;
+
+    if let Some(PathEl::MoveTo(p)) = path.elements().get(0) {
+        // the path is not empty, close and return it
+        path.push(PathEl::QuadTo(*p, *p));
+        path.close_path();
+        Some(path)
     } else {
-        if let PathEl::MoveTo(p) = path.elements()[0] {
-            path.push(PathEl::QuadTo(p, p));
-            path.close_path();
-            return Some(path);
-        } else {
-            return None;
-        }
+        None
     }
 }
 
