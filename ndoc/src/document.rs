@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    fs,
+    default, fs,
     io::{Error, ErrorKind, Read, Result, Write},
     path::{Path, PathBuf},
 };
@@ -19,35 +19,120 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Document {
-    pub rope: Rope,
+struct History {
     edit_stack: Vec<(Rope, Vec<Selection>)>,
     edit_stack_top: usize,
+    last_action: Action,
+}
+
+impl Default for History {
+    fn default() -> Self {
+        Self {
+            edit_stack: Vec::new(),
+            edit_stack_top: 0,
+            last_action: Default::default(),
+        }
+    }
+}
+
+impl History {
+    fn is_empty(&self) -> bool {
+        self.edit_stack_top == 0
+    }
+
+    fn push(&mut self, rope: Rope, selections: Vec<Selection>, action: &Action) {
+        if self.should_push(action, &self.last_action) {
+            self.edit_stack.drain(self.edit_stack_top..);
+            self.edit_stack.push((rope, selections));
+            self.edit_stack_top += 1;
+        }
+        self.last_action = action.clone();
+    }
+
+    fn undo(&mut self, rope: Rope, selections: Vec<Selection>) -> Option<(Rope, Vec<Selection>)> {
+        if self.edit_stack_top == self.edit_stack.len() {
+            self.edit_stack.push((rope, selections));
+        }
+
+        if self.edit_stack_top > 0 {
+            self.edit_stack_top -= 1;
+            Some(self.edit_stack[self.edit_stack_top].clone())
+        } else {
+            None
+        }
+    }
+
+    fn redo(&mut self) -> Option<(Rope, Vec<Selection>)> {
+        if self.edit_stack_top < self.edit_stack.len() - 1 {
+            self.edit_stack_top += 1;
+            Some(self.edit_stack[self.edit_stack_top].clone())
+        } else {
+            None
+        }
+    }
+
+    fn should_push(&self, action: &Action, last_action: &Action) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        match (action, last_action) {
+            (Action::Delete, Action::Delete) => false,
+            (Action::Backspace, Action::Backspace) => false,
+            (Action::Delete, _) => true,
+            (Action::Backspace, _) => true,
+            (Action::Text(t), _) if t.chars().count() > 1 => true,
+            (Action::Text(t), _) if t.chars().nth(0).is_some_and(|c| !c.is_alphanumeric()) => true,
+            (_, _) => false,
+        }
+    }
+}
+
+fn str_contains_separator(input: &str, sep: &[char]) -> bool {
+    for s in sep {
+        if input.contains(*s) {
+            return true;
+        }
+    }
+    false
+}
+
+#[derive(Debug, Default, Clone)]
+enum Action {
+    #[default]
+    None,
+    Backspace,
+    Delete,
+    Text(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct Document {
+    pub rope: Rope,
+    history: History,
     pub file_info: FileInfo,
     pub selections: Vec<Selection>,
     pub file_name: Option<PathBuf>,
 }
 
-impl PartialEq for Document {
-    fn eq(&self, other: &Self) -> bool {
-        self.rope == other.rope
-            && self.edit_stack == other.edit_stack
-            && self.edit_stack_top == other.edit_stack_top
-            && self.file_info == other.file_info
-            && self.selections == other.selections
-    }
-}
+// impl PartialEq for Document {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.rope == other.rope
+//             && self.edit_stack == other.edit_stack
+//             && self.edit_stack_top == other.edit_stack_top
+//             && self.file_info == other.file_info
+//             && self.selections == other.selections
+//     }
+// }
 
 impl Default for Document {
     fn default() -> Self {
         let rope = Rope::new();
         Self {
             rope: rope.clone(),
-            edit_stack: vec![(rope, vec![Selection::default()])],
-            edit_stack_top: 0,
-            file_info: Default::default(),
             selections: vec![Selection::default()],
             file_name: None,
+            history: Default::default(),
+            file_info: Default::default(),
         }
     }
 }
@@ -73,8 +158,6 @@ impl Document {
 
                 Ok(Self {
                     rope: rope.clone(),
-                    edit_stack: vec![(rope, vec![Selection::default()])],
-                    edit_stack_top: 0,
                     file_info: FileInfo {
                         encoding,
                         bom: None,
@@ -84,6 +167,7 @@ impl Document {
                     },
                     selections: vec![Selection::default()],
                     file_name: Some(path.as_ref().to_path_buf()),
+                    history: Default::default(),
                 })
             }
             Some((encoding, bom_size)) => {
@@ -98,8 +182,6 @@ impl Document {
 
                 Ok(Self {
                     rope: rope.clone(),
-                    edit_stack: vec![(rope, vec![Selection::default()])],
-                    edit_stack_top: 0,
                     file_info: FileInfo {
                         encoding,
                         bom: Some(bom),
@@ -109,14 +191,14 @@ impl Document {
                     },
                     selections: vec![Selection::default()],
                     file_name: Some(path.as_ref().to_path_buf()),
+                    history: Default::default(),
                 })
             }
         }
     }
 
     fn reset_edit_stack(&mut self) {
-        self.edit_stack = vec![(self.rope.clone(), vec![Selection::default()])];
-        self.edit_stack_top = 0;
+        self.history = Default::default();
     }
 
     pub fn save_as(&mut self, path: &Path) -> Result<()> {
@@ -125,12 +207,16 @@ impl Document {
         let encoded_output = match self.file_info.encoding.name() {
             "UTF-16LE" => {
                 let mut v = Vec::new();
-                input.encode_utf16().for_each(|i| v.extend_from_slice(&i.to_le_bytes()));
+                input
+                    .encode_utf16()
+                    .for_each(|i| v.extend_from_slice(&i.to_le_bytes()));
                 Cow::from(v)
             }
             "UTF-16BE" => {
                 let mut v = Vec::new();
-                input.encode_utf16().for_each(|i| v.extend_from_slice(&i.to_be_bytes()));
+                input
+                    .encode_utf16()
+                    .for_each(|i| v.extend_from_slice(&i.to_be_bytes()));
                 Cow::from(v)
             }
             _ => self.file_info.encoding.encode(&input).0,
@@ -146,22 +232,31 @@ impl Document {
         Ok(())
     }
 
-    pub fn insert_at_position(&mut self, input: &str, start: Position, end: Position) {
+    pub fn insert_at_position(&mut self, input: Action, start: Position, end: Position) {
         let start = self.position_to_char(start);
         let end = self.position_to_char(end);
         self.insert_at(input, start, end);
     }
 
-    pub fn insert_at_selection(&mut self, input: &str, selection: Selection) {
+    pub fn insert_at_selection(&mut self, input: Action, selection: Selection) {
         self.insert_at_position(input, selection.start(), selection.end());
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.edit_stack_top > 0 
+        !self.history.is_empty()
     }
 
-    pub fn insert_at(&mut self, input: &str, start: usize, end: usize) {
+    pub fn insert_at(&mut self, action: Action, start: usize, end: usize) {
+        let saved_action = action.clone();
+        let input = if let Action::Text(input) = action {
+            input
+        } else {
+            String::new()
+        };
+
         let mut changed = false;
+        let histo_rope = self.rope.clone();
+        let histo_selections = self.selections.clone();
 
         if start != end {
             let sel_idx = self
@@ -201,7 +296,7 @@ impl Document {
                     )
                 })
                 .collect::<Vec<(usize, usize)>>();
-            self.rope.insert(start, input);
+            self.rope.insert(start, &input);
 
             // update selections after the insertion point
             let to_add = input.chars().count();
@@ -219,23 +314,24 @@ impl Document {
         }
 
         if changed {
-            self.edit_stack.drain(self.edit_stack_top + 1..);
-            self.edit_stack
-                .push((self.rope.clone(), self.selections.clone()));
-            self.edit_stack_top += 1;
+            self.history
+                .push(histo_rope, histo_selections, &saved_action);
         }
     }
 
     pub fn undo(&mut self) {
-        if self.edit_stack_top > 0 {
-            self.edit_stack_top -= 1;
-            (self.rope, self.selections) = self.edit_stack[self.edit_stack_top].clone();
-        } 
+        if let Some((rope, selections)) = self
+            .history
+            .undo(self.rope.clone(), self.selections.clone())
+        {
+            self.rope = rope;
+            self.selections = selections;
+        }
     }
     pub fn redo(&mut self) {
-        if self.edit_stack_top < self.edit_stack.len() - 1 {
-            self.edit_stack_top += 1;
-            (self.rope, self.selections) = self.edit_stack[self.edit_stack_top].clone();
+        if let Some((rope, selections)) = self.history.redo() {
+            self.rope = rope;
+            self.selections = selections;
         }
     }
 
@@ -263,7 +359,7 @@ impl Document {
     pub fn insert_many(&mut self, input: &str) {
         if self.selections.len() > 1 && input.lines().count() == self.selections.len() {
             for (i, l) in input.lines().enumerate() {
-                self.insert_at_selection(l, self.selections[i]);
+                self.insert_at_selection(Action::Text(l.to_string()), self.selections[i]);
             }
         } else {
             self.insert(input);
@@ -272,7 +368,7 @@ impl Document {
 
     pub fn insert(&mut self, input: &str) {
         for i in 0..self.selections.len() {
-            self.insert_at_selection(input, self.selections[i]);
+            self.insert_at_selection(Action::Text(input.to_string()), self.selections[i]);
         }
         self.merge_selections();
     }
@@ -281,9 +377,9 @@ impl Document {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
                 let start = self.selections[i].start();
-                self.insert_at_position("", self.prev_position(start), start);
+                self.insert_at_position(Action::Backspace, self.prev_position(start), start);
             } else {
-                self.insert_at_selection("", self.selections[i]);
+                self.insert_at_selection(Action::Backspace, self.selections[i]);
             }
         }
         self.merge_selections();
@@ -293,9 +389,9 @@ impl Document {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
                 let start = self.selections[i].start();
-                self.insert_at_position("", start, self.next_position(start));
+                self.insert_at_position(Action::Delete, start, self.next_position(start));
             } else {
-                self.insert_at_selection("", self.selections[i]);
+                self.insert_at_selection(Action::Delete, self.selections[i]);
             }
         }
         self.merge_selections();
@@ -342,20 +438,20 @@ impl Document {
     }
 
     pub fn move_selections_word(&mut self, dir: MoveDirection, expand: bool) {
-        self.selections = self.selections.iter().map(|s| {
-            let head = match dir {
-                MoveDirection::Left => {
-                    self.prev_word_boundary(s.head)
-                }
-                MoveDirection::Right => {
-                    self.next_word_boundary(s.head)
-                }
-                _ => s.head,
-            };
+        self.selections = self
+            .selections
+            .iter()
+            .map(|s| {
+                let head = match dir {
+                    MoveDirection::Left => self.prev_word_boundary(s.head),
+                    MoveDirection::Right => self.next_word_boundary(s.head),
+                    _ => s.head,
+                };
 
-            let tail = if !expand { head } else { s.tail };
-            Selection::new(head, tail, s.is_clone)
-        }).collect();
+                let tail = if !expand { head } else { s.tail };
+                Selection::new(head, tail, s.is_clone)
+            })
+            .collect();
 
         self.merge_selections();
     }
@@ -399,7 +495,11 @@ impl Document {
     pub fn select_word(&mut self, position: Position) {
         let tail = self.word_start(position);
         let head = self.word_end(position);
-        self.selections = vec![Selection { head, tail, is_clone : false }]
+        self.selections = vec![Selection {
+            head,
+            tail,
+            is_clone: false,
+        }]
     }
 
     pub fn expand_selection_by_word(&mut self, position: Position) {
@@ -444,21 +544,38 @@ impl Document {
     pub fn select_line(&mut self, line: usize) {
         let tail = self.line_start(line);
         let head = self.line_end_full(line);
-        self.selections = vec![Selection { head, tail, is_clone: false }]
+        self.selections = vec![Selection {
+            head,
+            tail,
+            is_clone: false,
+        }]
     }
 
     pub fn select_all(&mut self) {
         let tail = char_to_position(&self.rope.slice(..), 0);
         let head = char_to_position(&self.rope.slice(..), self.rope.len_chars());
-        self.selections = vec![Selection { head, tail, is_clone: false }]
+        self.selections = vec![Selection {
+            head,
+            tail,
+            is_clone: false,
+        }]
     }
 
     pub fn set_main_selection(&mut self, head: Position, tail: Position) {
-        self.selections = vec![Selection { head, tail, is_clone: false }]
+        self.selections = vec![Selection {
+            head,
+            tail,
+            is_clone: false,
+        }]
     }
 
     pub fn cancel_multi_cursor(&mut self) {
-        self.selections = self.selections.iter().filter(|s| !s.is_clone).map(|s| *s).collect();
+        self.selections = self
+            .selections
+            .iter()
+            .filter(|s| !s.is_clone)
+            .map(|s| *s)
+            .collect();
     }
 
     pub fn duplicate_selection(&mut self, direction: MoveDirection) {
@@ -558,8 +675,12 @@ impl Document {
                 for l in s.start().line..=s.end().line {
                     let index = self.rope.line_to_char(l);
                     match self.file_info.indentation {
-                        Indentation::Tab(_) => self.insert_at("\t", index, index),
-                        Indentation::Space(x) => self.insert_at(&" ".repeat(x), index, index),
+                        Indentation::Tab(_) => {
+                            self.insert_at(Action::Text("\t".to_string()), index, index)
+                        }
+                        Indentation::Space(x) => {
+                            self.insert_at(Action::Text(" ".repeat(x)), index, index)
+                        }
                     }
                 }
             }
@@ -567,10 +688,12 @@ impl Document {
             for s in self.selections.clone() {
                 let index = position_to_char(&self.rope.slice(..), s.head);
                 match self.file_info.indentation {
-                    Indentation::Tab(_) => self.insert_at("\t", index, index),
+                    Indentation::Tab(_) => {
+                        self.insert_at(Action::Text("\t".to_string()), index, index)
+                    }
                     Indentation::Space(x) => {
                         let repeat = x - (s.head.column % x);
-                        self.insert_at(&" ".repeat(repeat), index, index);
+                        self.insert_at(Action::Text(" ".repeat(repeat)), index, index);
                     }
                 }
             }
@@ -584,10 +707,12 @@ impl Document {
 
                 let line_start = get_line_start_boundary(&self.rope.slice(..), l);
                 match self.file_info.indentation {
-                    Indentation::Tab(_) => self.insert_at("", index, index + 1),
+                    Indentation::Tab(_) => {
+                        self.insert_at(Action::Text(String::new()), index, index + 1)
+                    }
                     Indentation::Space(x) => {
                         let r = line_start.min(x);
-                        self.insert_at("", index, index + r);
+                        self.insert_at(Action::Text(String::new()), index, index + r);
                     }
                 }
             }
@@ -698,7 +823,11 @@ impl PartialOrd for Selection {
 
 impl Selection {
     pub fn new(head: Position, tail: Position, is_clone: bool) -> Self {
-        Self { head, tail, is_clone }
+        Self {
+            head,
+            tail,
+            is_clone,
+        }
     }
     pub fn start(&self) -> Position {
         if self.head <= self.tail {
