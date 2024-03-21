@@ -423,20 +423,24 @@ impl Widget for TextEditor {
                             "v" if e.modifiers.control_key() => {
                                 if let Ok(s) = Clipboard::get_contents() {
                                     self.doc.update(|d| d.insert_many(&s));
+                                    self.scroll_to_main_cursor();
                                     cx.request_all(self.id());
                                 }
                             }
                             "x" if e.modifiers.control_key() => {
                                 let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
                                 self.doc.update(|d| d.insert(""));
+                                self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
                             }
                             "z" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.undo());
+                                self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
                             }
                             "y" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.redo());
+                                self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
                             }
                             "S" if e.modifiers.control_key() => {
