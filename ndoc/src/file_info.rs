@@ -2,14 +2,17 @@ use std::fmt::{format, Display};
 
 use encoding_rs::Encoding;
 use ropey::RopeSlice;
+use syntect::parsing::SyntaxReference;
 
-#[derive(Debug, Clone, PartialEq)]
+use crate::syntax::SYNTAXSET;
+
+#[derive(Debug, Clone)]
 pub struct FileInfo {
     pub encoding: &'static Encoding,
     pub bom: Option<Vec<u8>>,
     pub linefeed: LineFeed,
     pub indentation: Indentation,
-    pub syntax: String, //&'static SyntaxReference
+    pub syntax: &'static SyntaxReference
 }
 
 impl Default for FileInfo {
@@ -19,7 +22,7 @@ impl Default for FileInfo {
             bom: None,
             linefeed: Default::default(),
             indentation: Indentation::Space(4),
-            syntax: "txt".to_owned(),
+            syntax: SYNTAXSET.find_syntax_plain_text(),
         }
     }
 }

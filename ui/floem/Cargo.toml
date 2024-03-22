@@ -9,6 +9,7 @@ path = "src/main.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+color-art = "0.3.7"
 floem = {git = "https://github.com/lapce/floem"}
 im = "15.1.0"
 ndoc = {path = "../../ndoc"}

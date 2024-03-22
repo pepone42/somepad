@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["ui/floem/src/main.rs"],
             "cwd": "${workspaceFolder}"
         },
         {

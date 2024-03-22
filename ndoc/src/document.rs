@@ -3,11 +3,17 @@ use std::{
     default, fs,
     io::{Error, ErrorKind, Read, Result, Write},
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
+    thread, time::Duration,
 };
 
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
 use ropey::{Rope, RopeBuilder, RopeSlice};
+use syntect::parsing::SyntaxReference;
 
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
@@ -16,7 +22,10 @@ use crate::{
         next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary,
         word_end, word_start,
     },
+    syntax::{StateCache, StyledLinesCache, SYNTAXSET},
 };
+
+static DOCID : AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone)]
 struct History {
@@ -107,6 +116,7 @@ enum Action {
 
 #[derive(Debug, Clone)]
 pub struct Document {
+    id: usize,
     pub rope: Rope,
     history: History,
     pub file_info: FileInfo,
@@ -114,20 +124,11 @@ pub struct Document {
     pub file_name: Option<PathBuf>,
 }
 
-// impl PartialEq for Document {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.rope == other.rope
-//             && self.edit_stack == other.edit_stack
-//             && self.edit_stack_top == other.edit_stack_top
-//             && self.file_info == other.file_info
-//             && self.selections == other.selections
-//     }
-// }
-
 impl Default for Document {
     fn default() -> Self {
         let rope = Rope::new();
         Self {
+            id: Document::new_id(),
             rope: rope.clone(),
             selections: vec![Selection::default()],
             file_name: None,
@@ -137,7 +138,71 @@ impl Default for Document {
     }
 }
 
+#[test]
+fn new_doc_id() {
+    let d1 = Document::default();
+    let d2 = Document::default();
+    assert_eq!(d1.id,0);
+    assert_eq!(d2.id,1);
+}
+
+pub enum BackgroundWorkerMessage {
+    Stop,
+    UpdateBuffer(usize, SyntaxReference, Rope, usize),
+    // WatchFile(PathBuf),
+    // UnwatchFile(PathBuf),
+}
+
 impl Document {
+    fn new_id() -> usize {
+        DOCID.fetch_add(1, Ordering::Relaxed)
+    }
+    pub fn init_highliter() {
+        // static HIGHLIGHT_TRHEAD_STARTED: AtomicBool = AtomicBool::new(false);
+        // if HIGHLIGHT_TRHEAD_STARTED
+        //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        //     .is_ok_and(|v| v)
+        // {
+            // start worker thread
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || {
+                let mut syntax = SYNTAXSET.find_syntax_plain_text();
+                let mut highlight_cache = StateCache::new();
+                let mut current_index = 0;
+                let mut chunk_len = 100;
+                let mut rope = Rope::new();
+                let highlighted_line = StyledLinesCache::new();
+                loop {
+                    match rx.try_recv() {
+                        Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start)) => {
+                            rope = r;
+                            current_index = start;
+                            // The first chunk is smaller, to repaint quickly with highlight
+                            chunk_len = 100;
+                            syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
+                        }
+                        Ok(BackgroundWorkerMessage::Stop) => return,
+                        _ => (),
+                    }
+                    if current_index < rope.len_lines() {
+                        highlight_cache.update_range(
+                            &highlighted_line,
+                            &syntax,
+                            &rope,
+                            current_index,
+                            current_index + chunk_len,
+                        );
+                        // TODO : inform the users that the higlight is to refresh
+                        current_index += chunk_len;
+                        // subsequent chunck are bigger, for better performance
+                        chunk_len = 1000;
+                    } else {
+                        thread::sleep(Duration::from_millis(1));
+                    }
+                }
+            });
+        
+    }
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut file = fs::File::open(&path)?;
 
@@ -147,6 +212,12 @@ impl Document {
 
         detector.feed(&vec, true);
         let encoding = Encoding::for_bom(&vec);
+
+        let syntax = if let Ok(s ) = SYNTAXSET.find_syntax_for_file(&path) {
+            s.unwrap_or_else(|| SYNTAXSET.find_syntax_plain_text())
+        } else {
+            SYNTAXSET.find_syntax_plain_text()
+        };
 
         match encoding {
             None => {
@@ -163,11 +234,12 @@ impl Document {
                         bom: None,
                         linefeed,
                         indentation,
-                        syntax: "txt".to_owned(),
+                        syntax,
                     },
                     selections: vec![Selection::default()],
                     file_name: Some(path.as_ref().to_path_buf()),
                     history: Default::default(),
+                    id: Document::new_id(),
                 })
             }
             Some((encoding, bom_size)) => {
@@ -187,11 +259,12 @@ impl Document {
                         bom: Some(bom),
                         linefeed,
                         indentation,
-                        syntax: "txt".to_owned(),
+                        syntax,
                     },
                     selections: vec![Selection::default()],
                     file_name: Some(path.as_ref().to_path_buf()),
                     history: Default::default(),
+                    id: Document::new_id(),
                 })
             }
         }
