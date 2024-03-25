@@ -1,37 +1,33 @@
 // 🤦‍♀️😊❤😂🤣
 use std::collections::HashMap;
-use std::env::{self, Args};
-use std::fmt::format;
-use std::iter::empty;
+use std::env;
 
 use floem::action::save_as;
-use floem::cosmic_text::fontdb::Database;
 use floem::cosmic_text::{
-    Attrs, AttrsList, Family, FamilyOwned, Font, HitPosition, TextLayout, Wrap,
+    Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout,
 };
 use floem::event::Event;
 use floem::file::FileDialogOptions;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
-use floem::kurbo::{BezPath, Circle, PathEl, Point, Rect, Vec2};
-use floem::menu::{Menu, MenuEntry, MenuItem};
+use floem::kurbo::{BezPath, PathEl, Point, Rect};
+use floem::menu::{Menu, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
-use floem::style::{FontFamily, Position, StyleProp};
-use floem::taffy::Layout;
+
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
-    container, h_stack, label, list, scroll, stack, text, v_stack, virtual_list, virtual_stack,
+    container, h_stack, label, scroll, v_stack, virtual_stack,
     Decorators, VirtualItemSize,
 };
-use floem::widgets::button;
+
 use floem::{Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{
-    byte_to_grapheme, char_to_grapheme, grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator,
+    byte_to_grapheme, grapheme_to_byte,
 };
 use ndoc::syntax::{StateCache, StyledLinesCache, SYNTAXSET};
 use ndoc::theme::THEME;
-use ndoc::{Document, Indentation, Rope, Selection, SelectionAera};
+use ndoc::{Document, Indentation, Selection};
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
@@ -105,7 +101,7 @@ impl TextEditor {
             .font_size(14.);
         let mut attr_list = AttrsList::new(attrs);
 
-        if let Some(style) = self.highlighted_line.get(line) {
+        if let Some(style) = self.doc.get().get_style_line_info(line) { //self.highlighted_line.get(line) {
             for s in style.iter() {
                 let fg = Color::rgba8(
                     s.style.foreground.r,
@@ -702,7 +698,7 @@ impl Widget for TextEditor {
 
 fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     let ndoc = doc(); //.clone();
-    let mut text_editor = text_editor(move || ndoc);
+    let text_editor = text_editor(move || ndoc);
 
     let mut cache = StateCache::new();
 
@@ -786,6 +782,7 @@ fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
 }
 
 fn app_view() -> impl View {
+    ndoc::Document::init_highlighter();
     let ndoc = if let Some(path) = env::args().nth(1) {
         ndoc::Document::from_file(path).unwrap()
     } else {

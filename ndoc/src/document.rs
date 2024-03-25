@@ -1,31 +1,37 @@
 use std::{
     borrow::Cow,
-    default, fs,
-    io::{Error, ErrorKind, Read, Result, Write},
+    collections::HashMap,
+    fs,
+    io::{Read, Result, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
-        mpsc,
+        mpsc::{self, Sender},
+        Arc, Mutex,
     },
-    thread, time::Duration,
+    thread,
+    time::Duration,
 };
 
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
-use ropey::{Rope, RopeBuilder, RopeSlice};
+use once_cell::sync::Lazy;
+use ropey::{Rope, RopeSlice};
 use syntect::parsing::SyntaxReference;
 
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
-        char_to_grapheme, get_line_start_boundary, grapheme_to_byte, grapheme_to_char,
+        char_to_grapheme, get_line_start_boundary, grapheme_to_char,
         next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary,
         word_end, word_start,
     },
-    syntax::{StateCache, StyledLinesCache, SYNTAXSET},
+    syntax::{StateCache, StyledLine, StyledLinesCache, SYNTAXSET},
 };
 
-static DOCID : AtomicUsize = AtomicUsize::new(0);
+static DOCID: AtomicUsize = AtomicUsize::new(0);
+static MESSAGE_SENDER: Lazy<Arc<Mutex<Option<Sender<BackgroundWorkerMessage>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 #[derive(Debug, Clone)]
 struct History {
@@ -96,15 +102,6 @@ impl History {
     }
 }
 
-fn str_contains_separator(input: &str, sep: &[char]) -> bool {
-    for s in sep {
-        if input.contains(*s) {
-            return true;
-        }
-    }
-    false
-}
-
 #[derive(Debug, Default, Clone)]
 enum Action {
     #[default]
@@ -112,6 +109,58 @@ enum Action {
     Backspace,
     Delete,
     Text(String),
+}
+
+#[test]
+fn new_doc_id() {
+    let d1 = Document::default();
+    let d2 = Document::default();
+    assert_eq!(d1.id, 0);
+    assert_eq!(d2.id, 1);
+}
+
+#[derive(Debug, Clone)]
+pub enum BackgroundWorkerMessage {
+    Stop,
+    UpdateBuffer(usize, SyntaxReference, Rope, usize, StyledLinesCache),
+    // WatchFile(PathBuf),
+    // UnwatchFile(PathBuf),
+}
+
+struct HighlighterState<'a> {
+    syntax: &'a SyntaxReference,
+    state_cache: StateCache,
+    current_index: usize,
+    chunk_len: usize,
+    rope: Rope,
+    lines_cache: StyledLinesCache,
+}
+
+impl<'a> HighlighterState<'a> {
+    fn new() -> Self {
+        Self {
+            syntax: SYNTAXSET.find_syntax_plain_text(),
+            state_cache: StateCache::new(),
+            current_index: 0,
+            chunk_len: 100,
+            rope: Rope::new(),
+            lines_cache: StyledLinesCache::new(),
+        }
+    }
+
+    fn update_chunk(&mut self) {
+        self.state_cache.update_range(
+            &self.lines_cache,
+            &self.syntax,
+            &self.rope,
+            self.current_index,
+            self.current_index + self.chunk_len,
+        );
+        // TODO : inform the users that the higlight is to refresh
+        self.current_index += self.chunk_len;
+        // subsequent chunck are bigger, for better performance
+        self.chunk_len = 1000;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -122,11 +171,19 @@ pub struct Document {
     pub file_info: FileInfo,
     pub selections: Vec<Selection>,
     pub file_name: Option<PathBuf>,
+    message_sender: Option<Sender<BackgroundWorkerMessage>>,
+    line_style_cache: StyledLinesCache,
 }
 
 impl Default for Document {
     fn default() -> Self {
         let rope = Rope::new();
+        let message_sender = if let Ok(mg) = MESSAGE_SENDER.lock() {
+            mg.clone()
+        } else {
+            None
+        };
+
         Self {
             id: Document::new_id(),
             rope: rope.clone(),
@@ -134,75 +191,67 @@ impl Default for Document {
             file_name: None,
             history: Default::default(),
             file_info: Default::default(),
+            message_sender,
+            line_style_cache: StyledLinesCache::new(),
         }
     }
-}
-
-#[test]
-fn new_doc_id() {
-    let d1 = Document::default();
-    let d2 = Document::default();
-    assert_eq!(d1.id,0);
-    assert_eq!(d2.id,1);
-}
-
-pub enum BackgroundWorkerMessage {
-    Stop,
-    UpdateBuffer(usize, SyntaxReference, Rope, usize),
-    // WatchFile(PathBuf),
-    // UnwatchFile(PathBuf),
 }
 
 impl Document {
     fn new_id() -> usize {
         DOCID.fetch_add(1, Ordering::Relaxed)
     }
-    pub fn init_highliter() {
-        // static HIGHLIGHT_TRHEAD_STARTED: AtomicBool = AtomicBool::new(false);
-        // if HIGHLIGHT_TRHEAD_STARTED
-        //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        //     .is_ok_and(|v| v)
-        // {
-            // start worker thread
-            let (tx, rx) = mpsc::channel();
-            thread::spawn(move || {
-                let mut syntax = SYNTAXSET.find_syntax_plain_text();
-                let mut highlight_cache = StateCache::new();
-                let mut current_index = 0;
-                let mut chunk_len = 100;
-                let mut rope = Rope::new();
-                let highlighted_line = StyledLinesCache::new();
-                loop {
-                    match rx.try_recv() {
-                        Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start)) => {
-                            rope = r;
-                            current_index = start;
-                            // The first chunk is smaller, to repaint quickly with highlight
-                            chunk_len = 100;
-                            syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
-                        }
-                        Ok(BackgroundWorkerMessage::Stop) => return,
-                        _ => (),
+
+    pub fn init_highlighter() {
+        if MESSAGE_SENDER.lock().is_ok_and(|m| m.is_some()) {
+            return;
+        }
+
+        let (tx, rx) = mpsc::channel();
+
+        (*MESSAGE_SENDER.lock().unwrap()) = Some(tx);
+
+        thread::spawn(move || {
+            let mut highlight_state = HashMap::new();
+
+            loop {
+                match rx.try_recv() {
+                    Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache)) => {
+                        let state = highlight_state.entry(id).or_insert(HighlighterState::new());
+
+                        state.rope = r;
+                        state.current_index = start;
+                        state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
+                        state.lines_cache = cache;
                     }
-                    if current_index < rope.len_lines() {
-                        highlight_cache.update_range(
-                            &highlighted_line,
-                            &syntax,
-                            &rope,
-                            current_index,
-                            current_index + chunk_len,
-                        );
-                        // TODO : inform the users that the higlight is to refresh
-                        current_index += chunk_len;
-                        // subsequent chunck are bigger, for better performance
-                        chunk_len = 1000;
-                    } else {
-                        thread::sleep(Duration::from_millis(1));
-                    }
+                    Ok(BackgroundWorkerMessage::Stop) => return,
+                    _ => (),
                 }
-            });
-        
+                if highlight_state
+                    .values()
+                    .any(|s| s.current_index < s.rope.len_lines())
+                {
+                    for h in highlight_state.values_mut() {
+                        h.update_chunk();
+                    }
+                } else {
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        });
     }
+
+    pub fn get_style_line_info(&self, line_idx: usize) -> Option<StyledLine> {
+        self.line_style_cache.get(line_idx)
+    }
+
+    fn update_highlight_from(&self, line_idx: usize) {
+        if let Some(tx) = self.message_sender.as_ref() {
+            let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(self.id, self.file_info.syntax.clone(), self.rope.clone(), line_idx, self.line_style_cache.clone()));
+            // TODO: log error
+        }
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut file = fs::File::open(&path)?;
 
@@ -213,13 +262,19 @@ impl Document {
         detector.feed(&vec, true);
         let encoding = Encoding::for_bom(&vec);
 
-        let syntax = if let Ok(s ) = SYNTAXSET.find_syntax_for_file(&path) {
+        let syntax = if let Ok(s) = SYNTAXSET.find_syntax_for_file(&path) {
             s.unwrap_or_else(|| SYNTAXSET.find_syntax_plain_text())
         } else {
             SYNTAXSET.find_syntax_plain_text()
         };
 
-        match encoding {
+        let message_sender = if let Ok(mg) = MESSAGE_SENDER.lock() {
+            mg.clone()
+        } else {
+            None
+        };
+
+        let doc = match encoding {
             None => {
                 let encoding = detector.guess(None, true);
 
@@ -227,7 +282,7 @@ impl Document {
                 let linefeed = detect_linefeed(&rope.slice(..));
                 let indentation = detect_indentation(&rope.slice(..));
 
-                Ok(Self {
+                Self {
                     rope: rope.clone(),
                     file_info: FileInfo {
                         encoding,
@@ -240,7 +295,9 @@ impl Document {
                     file_name: Some(path.as_ref().to_path_buf()),
                     history: Default::default(),
                     id: Document::new_id(),
-                })
+                    message_sender,
+                    line_style_cache: StyledLinesCache::new(),
+                }
             }
             Some((encoding, bom_size)) => {
                 let bom = {
@@ -252,7 +309,7 @@ impl Document {
                 let linefeed = detect_linefeed(&rope.slice(..));
                 let indentation = detect_indentation(&rope.slice(..));
 
-                Ok(Self {
+                Self {
                     rope: rope.clone(),
                     file_info: FileInfo {
                         encoding,
@@ -265,9 +322,13 @@ impl Document {
                     file_name: Some(path.as_ref().to_path_buf()),
                     history: Default::default(),
                     id: Document::new_id(),
-                })
+                    message_sender,
+                    line_style_cache: StyledLinesCache::new(),
+                }
             }
-        }
+        };
+        doc.update_highlight_from(0);
+        Ok(doc)
     }
 
     fn reset_edit_stack(&mut self) {
@@ -305,13 +366,13 @@ impl Document {
         Ok(())
     }
 
-    pub fn insert_at_position(&mut self, input: Action, start: Position, end: Position) {
+    fn insert_at_position(&mut self, input: Action, start: Position, end: Position) {
         let start = self.position_to_char(start);
         let end = self.position_to_char(end);
         self.insert_at(input, start, end);
     }
 
-    pub fn insert_at_selection(&mut self, input: Action, selection: Selection) {
+    fn insert_at_selection(&mut self, input: Action, selection: Selection) {
         self.insert_at_position(input, selection.start(), selection.end());
     }
 
@@ -319,7 +380,7 @@ impl Document {
         !self.history.is_empty()
     }
 
-    pub fn insert_at(&mut self, action: Action, start: usize, end: usize) {
+    fn insert_at(&mut self, action: Action, start: usize, end: usize) {
         let saved_action = action.clone();
         let input = if let Action::Text(input) = action {
             input
@@ -389,6 +450,7 @@ impl Document {
         if changed {
             self.history
                 .push(histo_rope, histo_selections, &saved_action);
+            self.update_highlight_from(self.rope.char_to_line(start));
         }
     }
 

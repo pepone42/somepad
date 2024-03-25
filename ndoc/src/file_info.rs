@@ -1,4 +1,4 @@
-use std::fmt::{format, Display};
+use std::fmt::Display;
 
 use encoding_rs::Encoding;
 use ropey::RopeSlice;
