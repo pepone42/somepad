@@ -699,17 +699,7 @@ impl Widget for TextEditor {
 fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     let ndoc = doc(); //.clone();
     let text_editor = text_editor(move || ndoc);
-
-    let mut cache = StateCache::new();
-
     let text_editor_id = text_editor.id();
-    cache.update_range(
-        &text_editor.highlighted_line,
-        SYNTAXSET.find_syntax_by_extension("rs").unwrap(),
-        &ndoc.get().rope,
-        0,
-        ndoc.get().rope.len_lines(),
-    );
 
     let (line_number_width, line_number_width_set) = create_signal(
         (ndoc.get().rope.len_lines().to_string().len() + 2) as f64 * text_editor.char_base_width,
