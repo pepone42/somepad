@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use floem::action::save_as;
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
+use floem::ext_event::create_signal_from_channel;
 use floem::file::FileDialogOptions;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
@@ -34,7 +35,6 @@ pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
 enum TextEditorCommand {
     FocusMainCursor,
     SelectLine(usize),
-    Repaint,
 }
 
 pub struct TextEditor {
@@ -55,41 +55,6 @@ pub enum SelectionKind {
     Line,
 }
 
-// pub fn create_ext_action<T: Send + 'static>(
-//     cx: floem::reactive::Scope,
-//     view: Id,
-//     action: impl Fn(T) + 'static,
-// ) -> impl Fn(T) {
-//     let cx = cx.create_child();
-//     let trigger = cx.create_trigger();
-//     let data = Arc::new(Mutex::new(None));
-
-//     {
-//         let data = data.clone();
-//         let action = Cell::new(Some(action));
-//         floem::reactive::with_scope(cx, move || {
-//             create_effect(move |_| {
-//                 trigger.track();
-//                 if let Some(event) = data.lock().take() {
-//                     floem::reactive::untrack(|| {
-//                         let current_view = get_current_view();
-//                         set_current_view(view);
-//                         let action = action.take().unwrap();
-//                         action(event);
-//                         set_current_view(current_view);
-//                     });
-//                     cx.dispose();
-//                 }
-//             });
-//         });
-//     }
-
-//     move |event| {
-//         *data.lock() = Some(event);
-//         floem::ext_event::register_ext_trigger(trigger);
-//     }
-// }
-
 pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor {
     let id = Id::next();
     let attrs = Attrs::new()
@@ -108,9 +73,19 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     let ndoc = doc();
 
+    // create a system tu update the view when the highlighter is updated
+    // on_lighter_update is called from an other thread
+    // we need to send a message to the main thread to update the view
+    let (s,r) = crossbeam_channel::unbounded();
+    let x = create_signal_from_channel(r);
     ndoc.get().on_highlighter_update(move || {
-        dbg!("highlighter update",id);
-        id.update_state(TextEditorCommand::FocusMainCursor);
+        s.send(()).unwrap();
+    });
+
+    create_effect(move |_| {
+        match x.get() {
+            _ => {id.request_paint();}
+        }
     });
 
     TextEditor {
@@ -124,7 +99,7 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         selection_kind: SelectionKind::Char,
         disable,
     }
-    .disabled(move || disable.get()) //.on_highlighter_update(move || {dbg!("highlighter update");id.update_state_deferred(TextEditorCommand::Repaint);})
+    .disabled(move || disable.get())
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
@@ -359,10 +334,6 @@ impl Widget for TextEditor {
                 }
                 TextEditorCommand::SelectLine(line) => {
                     self.doc.update(|d| d.select_line(line));
-                }
-                TextEditorCommand::Repaint => {
-                    dbg!("request_paint");
-                    self.id().request_paint();
                 }
             }
         }
