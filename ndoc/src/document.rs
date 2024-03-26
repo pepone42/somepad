@@ -22,9 +22,8 @@ use syntect::parsing::SyntaxReference;
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
-        char_to_grapheme, get_line_start_boundary, grapheme_to_char,
-        next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary,
-        word_end, word_start,
+        char_to_grapheme, get_line_start_boundary, grapheme_to_char, next_grapheme_boundary,
+        next_word_boundary, prev_grapheme_boundary, prev_word_boundary, word_end, word_start,
     },
     syntax::{StateCache, StyledLine, StyledLinesCache, SYNTAXSET},
 };
@@ -119,15 +118,16 @@ fn new_doc_id() {
     assert_eq!(d2.id, 1);
 }
 
-#[derive(Debug, Clone)]
 pub enum BackgroundWorkerMessage {
     Stop,
+    RegisterDocument(usize, Box<dyn Send + Fn()>),
     UpdateBuffer(usize, SyntaxReference, Rope, usize, StyledLinesCache),
     // WatchFile(PathBuf),
     // UnwatchFile(PathBuf),
 }
 
 struct HighlighterState<'a> {
+    doc_id: usize,
     syntax: &'a SyntaxReference,
     state_cache: StateCache,
     current_index: usize,
@@ -137,8 +137,9 @@ struct HighlighterState<'a> {
 }
 
 impl<'a> HighlighterState<'a> {
-    fn new() -> Self {
+    fn new(doc_id: usize) -> Self {
         Self {
+            doc_id,
             syntax: SYNTAXSET.find_syntax_plain_text(),
             state_cache: StateCache::new(),
             current_index: 0,
@@ -213,16 +214,23 @@ impl Document {
 
         thread::spawn(move || {
             let mut highlight_state = HashMap::new();
+            let mut callback = HashMap::new();
 
             loop {
                 match rx.try_recv() {
                     Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache)) => {
-                        let state = highlight_state.entry(id).or_insert(HighlighterState::new());
+                        dbg!("update buffer",id);
+                        let state = highlight_state
+                            .entry(id)
+                            .or_insert(HighlighterState::new(id));
 
                         state.rope = r;
                         state.current_index = start;
                         state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
                         state.lines_cache = cache;
+                    }
+                    Ok(BackgroundWorkerMessage::RegisterDocument(id, f)) => {
+                        callback.insert(id, f);
                     }
                     Ok(BackgroundWorkerMessage::Stop) => return,
                     _ => (),
@@ -234,11 +242,25 @@ impl Document {
                     for h in highlight_state.values_mut() {
                         h.update_chunk();
                     }
+                    for id in highlight_state.keys() {
+                        if let Some(f) = callback.get(id) {
+                            f();
+                        }
+                    }
                 } else {
                     thread::sleep(Duration::from_millis(1));
                 }
             }
         });
+    }
+
+    pub fn on_highlighter_update(&self, f: impl Fn() + Send + 'static) {
+        if let Some(mg) = &self.message_sender {
+            let _ = mg.send(BackgroundWorkerMessage::RegisterDocument(
+                self.id,
+                Box::new(f),
+            ));
+        }
     }
 
     pub fn get_style_line_info(&self, line_idx: usize) -> Option<StyledLine> {
@@ -247,7 +269,13 @@ impl Document {
 
     fn update_highlight_from(&self, line_idx: usize) {
         if let Some(tx) = self.message_sender.as_ref() {
-            let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(self.id, self.file_info.syntax.clone(), self.rope.clone(), line_idx, self.line_style_cache.clone()));
+            let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(
+                self.id,
+                self.file_info.syntax.clone(),
+                self.rope.clone(),
+                line_idx,
+                self.line_style_cache.clone(),
+            ));
             // TODO: log error
         }
     }

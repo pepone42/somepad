@@ -1,11 +1,11 @@
+use std::cell::Cell;
 // 🤦‍♀️😊❤😂🤣
 use std::collections::HashMap;
 use std::env;
+use std::sync::{Arc, Mutex};
 
 use floem::action::save_as;
-use floem::cosmic_text::{
-    Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout,
-};
+use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
 use floem::file::FileDialogOptions;
 use floem::id::Id;
@@ -17,14 +17,11 @@ use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
 
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
-    container, h_stack, label, scroll, v_stack, virtual_stack,
-    Decorators, VirtualItemSize,
+    container, h_stack, label, scroll, v_stack, virtual_stack, Decorators, VirtualItemSize,
 };
 
 use floem::{Clipboard, EventPropagation, Renderer};
-use ndoc::rope_utils::{
-    byte_to_grapheme, grapheme_to_byte,
-};
+use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 use ndoc::syntax::{StateCache, StyledLinesCache, SYNTAXSET};
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
@@ -33,9 +30,11 @@ pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
 }
 
+#[derive(Debug)]
 enum TextEditorCommand {
     FocusMainCursor,
     SelectLine(usize),
+    Repaint,
 }
 
 pub struct TextEditor {
@@ -48,7 +47,6 @@ pub struct TextEditor {
     char_base_width: f64,
     selection_kind: SelectionKind,
     disable: RwSignal<bool>,
-    highlighted_line: StyledLinesCache,
 }
 
 pub enum SelectionKind {
@@ -56,6 +54,41 @@ pub enum SelectionKind {
     Word,
     Line,
 }
+
+// pub fn create_ext_action<T: Send + 'static>(
+//     cx: floem::reactive::Scope,
+//     view: Id,
+//     action: impl Fn(T) + 'static,
+// ) -> impl Fn(T) {
+//     let cx = cx.create_child();
+//     let trigger = cx.create_trigger();
+//     let data = Arc::new(Mutex::new(None));
+
+//     {
+//         let data = data.clone();
+//         let action = Cell::new(Some(action));
+//         floem::reactive::with_scope(cx, move || {
+//             create_effect(move |_| {
+//                 trigger.track();
+//                 if let Some(event) = data.lock().take() {
+//                     floem::reactive::untrack(|| {
+//                         let current_view = get_current_view();
+//                         set_current_view(view);
+//                         let action = action.take().unwrap();
+//                         action(event);
+//                         set_current_view(current_view);
+//                     });
+//                     cx.dispose();
+//                 }
+//             });
+//         });
+//     }
+
+//     move |event| {
+//         *data.lock() = Some(event);
+//         floem::ext_event::register_ext_trigger(trigger);
+//     }
+// }
 
 pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor {
     let id = Id::next();
@@ -73,9 +106,16 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     let disable = RwSignal::new(false);
 
+    let ndoc = doc();
+
+    ndoc.get().on_highlighter_update(move || {
+        dbg!("highlighter update",id);
+        id.update_state(TextEditorCommand::FocusMainCursor);
+    });
+
     TextEditor {
         data: ViewData::new(id),
-        doc: doc(),
+        doc: ndoc,
         text_node: None,
         viewport: Rect::default(),
         line_height,
@@ -83,17 +123,24 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         char_base_width,
         selection_kind: SelectionKind::Char,
         disable,
-        highlighted_line: StyledLinesCache::new(),
     }
-    .disabled(move || disable.get())
+    .disabled(move || disable.get()) //.on_highlighter_update(move || {dbg!("highlighter update");id.update_state_deferred(TextEditorCommand::Repaint);})
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
+        dbg!(self.id());
         self.id()
             .update_state_deferred(TextEditorCommand::FocusMainCursor);
     }
 
+    // pub fn on_highlighter_update(self,f: impl Send + 'static + Fn()) -> Self {
+    //     let id = self.id();
+    //     self.doc.get().on_highlighter_update(move || id.update_state_deferred(TextEditorCommand::Repaint));
+    //     self
+    // }
+
     pub fn layout_line(&self, line: usize) -> TextLayout {
+        
         let mut layout = TextLayout::new();
         let attrs = Attrs::new()
             .color(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
@@ -101,7 +148,8 @@ impl TextEditor {
             .font_size(14.);
         let mut attr_list = AttrsList::new(attrs);
 
-        if let Some(style) = self.doc.get().get_style_line_info(line) { //self.highlighted_line.get(line) {
+        if let Some(style) = self.doc.get().get_style_line_info(line) {
+            //self.highlighted_line.get(line) {
             for s in style.iter() {
                 let fg = Color::rgba8(
                     s.style.foreground.r,
@@ -283,6 +331,7 @@ impl Widget for TextEditor {
 
     fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
         if let Ok(cmd) = state.downcast::<TextEditorCommand>() {
+            dbg!(&cmd);
             match *cmd {
                 TextEditorCommand::FocusMainCursor => {
                     if self.doc.get().selections.len() == 1 {
@@ -310,6 +359,10 @@ impl Widget for TextEditor {
                 }
                 TextEditorCommand::SelectLine(line) => {
                     self.doc.update(|d| d.select_line(line));
+                }
+                TextEditorCommand::Repaint => {
+                    dbg!("request_paint");
+                    self.id().request_paint();
                 }
             }
         }
@@ -348,6 +401,7 @@ impl Widget for TextEditor {
     }
 
     fn paint(&mut self, cx: &mut floem::context::PaintCx) {
+        dbg!("paint!");
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
@@ -373,7 +427,11 @@ impl Widget for TextEditor {
         // Draw Selections
         for path in self.get_selections_shapes(&layouts) {
             let bg_color = &THEME.vscode.colors.selection_background;
-            let border_color = color_art::Color::from_hex(&THEME.vscode.colors.selection_background).unwrap().darken(0.1).hex_full();
+            let border_color =
+                color_art::Color::from_hex(&THEME.vscode.colors.selection_background)
+                    .unwrap()
+                    .darken(0.1)
+                    .hex_full();
 
             let bg = Brush::Solid(Color::parse(bg_color).unwrap());
             let fg = Brush::Solid(Color::parse(&border_color).unwrap());
