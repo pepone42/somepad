@@ -219,7 +219,6 @@ impl Document {
             loop {
                 match rx.try_recv() {
                     Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache)) => {
-                        dbg!("update buffer",id);
                         let state = highlight_state
                             .entry(id)
                             .or_insert(HighlighterState::new(id));
@@ -248,6 +247,7 @@ impl Document {
                         }
                     }
                 } else {
+                    
                     thread::sleep(Duration::from_millis(1));
                 }
             }

@@ -103,16 +103,9 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 }
 impl TextEditor {
     pub fn scroll_to_main_cursor(&self) {
-        dbg!(self.id());
         self.id()
             .update_state_deferred(TextEditorCommand::FocusMainCursor);
     }
-
-    // pub fn on_highlighter_update(self,f: impl Send + 'static + Fn()) -> Self {
-    //     let id = self.id();
-    //     self.doc.get().on_highlighter_update(move || id.update_state_deferred(TextEditorCommand::Repaint));
-    //     self
-    // }
 
     pub fn layout_line(&self, line: usize) -> TextLayout {
         
@@ -306,7 +299,6 @@ impl Widget for TextEditor {
 
     fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
         if let Ok(cmd) = state.downcast::<TextEditorCommand>() {
-            dbg!(&cmd);
             match *cmd {
                 TextEditorCommand::FocusMainCursor => {
                     if self.doc.get().selections.len() == 1 {
@@ -372,7 +364,6 @@ impl Widget for TextEditor {
     }
 
     fn paint(&mut self, cx: &mut floem::context::PaintCx) {
-        dbg!("paint!");
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
