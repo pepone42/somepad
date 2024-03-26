@@ -1,36 +1,37 @@
+use std::cell::Cell;
 // 🤦‍♀️😊❤😂🤣
 use std::collections::HashMap;
-use std::env::{self, Args};
-use std::fmt::format;
-use std::iter::empty;
+use std::env;
+use std::sync::{Arc, Mutex};
 
 use floem::action::save_as;
-use floem::cosmic_text::fontdb::Database;
-use floem::cosmic_text::{
-    Attrs, AttrsList, Family, FamilyOwned, Font, HitPosition, TextLayout, Wrap,
-};
+use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
+use floem::ext_event::create_signal_from_channel;
 use floem::file::FileDialogOptions;
 use floem::id::Id;
 use floem::keyboard::{Key, ModifiersState, NamedKey};
-use floem::kurbo::{BezPath, Circle, PathEl, Point, Rect, Vec2};
-use floem::menu::{Menu, MenuEntry, MenuItem};
+use floem::kurbo::{BezPath, PathEl, Point, Rect};
+use floem::menu::{Menu, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
-use floem::style::{FontFamily, Position, StyleProp};
-use floem::taffy::Layout;
+
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
-    container, h_stack, label, list, scroll, stack, text, v_stack, virtual_list, virtual_stack,
-    Decorators, VirtualItemSize,
+    container, h_stack, label, scroll, v_stack, virtual_stack, Decorators, VirtualItemSize,
 };
-use floem::widgets::button;
-use floem::{Clipboard, EventPropagation, Renderer};
-use ndoc::rope_utils::{
-    byte_to_grapheme, char_to_grapheme, grapheme_to_byte, grapheme_to_char, NextGraphemeIdxIterator,
-};
-use ndoc::{Document, Indentation, Rope, Selection, SelectionAera};
 
+use floem::{Clipboard, EventPropagation, Renderer};
+use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
+use ndoc::syntax::{StateCache, StyledLinesCache, SYNTAXSET};
+use ndoc::theme::THEME;
+use ndoc::{Document, Indentation, Selection};
+
+pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
+    Color::rgba8(col.r, col.g, col.b, col.a)
+}
+
+#[derive(Debug)]
 enum TextEditorCommand {
     FocusMainCursor,
     SelectLine(usize),
@@ -70,9 +71,26 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     let disable = RwSignal::new(false);
 
+    let ndoc = doc();
+
+    // create a system tu update the view when the highlighter is updated
+    // on_lighter_update is called from an other thread
+    // we need to send a message to the main thread to update the view
+    let (s,r) = crossbeam_channel::unbounded();
+    let x = create_signal_from_channel(r);
+    ndoc.get().on_highlighter_update(move || {
+        s.send(()).unwrap();
+    });
+
+    create_effect(move |_| {
+        match x.get() {
+            _ => {id.request_paint();}
+        }
+    });
+
     TextEditor {
         data: ViewData::new(id),
-        doc: doc(),
+        doc: ndoc,
         text_node: None,
         viewport: Rect::default(),
         line_height,
@@ -90,13 +108,33 @@ impl TextEditor {
     }
 
     pub fn layout_line(&self, line: usize) -> TextLayout {
+        
         let mut layout = TextLayout::new();
         let attrs = Attrs::new()
-            .color(Color::BLACK)
+            .color(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
             .family(&[FamilyOwned::Monospace])
             .font_size(14.);
+        let mut attr_list = AttrsList::new(attrs);
 
-        let attr_list = AttrsList::new(attrs);
+        if let Some(style) = self.doc.get().get_style_line_info(line) {
+            //self.highlighted_line.get(line) {
+            for s in style.iter() {
+                let fg = Color::rgba8(
+                    s.style.foreground.r,
+                    s.style.foreground.g,
+                    s.style.foreground.b,
+                    s.style.foreground.a,
+                );
+                attr_list.add_span(
+                    s.range.clone(),
+                    Attrs::new()
+                        .color(fg)
+                        .family(&[FamilyOwned::Monospace])
+                        .font_size(14.),
+                );
+            }
+        }
+
         layout.set_tab_width(self.doc.get().file_info.indentation.len());
         layout.set_text(&self.doc.get().rope.line(line).to_string(), attr_list);
         layout
@@ -326,18 +364,9 @@ impl Widget for TextEditor {
     }
 
     fn paint(&mut self, cx: &mut floem::context::PaintCx) {
-        let mut layout = TextLayout::new();
-        let attrs = Attrs::new()
-            .color(Color::BLACK)
-            .family(&[FamilyOwned::Monospace])
-            .font_size(14.);
-
-        let attr_list = AttrsList::new(attrs);
-
         let first_line = ((self.viewport.y0 / self.line_height).ceil() as usize).saturating_sub(1);
         let total_line = ((self.viewport.height() / self.line_height).ceil() as usize) + 1;
 
-        layout.set_tab_width(self.doc.get().file_info.indentation.len());
         let layouts = self
             .doc
             .get()
@@ -346,10 +375,7 @@ impl Widget for TextEditor {
             .enumerate()
             .skip(first_line)
             .take(total_line)
-            .map(|(i, l)| {
-                layout.set_text(&l.to_string(), attr_list.clone());
-                (i, layout.clone())
-            })
+            .map(|(i, _)| (i, self.layout_line(i)))
             .collect::<HashMap<usize, TextLayout>>();
 
         let selections = self
@@ -362,11 +388,19 @@ impl Widget for TextEditor {
 
         // Draw Selections
         for path in self.get_selections_shapes(&layouts) {
-            let bg = Brush::Solid(Color::DARK_BLUE.with_alpha_factor(0.25));
-            let fg = Brush::Solid(Color::DARK_BLUE);
+            let bg_color = &THEME.vscode.colors.selection_background;
+            let border_color =
+                color_art::Color::from_hex(&THEME.vscode.colors.selection_background)
+                    .unwrap()
+                    .darken(0.1)
+                    .hex_full();
+
+            let bg = Brush::Solid(Color::parse(bg_color).unwrap());
+            let fg = Brush::Solid(Color::parse(&border_color).unwrap());
+
             if !path.is_empty() {
                 cx.fill(&path, &bg, 0.);
-                cx.stroke(&path, &fg, 0.5);
+                cx.stroke(&path, &fg, 1.);
             }
             // for n in path.elements() {
             //     match n {
@@ -428,7 +462,8 @@ impl Widget for TextEditor {
                                 }
                             }
                             "x" if e.modifiers.control_key() => {
-                                let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
+                                let _ =
+                                    Clipboard::set_contents(self.doc.get().get_selection_content());
                                 self.doc.update(|d| d.insert(""));
                                 self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
@@ -685,6 +720,7 @@ fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     let ndoc = doc(); //.clone();
     let text_editor = text_editor(move || ndoc);
     let text_editor_id = text_editor.id();
+
     let (line_number_width, line_number_width_set) = create_signal(
         (ndoc.get().rope.len_lines().to_string().len() + 2) as f64 * text_editor.char_base_width,
     );
@@ -717,12 +753,15 @@ fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
                     },
                 )
                 .style(move |s| {
-                    s.color(Color::BLACK)
+                    s.color(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
                         .font_family("Monospace".to_string())
                         .font_size(14.)
                         .width(line_number_width.get())
                 }),
-                floem::views::empty().style(|s| s.width(1.0).background(Color::BLACK)),
+                floem::views::empty().style(|s| {
+                    s.width(1.0)
+                        .background(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
+                }),
                 text_editor
                     .keyboard_navigatable()
                     .style(|s| s.size_full().margin_left(5.)),
@@ -733,6 +772,7 @@ fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     )
     .on_click_cont(move |_| text_editor_id.request_focus())
     .style(move |s| s.border(1.0).border_radius(1.0).size_full())
+    .style(|s| s.background(Color::parse(&THEME.vscode.colors.editor_background).unwrap()))
 }
 
 fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
@@ -752,6 +792,7 @@ fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
 }
 
 fn app_view() -> impl View {
+    ndoc::Document::init_highlighter();
     let ndoc = if let Some(path) = env::args().nth(1) {
         ndoc::Document::from_file(path).unwrap()
     } else {
