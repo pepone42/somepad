@@ -2,9 +2,9 @@ use std::cell::Cell;
 // 🤦‍♀️😊❤😂🤣
 use std::collections::HashMap;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use floem::action::save_as;
+use floem::action::{add_overlay, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
 use floem::ext_event::create_signal_from_channel;
@@ -18,9 +18,12 @@ use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
 
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
-    container, h_stack, label, scroll, v_stack, virtual_stack, Decorators, VirtualItemSize,
+    container, dyn_container, h_stack, label, scroll, v_stack, virtual_list, virtual_stack,
+    Decorators, VirtualDirection, VirtualItemSize,
 };
 
+use floem::widgets::dropdown::dropdown;
+use floem::widgets::{button, dropdown};
 use floem::{Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 use ndoc::syntax::{StateCache, StyledLinesCache, SYNTAXSET};
@@ -29,6 +32,29 @@ use ndoc::{Document, Indentation, Selection};
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
+}
+
+fn documents() -> &'static Arc<Mutex<HashMap<usize, RwSignal<Document>>>> {
+    // n.b. static items do not call [`Drop`] on program termination, so if
+    // [`DeepThought`] impls Drop, that will not be used for this instance.
+    static COMPUTATION: OnceLock<Arc<Mutex<HashMap<usize, RwSignal<Document>>>>> = OnceLock::new();
+    COMPUTATION.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+}
+
+fn new_document() {
+    let doc = Document::default();
+    documents()
+        .lock()
+        .unwrap()
+        .insert(doc.id(), RwSignal::new(doc));
+}
+
+fn new_document_from_file(path: impl AsRef<std::path::Path>) {
+    let doc = ndoc::Document::from_file(path).unwrap();
+    documents()
+        .lock()
+        .unwrap()
+        .insert(doc.id(), RwSignal::new(doc));
 }
 
 #[derive(Debug)]
@@ -76,15 +102,15 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
     // create a system tu update the view when the highlighter is updated
     // on_lighter_update is called from an other thread
     // we need to send a message to the main thread to update the view
-    let (s,r) = crossbeam_channel::unbounded();
+    let (s, r) = crossbeam_channel::unbounded();
     let x = create_signal_from_channel(r);
     ndoc.get().on_highlighter_update(move || {
         s.send(()).unwrap();
     });
 
-    create_effect(move |_| {
-        match x.get() {
-            _ => {id.request_paint();}
+    create_effect(move |_| match x.get() {
+        _ => {
+            id.request_paint();
         }
     });
 
@@ -108,7 +134,6 @@ impl TextEditor {
     }
 
     pub fn layout_line(&self, line: usize) -> TextLayout {
-        
         let mut layout = TextLayout::new();
         let attrs = Attrs::new()
             .color(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
@@ -453,6 +478,7 @@ impl Widget for TextEditor {
                                 let _ =
                                     Clipboard::set_contents(self.doc.get().get_selection_content());
                                 cx.request_all(self.id());
+                                return EventPropagation::Stop;
                             }
                             "v" if e.modifiers.control_key() => {
                                 if let Ok(s) = Clipboard::get_contents() {
@@ -460,6 +486,7 @@ impl Widget for TextEditor {
                                     self.scroll_to_main_cursor();
                                     cx.request_all(self.id());
                                 }
+                                return EventPropagation::Stop;
                             }
                             "x" if e.modifiers.control_key() => {
                                 let _ =
@@ -467,19 +494,23 @@ impl Widget for TextEditor {
                                 self.doc.update(|d| d.insert(""));
                                 self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
+                                return EventPropagation::Stop;
                             }
                             "z" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.undo());
                                 self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
+                                return EventPropagation::Stop;
                             }
                             "y" if e.modifiers.control_key() => {
                                 self.doc.update(|d| d.redo());
                                 self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
+                                return EventPropagation::Stop;
                             }
                             "S" if e.modifiers.control_key() => {
                                 self.save_as();
+                                return EventPropagation::Stop;
                             }
                             "s" if e.modifiers.control_key() => {
                                 if let Some(ref file_name) = self.doc.get().file_name {
@@ -487,14 +518,26 @@ impl Widget for TextEditor {
                                 } else {
                                     self.save_as();
                                 }
+                                return EventPropagation::Stop;
+                            }
+                            "n" if e.modifiers.control_key() => {
+                                new_document();
+                                dbg!(documents().lock().unwrap().keys());
+                                return EventPropagation::Stop;
                             }
                             _ => {
-                                self.doc.update(|d| d.insert(txt));
-                                self.scroll_to_main_cursor();
-                                cx.request_all(self.id());
+                                if !e.modifiers.control_key()
+                                    && !e.modifiers.alt_key()
+                                    && !e.modifiers.super_key()
+                                {
+                                    self.doc.update(|d| d.insert(txt));
+                                    self.scroll_to_main_cursor();
+                                    cx.request_all(self.id());
+                                    return EventPropagation::Stop;
+                                }
                             }
                         }
-                        EventPropagation::Stop
+                        EventPropagation::Continue
                     }
                     _ => match e.key.logical_key {
                         Key::Named(NamedKey::ArrowDown)
@@ -778,9 +821,6 @@ fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
 fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
     let mut tab = Menu::new("Tabs");
     let mut space = Menu::new("Spaces");
-    // tab.entry(MenuItem::new("1".to_string()).action(move || (indent.clone())(Indentation::Tab(1))));
-    // let ind = indent.clone();
-    // tab.entry(MenuItem::new("2".to_string()).action(move || (indent.clone())(Indentation::Tab(2))));
     for i in 1..9 {
         let ind = indent.clone();
         tab = tab.entry(MenuItem::new(i.to_string()).action(move || ind(Indentation::Tab(i))));
@@ -791,45 +831,81 @@ fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
     Menu::new("Indentation").entry(tab).entry(space)
 }
 
+fn palette(
+    items: im::Vector<(usize, String)>,
+    action: impl FnOnce(usize) + 'static + Clone + Copy,
+) {
+    add_overlay(Point::new(0., 0.), move |id| {
+        virtual_list(
+            VirtualDirection::Vertical,
+            VirtualItemSize::Fixed(Box::new(|| 20.0)),
+            move || items.clone(),
+            move |item| item.clone(),
+            move |item| label(move || item.1.to_string()).style(|s| s.height(20.0)).on_click_stop(move |_| {action(item.0);remove_overlay(id);}),
+        )
+        
+        // .on_select(move |i| {
+        //     if let Some(i) = i {
+        //         action(i);
+        //     }
+        //     remove_overlay(id);
+        // })
+        .style(|s| s.background(Color::WHITE))
+    });
+}
+
 fn app_view() -> impl View {
     ndoc::Document::init_highlighter();
-    let ndoc = if let Some(path) = env::args().nth(1) {
-        ndoc::Document::from_file(path).unwrap()
+    if let Some(path) = env::args().nth(1) {
+        new_document_from_file(path);
     } else {
-        ndoc::Document::default()
-    };
+        new_document();
+    }
 
-    let (indentation, set_indentation) = create_signal(ndoc.file_info.indentation);
-    let doc = create_rw_signal(ndoc);
+    let current_doc_id = create_rw_signal(0usize);
 
-    create_effect(move |_| {
-        doc.update(|d| d.file_info.indentation = indentation.get());
-    });
+    let current_doc = move || documents().lock().unwrap()[&current_doc_id.get()].clone();
 
     let v = v_stack((
-        editor(move || doc),
-        //label(|| "label".to_string()).style(|s| s.size_full()),
+        dyn_container(
+            move || current_doc_id.get(),
+            move |val| {
+                editor(move || dbg!(*documents().lock().unwrap().get(dbg!(&val)).unwrap())).any()
+            },
+        )
+        .style(|s| s.size_full()),
         h_stack((
-            label(move || match doc.get().file_name {
+            label(move || match current_doc().get().file_name {
                 Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
                 None => "[Untilted]".to_string(),
             }),
             label(move || {
-                if doc.get().is_dirty() {
+                if current_doc().get().is_dirty() {
                     "●".to_string()
                 } else {
                     "".to_string()
                 }
             })
             .style(|s| s.width_full()), //.height(24.)),
-            label(move || indentation.get().to_string())
-                .popout_menu(move || indentation_menu(move |indent| set_indentation.set(indent)))
+            label(move || current_doc().get().file_info.indentation.to_string())
+                .popout_menu(move || {
+                    indentation_menu(move |indent| {
+                        current_doc().update(|d| d.file_info.indentation = indent)
+                    })
+                })
                 .style(|s| {
                     s.padding_left(10.)
                         .padding_right(10.)
                         .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
                 }),
-            label(move || doc.get().file_info.encoding.name().to_string()),
+            label(move || current_doc().get().file_info.encoding.name().to_string()),
+            button(move || "switch").on_click_stop(move |_| {
+                if current_doc_id.get() == 0 {
+                    current_doc_id.set(1)
+                } else {
+                    current_doc_id.set(0)
+                }
+            }),
         ))
         .style(|s| s.padding(6.)),
     ))
@@ -838,11 +914,23 @@ fn app_view() -> impl View {
 
     let id = v.id();
 
-    v.keyboard_navigatable().on_key_down(
-        Key::Named(NamedKey::F10),
-        ModifiersState::empty(),
-        move |_| id.inspect(),
-    )
+    v.keyboard_navigatable()
+        .on_key_down(
+            Key::Named(NamedKey::F10),
+            ModifiersState::empty(),
+            move |_| id.inspect(),
+        )
+        .on_key_down(
+            Key::Character("p".into()),
+            ModifiersState::CONTROL,
+            move |_| {
+                palette(
+                    //im::vector!((0usize, "plop".to_string()), (1, "toto".to_string())),
+                    documents().lock().unwrap().iter().map(|(k, v)| (*k, v.get().title().to_string())).collect(),
+                    move |i| {current_doc_id.set(i)},
+                );
+            },
+        )
 }
 
 fn main() {

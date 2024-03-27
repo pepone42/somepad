@@ -203,6 +203,18 @@ impl Document {
         DOCID.fetch_add(1, Ordering::Relaxed)
     }
 
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn title(&self) -> Cow<'_, str> {
+        if let Some(f) = &self.file_name {
+            f.file_name().unwrap().to_string_lossy()
+        } else {
+            "Untitled".into()
+        }
+    }
+
     pub fn init_highlighter() {
         if MESSAGE_SENDER.lock().is_ok_and(|m| m.is_some()) {
             return;
