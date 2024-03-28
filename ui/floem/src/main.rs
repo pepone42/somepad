@@ -1,10 +1,11 @@
-use std::cell::Cell;
 // 🤦‍♀️😊❤😂🤣
-use std::collections::HashMap;
-use std::env;
-use std::sync::{Arc, Mutex, OnceLock};
+mod documents;
 
-use floem::action::{add_overlay, remove_overlay, save_as};
+use std::collections::HashMap;
+use std::{env, time};
+
+use documents::Documents;
+use floem::action::{add_overlay, open_file, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
 use floem::ext_event::create_signal_from_channel;
@@ -22,39 +23,14 @@ use floem::views::{
     Decorators, VirtualDirection, VirtualItemSize,
 };
 
-use floem::widgets::dropdown::dropdown;
-use floem::widgets::{button, dropdown};
 use floem::{Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
-use ndoc::syntax::{StateCache, StyledLinesCache, SYNTAXSET};
+
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
-}
-
-fn documents() -> &'static Arc<Mutex<HashMap<usize, RwSignal<Document>>>> {
-    // n.b. static items do not call [`Drop`] on program termination, so if
-    // [`DeepThought`] impls Drop, that will not be used for this instance.
-    static COMPUTATION: OnceLock<Arc<Mutex<HashMap<usize, RwSignal<Document>>>>> = OnceLock::new();
-    COMPUTATION.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
-}
-
-fn new_document() {
-    let doc = Document::default();
-    documents()
-        .lock()
-        .unwrap()
-        .insert(doc.id(), RwSignal::new(doc));
-}
-
-fn new_document_from_file(path: impl AsRef<std::path::Path>) {
-    let doc = ndoc::Document::from_file(path).unwrap();
-    documents()
-        .lock()
-        .unwrap()
-        .insert(doc.id(), RwSignal::new(doc));
 }
 
 #[derive(Debug)]
@@ -73,6 +49,7 @@ pub struct TextEditor {
     char_base_width: f64,
     selection_kind: SelectionKind,
     disable: RwSignal<bool>,
+    documents: RwSignal<Documents>,
 }
 
 pub enum SelectionKind {
@@ -81,7 +58,10 @@ pub enum SelectionKind {
     Line,
 }
 
-pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor {
+pub fn text_editor(
+    documents: RwSignal<Documents>,
+    doc: impl Fn() -> RwSignal<Document> + 'static,
+) -> TextEditor {
     let id = Id::next();
     let attrs = Attrs::new()
         .family(&[FamilyOwned::Monospace])
@@ -124,6 +104,7 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
         char_base_width,
         selection_kind: SelectionKind::Char,
         disable,
+        documents,
     }
     .disabled(move || disable.get())
 }
@@ -521,8 +502,35 @@ impl Widget for TextEditor {
                                 return EventPropagation::Stop;
                             }
                             "n" if e.modifiers.control_key() => {
-                                new_document();
-                                dbg!(documents().lock().unwrap().keys());
+                                self.documents
+                                    .update(|d| d.add(create_rw_signal(Document::default())));
+                                return EventPropagation::Stop;
+                            }
+                            "o" if e.modifiers.control_key() => {
+                                self.disable.set(true);
+                                let disable = self.disable.clone();
+                                let doc = create_rw_signal(Document::default());
+                                let documents = self.documents.clone();
+                                open_file(
+                                    FileDialogOptions::new().title("Open new file"),
+                                    move |p| {
+                                        if let Some(path) = p {
+                                            doc.set(Document::from_file(&path.path[0]).unwrap());
+                                            documents.update(|d| d.add(doc));
+                                            // swap_document_from_file(path.path[0].clone(), doc)
+                                            //     .unwrap();
+                                            // dbg!(DOCUMENTS.lock().unwrap().get().keys());
+                                            disable.set(false);
+                                        }
+                                    },
+                                );
+                                return EventPropagation::Stop;
+                            }
+                            "w" if e.modifiers.control_key() => {
+                                let id = self.doc.get().id();
+                                if self.documents.get().len() > 1 {
+                                    self.documents.update(|d| d.remove(id));
+                                }
                                 return EventPropagation::Stop;
                             }
                             _ => {
@@ -759,9 +767,12 @@ impl Widget for TextEditor {
     }
 }
 
-fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
+fn editor(
+    documents: RwSignal<Documents>,
+    doc: impl Fn() -> RwSignal<Document> + 'static,
+) -> impl View {
     let ndoc = doc(); //.clone();
-    let text_editor = text_editor(move || ndoc);
+    let text_editor = text_editor(documents, move || ndoc);
     let text_editor_id = text_editor.id();
 
     let (line_number_width, line_number_width_set) = create_signal(
@@ -841,71 +852,89 @@ fn palette(
             VirtualItemSize::Fixed(Box::new(|| 20.0)),
             move || items.clone(),
             move |item| item.clone(),
-            move |item| label(move || item.1.to_string()).style(|s| s.height(20.0)).on_click_stop(move |_| {action(item.0);remove_overlay(id);}),
+            move |item| {
+                label(move || item.1.to_string())
+                    .style(|s| s.height(20.0))
+                    .on_click_stop(move |_| {
+                        action(item.0);
+                        remove_overlay(id);
+                    })
+            },
         )
-        
-        // .on_select(move |i| {
-        //     if let Some(i) = i {
-        //         action(i);
-        //     }
-        //     remove_overlay(id);
-        // })
         .style(|s| s.background(Color::WHITE))
     });
 }
 
 fn app_view() -> impl View {
     ndoc::Document::init_highlighter();
-    if let Some(path) = env::args().nth(1) {
-        new_document_from_file(path);
+    let doc = create_rw_signal(if let Some(path) = env::args().nth(1) {
+        Document::from_file(path).unwrap()
     } else {
-        new_document();
-    }
+        Document::default()
+    });
 
-    let current_doc_id = create_rw_signal(0usize);
-
-    let current_doc = move || documents().lock().unwrap()[&current_doc_id.get()].clone();
+    let documents = create_rw_signal(Documents::new());
+    documents.update(|docs| docs.add(doc));
+    dbg!(documents.get());
 
     let v = v_stack((
         dyn_container(
-            move || current_doc_id.get(),
-            move |val| {
-                editor(move || dbg!(*documents().lock().unwrap().get(dbg!(&val)).unwrap())).any()
-            },
+            move || documents.get().current_id(),
+            move |val| editor(documents, move || documents.get().get_doc(val)).any(),
         )
         .style(|s| s.size_full()),
         h_stack((
-            label(move || match current_doc().get().file_name {
+            label(move || match documents.get().current().get().file_name {
                 Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
                 None => "[Untilted]".to_string(),
             }),
             label(move || {
-                if current_doc().get().is_dirty() {
+                if documents.get().current().get().is_dirty() {
                     "●".to_string()
                 } else {
                     "".to_string()
                 }
             })
             .style(|s| s.width_full()), //.height(24.)),
-            label(move || current_doc().get().file_info.indentation.to_string())
-                .popout_menu(move || {
-                    indentation_menu(move |indent| {
-                        current_doc().update(|d| d.file_info.indentation = indent)
-                    })
+            label(move || {
+                documents
+                    .get()
+                    .current()
+                    .get()
+                    .file_info
+                    .indentation
+                    .to_string()
+            })
+            .popout_menu(move || {
+                indentation_menu(move |indent| {
+                    documents
+                        .get()
+                        .current()
+                        .update(|d| d.file_info.indentation = indent)
                 })
-                .style(|s| {
-                    s.padding_left(10.)
-                        .padding_right(10.)
-                        .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
-                }),
-            label(move || current_doc().get().file_info.encoding.name().to_string()),
-            button(move || "switch").on_click_stop(move |_| {
-                if current_doc_id.get() == 0 {
-                    current_doc_id.set(1)
-                } else {
-                    current_doc_id.set(0)
-                }
+            })
+            .style(|s| {
+                s.padding_left(10.)
+                    .padding_right(10.)
+                    .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
             }),
+            label(move || {
+                documents
+                    .get()
+                    .current()
+                    .get()
+                    .file_info
+                    .encoding
+                    .name()
+                    .to_string()
+            }),
+            // button(move || "switch").on_click_stop(move |_| {
+            //     if documents.get().current == 0 {
+            //         set_current_doc_id(1)
+            //     } else {
+            //         set_current_doc_id(0)
+            //     }
+            // }),
         ))
         .style(|s| s.padding(6.)),
     ))
@@ -926,8 +955,20 @@ fn app_view() -> impl View {
             move |_| {
                 palette(
                     //im::vector!((0usize, "plop".to_string()), (1, "toto".to_string())),
-                    documents().lock().unwrap().iter().map(|(k, v)| (*k, v.get().title().to_string())).collect(),
-                    move |i| {current_doc_id.set(i)},
+                    documents
+                        .get()
+                        .order_by_mru()
+                        .iter()
+                        .enumerate()
+                        .map(|(_, d)| (d.get().id(), d.get().title().to_string()))
+                        .collect(),
+                    // documents
+                    //     .get()
+                    //     .documents
+                    //     .iter()
+                    //     .map(|(k, v)| (dbg!(*k), { v.1.get().title().to_string() }))
+                    //     .collect(),
+                    move |i| documents.update(|d| d.set_current(i)),
                 );
             },
         )
