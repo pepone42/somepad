@@ -22,7 +22,11 @@ impl Documents {
     }
     pub fn remove(&mut self, id: usize) {
         self.documents.remove(&id);
-        self.current = *self.documents.iter().max_by(|v1,v2| v1.0.cmp(v2.0)).unwrap().0;
+        if !self.documents.is_empty() {
+            self.current = *self.documents.iter().max_by(|v1,v2| v1.0.cmp(v2.0)).unwrap().0;
+        } else {
+            self.current = 0;
+        }
     }
     pub fn current(&self) -> RwSignal<Document> {
         self.documents[&self.current].1

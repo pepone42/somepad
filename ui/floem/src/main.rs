@@ -19,7 +19,7 @@ use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
 
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
-    container, dyn_container, h_stack, label, scroll, v_stack, virtual_list, virtual_stack,
+    container, dyn_container, empty, h_stack, label, scroll, v_stack, virtual_list, virtual_stack,
     Decorators, VirtualDirection, VirtualItemSize,
 };
 
@@ -528,9 +528,9 @@ impl Widget for TextEditor {
                             }
                             "w" if e.modifiers.control_key() => {
                                 let id = self.doc.get().id();
-                                if self.documents.get().len() > 1 {
+                                //if self.documents.get().len() > 1 {
                                     self.documents.update(|d| d.remove(id));
-                                }
+                                //}
                                 return EventPropagation::Stop;
                             }
                             _ => {
@@ -829,6 +829,44 @@ fn editor(
     .style(|s| s.background(Color::parse(&THEME.vscode.colors.editor_background).unwrap()))
 }
 
+fn startup_screen(documents: RwSignal<Documents>) -> impl View {
+    let view = container(
+        v_stack((
+            label(move || "Welcome to SomePad".to_string()),
+            label(move || "Ctrl+n to create a new document".to_string()).style(|s| s.font_size(18.)),
+            label(move || "Ctrl+o to open an existing file".to_string()).style(|s| s.font_size(18.)),
+        ))
+    )
+    .style(|s| s.size_full().flex_row().items_center().justify_center().font_size(24.).border(1.0).border_color(Color::BLACK))
+    .keyboard_navigatable()
+    .on_key_down(
+        Key::Character("n".into()),
+        ModifiersState::CONTROL,
+        move |_| {
+            dbg!("new file");
+            let doc = create_rw_signal(Document::default());
+            documents.update(|d| d.add(doc));
+        },
+    ).on_key_down(
+        Key::Character("o".into()),
+        ModifiersState::CONTROL,
+        move |_| {
+            let doc = create_rw_signal(Document::default());
+            open_file(
+                FileDialogOptions::new().title("Open new file"),
+                move |p| {
+                    if let Some(path) = p {
+                        doc.set(Document::from_file(&path.path[0]).unwrap());
+                        documents.update(|d| d.add(doc));
+                    }
+                },
+            );
+        },
+    );
+    view.id().request_focus();
+    view
+}
+
 fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
     let mut tab = Menu::new("Tabs");
     let mut space = Menu::new("Spaces");
@@ -867,51 +905,79 @@ fn palette(
 
 fn app_view() -> impl View {
     ndoc::Document::init_highlighter();
-    let doc = create_rw_signal(if let Some(path) = env::args().nth(1) {
-        Document::from_file(path).unwrap()
-    } else {
-        Document::default()
-    });
+    // let doc = create_rw_signal(if let Some(path) = env::args().nth(1) {
+    //     Document::from_file(path).unwrap()
+    // } else {
+    //     Document::default()
+    // });
 
     let documents = create_rw_signal(Documents::new());
-    documents.update(|docs| docs.add(doc));
+
+    if let Some(path) = env::args().nth(1) {
+        let doc = create_rw_signal(Document::from_file(path).unwrap());
+        documents.update(|docs| docs.add(doc));
+    }
     dbg!(documents.get());
 
     let v = v_stack((
         dyn_container(
             move || documents.get().current_id(),
-            move |val| editor(documents, move || documents.get().get_doc(val)).any(),
+            move |val| {
+                if documents.get().is_empty() {
+                    startup_screen(documents).any()
+                } else {
+                    editor(documents, move || documents.get().get_doc(val)).any()
+                }
+            },
         )
         .style(|s| s.size_full()),
         h_stack((
-            label(move || match documents.get().current().get().file_name {
-                Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
-                None => "[Untilted]".to_string(),
+            label(move || {
+                if documents.get().is_empty() {
+                    "".to_string()
+                } else {
+                    match documents.get().current().get().file_name {
+                        Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
+                        None => "[Untilted]".to_string(),
+                    }
+                }
             }),
             label(move || {
-                if documents.get().current().get().is_dirty() {
-                    "●".to_string()
-                } else {
+                if documents.get().is_empty() {
                     "".to_string()
+                } else {
+                    if documents.get().current().get().is_dirty() {
+                        "●".to_string()
+                    } else {
+                        "".to_string()
+                    }
                 }
             })
             .style(|s| s.width_full()), //.height(24.)),
             label(move || {
-                documents
-                    .get()
-                    .current()
-                    .get()
-                    .file_info
-                    .indentation
-                    .to_string()
-            })
-            .popout_menu(move || {
-                indentation_menu(move |indent| {
+                if documents.get().is_empty() {
+                    "".to_string()
+                } else {
                     documents
                         .get()
                         .current()
-                        .update(|d| d.file_info.indentation = indent)
-                })
+                        .get()
+                        .file_info
+                        .indentation
+                        .to_string()
+                }
+            })
+            .popout_menu(move || {
+                if documents.get().is_empty() {
+                    Menu::new("nothing")
+                } else {
+                    indentation_menu(move |indent| {
+                        documents
+                            .get()
+                            .current()
+                            .update(|d| d.file_info.indentation = indent)
+                    })
+                }
             })
             .style(|s| {
                 s.padding_left(10.)
@@ -919,26 +985,30 @@ fn app_view() -> impl View {
                     .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
             }),
             label(move || {
-                documents
-                    .get()
-                    .current()
-                    .get()
-                    .file_info
-                    .encoding
-                    .name()
-                    .to_string()
+                if documents.get().is_empty() {
+                    "".to_string()
+                } else {
+                    documents
+                        .get()
+                        .current()
+                        .get()
+                        .file_info
+                        .encoding
+                        .name()
+                        .to_string()
+                }
             }),
-            // button(move || "switch").on_click_stop(move |_| {
-            //     if documents.get().current == 0 {
-            //         set_current_doc_id(1)
-            //     } else {
-            //         set_current_doc_id(0)
-            //     }
-            // }),
         ))
         .style(|s| s.padding(6.)),
     ))
-    .style(|s| s.width_full().height_full().font_size(12.))
+    .style(|s| {
+        s.width_full()
+            .height_full()
+            .font_size(12.)
+            .color(Color::parse(&THEME.vscode.colors.editor_foreground).unwrap())
+            .background(Color::parse(&THEME.vscode.colors.editor_background).unwrap())
+    })
+    .style(move |s| s)
     .window_title(|| "xncode".to_string());
 
     let id = v.id();
