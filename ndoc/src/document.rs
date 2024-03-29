@@ -77,7 +77,7 @@ impl History {
     }
 
     fn redo(&mut self) -> Option<(Rope, Vec<Selection>)> {
-        if self.edit_stack_top < self.edit_stack.len() - 1 {
+        if self.edit_stack_top +1 < self.edit_stack.len() {
             self.edit_stack_top += 1;
             Some(self.edit_stack[self.edit_stack_top].clone())
         } else {

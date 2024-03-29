@@ -1,5 +1,6 @@
 // 🤦‍♀️😊❤😂🤣
 mod documents;
+mod widgets;
 
 use std::collections::HashMap;
 use std::{env, time};
@@ -28,6 +29,9 @@ use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
+
+use crate::widgets::palette;
+use crate::widgets::window;
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
@@ -501,36 +505,9 @@ impl Widget for TextEditor {
                                 }
                                 return EventPropagation::Stop;
                             }
-                            "n" if e.modifiers.control_key() => {
-                                self.documents
-                                    .update(|d| d.add(create_rw_signal(Document::default())));
-                                return EventPropagation::Stop;
-                            }
-                            "o" if e.modifiers.control_key() => {
-                                self.disable.set(true);
-                                let disable = self.disable.clone();
-                                let doc = create_rw_signal(Document::default());
-                                let documents = self.documents.clone();
-                                open_file(
-                                    FileDialogOptions::new().title("Open new file"),
-                                    move |p| {
-                                        if let Some(path) = p {
-                                            doc.set(Document::from_file(&path.path[0]).unwrap());
-                                            documents.update(|d| d.add(doc));
-                                            // swap_document_from_file(path.path[0].clone(), doc)
-                                            //     .unwrap();
-                                            // dbg!(DOCUMENTS.lock().unwrap().get().keys());
-                                            disable.set(false);
-                                        }
-                                    },
-                                );
-                                return EventPropagation::Stop;
-                            }
                             "w" if e.modifiers.control_key() => {
                                 let id = self.doc.get().id();
-                                //if self.documents.get().len() > 1 {
-                                    self.documents.update(|d| d.remove(id));
-                                //}
+                                self.documents.update(|d| d.remove(id));
                                 return EventPropagation::Stop;
                             }
                             _ => {
@@ -829,42 +806,21 @@ fn editor(
     .style(|s| s.background(Color::parse(&THEME.vscode.colors.editor_background).unwrap()))
 }
 
-fn startup_screen(documents: RwSignal<Documents>) -> impl View {
-    let view = container(
-        v_stack((
-            label(move || "Welcome to SomePad".to_string()),
-            label(move || "Ctrl+n to create a new document".to_string()).style(|s| s.font_size(18.)),
-            label(move || "Ctrl+o to open an existing file".to_string()).style(|s| s.font_size(18.)),
-        ))
-    )
-    .style(|s| s.size_full().flex_row().items_center().justify_center().font_size(24.).border(1.0).border_color(Color::BLACK))
-    .keyboard_navigatable()
-    .on_key_down(
-        Key::Character("n".into()),
-        ModifiersState::CONTROL,
-        move |_| {
-            dbg!("new file");
-            let doc = create_rw_signal(Document::default());
-            documents.update(|d| d.add(doc));
-        },
-    ).on_key_down(
-        Key::Character("o".into()),
-        ModifiersState::CONTROL,
-        move |_| {
-            let doc = create_rw_signal(Document::default());
-            open_file(
-                FileDialogOptions::new().title("Open new file"),
-                move |p| {
-                    if let Some(path) = p {
-                        doc.set(Document::from_file(&path.path[0]).unwrap());
-                        documents.update(|d| d.add(doc));
-                    }
-                },
-            );
-        },
-    );
-    view.id().request_focus();
-    view
+fn startup_screen() -> impl View {
+    container(v_stack((
+        label(move || "Welcome to SomePad".to_string()),
+        label(move || "Ctrl+n to create a new document".to_string()).style(|s| s.font_size(18.)),
+        label(move || "Ctrl+o to open an existing file".to_string()).style(|s| s.font_size(18.)),
+    )))
+    .style(|s| {
+        s.size_full()
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .font_size(24.)
+            .border(1.0)
+            .border_color(Color::BLACK)
+    })
 }
 
 fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
@@ -880,36 +836,8 @@ fn indentation_menu(indent: impl Fn(Indentation) + 'static + Clone) -> Menu {
     Menu::new("Indentation").entry(tab).entry(space)
 }
 
-fn palette(
-    items: im::Vector<(usize, String)>,
-    action: impl FnOnce(usize) + 'static + Clone + Copy,
-) {
-    add_overlay(Point::new(0., 0.), move |id| {
-        virtual_list(
-            VirtualDirection::Vertical,
-            VirtualItemSize::Fixed(Box::new(|| 20.0)),
-            move || items.clone(),
-            move |item| item.clone(),
-            move |item| {
-                label(move || item.1.to_string())
-                    .style(|s| s.height(20.0))
-                    .on_click_stop(move |_| {
-                        action(item.0);
-                        remove_overlay(id);
-                    })
-            },
-        )
-        .style(|s| s.background(Color::WHITE))
-    });
-}
-
 fn app_view() -> impl View {
     ndoc::Document::init_highlighter();
-    // let doc = create_rw_signal(if let Some(path) = env::args().nth(1) {
-    //     Document::from_file(path).unwrap()
-    // } else {
-    //     Document::default()
-    // });
 
     let documents = create_rw_signal(Documents::new());
 
@@ -919,88 +847,92 @@ fn app_view() -> impl View {
     }
     dbg!(documents.get());
 
-    let v = v_stack((
-        dyn_container(
-            move || documents.get().current_id(),
-            move |val| {
-                if documents.get().is_empty() {
-                    startup_screen(documents).any()
-                } else {
-                    editor(documents, move || documents.get().get_doc(val)).any()
-                }
-            },
-        )
-        .style(|s| s.size_full()),
-        h_stack((
-            label(move || {
-                if documents.get().is_empty() {
-                    "".to_string()
-                } else {
-                    match documents.get().current().get().file_name {
-                        Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
-                        None => "[Untilted]".to_string(),
-                    }
-                }
-            }),
-            label(move || {
-                if documents.get().is_empty() {
-                    "".to_string()
-                } else {
-                    if documents.get().current().get().is_dirty() {
-                        "●".to_string()
+    let v = window(
+        v_stack((
+            dyn_container(
+                move || documents.get().current_id(),
+                move |val| {
+                    if documents.get().is_empty() {
+                        startup_screen().any()
                     } else {
-                        "".to_string()
+                        editor(documents, move || documents.get().get_doc(val)).any()
                     }
-                }
-            })
-            .style(|s| s.width_full()), //.height(24.)),
-            label(move || {
-                if documents.get().is_empty() {
-                    "".to_string()
-                } else {
-                    documents
-                        .get()
-                        .current()
-                        .get()
-                        .file_info
-                        .indentation
-                        .to_string()
-                }
-            })
-            .popout_menu(move || {
-                if documents.get().is_empty() {
-                    Menu::new("nothing")
-                } else {
-                    indentation_menu(move |indent| {
+                },
+            )
+            .style(|s| s.size_full()),
+            h_stack((
+                label(move || {
+                    if documents.get().is_empty() {
+                        "".to_string()
+                    } else {
+                        match documents.get().current().get().file_name {
+                            Some(f) => f.file_name().unwrap().to_string_lossy().to_string(),
+                            None => "[Untilted]".to_string(),
+                        }
+                    }
+                }),
+                label(move || {
+                    if documents.get().is_empty() {
+                        "".to_string()
+                    } else {
+                        if documents.get().current().get().is_dirty() {
+                            "●".to_string()
+                        } else {
+                            "".to_string()
+                        }
+                    }
+                })
+                .style(|s| s.width_full()), //.height(24.)),
+                label(move || {
+                    if documents.get().is_empty() {
+                        "".to_string()
+                    } else {
                         documents
                             .get()
                             .current()
-                            .update(|d| d.file_info.indentation = indent)
-                    })
-                }
-            })
-            .style(|s| {
-                s.padding_left(10.)
-                    .padding_right(10.)
-                    .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
-            }),
-            label(move || {
-                if documents.get().is_empty() {
-                    "".to_string()
-                } else {
-                    documents
-                        .get()
-                        .current()
-                        .get()
-                        .file_info
-                        .encoding
-                        .name()
-                        .to_string()
-                }
-            }),
+                            .get()
+                            .file_info
+                            .indentation
+                            .to_string()
+                    }
+                })
+                .popout_menu(move || {
+                    if documents.get().is_empty() {
+                        Menu::new("nothing")
+                    } else {
+                        indentation_menu(move |indent| {
+                            documents
+                                .get()
+                                .current()
+                                .update(|d| d.file_info.indentation = indent)
+                        })
+                    }
+                })
+                .style(|s| {
+                    s.padding_left(10.)
+                        .padding_right(10.)
+                        .hover(|s| s.background(Color::BLACK.with_alpha_factor(0.15)))
+                }),
+                label(move || {
+                    if documents.get().is_empty() {
+                        "".to_string()
+                    } else {
+                        documents
+                            .get()
+                            .current()
+                            .get()
+                            .file_info
+                            .encoding
+                            .name()
+                            .to_string()
+                    }
+                }),
+            ))
+            .style(|s| s.padding(6.)),
         ))
-        .style(|s| s.padding(6.)),
-    ))
+        .style(|s| s.size_full()),
+        documents,
+    )
     .style(|s| {
         s.width_full()
             .height_full()
@@ -1013,35 +945,11 @@ fn app_view() -> impl View {
 
     let id = v.id();
 
-    v.keyboard_navigatable()
-        .on_key_down(
-            Key::Named(NamedKey::F10),
-            ModifiersState::empty(),
-            move |_| id.inspect(),
-        )
-        .on_key_down(
-            Key::Character("p".into()),
-            ModifiersState::CONTROL,
-            move |_| {
-                palette(
-                    //im::vector!((0usize, "plop".to_string()), (1, "toto".to_string())),
-                    documents
-                        .get()
-                        .order_by_mru()
-                        .iter()
-                        .enumerate()
-                        .map(|(_, d)| (d.get().id(), d.get().title().to_string()))
-                        .collect(),
-                    // documents
-                    //     .get()
-                    //     .documents
-                    //     .iter()
-                    //     .map(|(k, v)| (dbg!(*k), { v.1.get().title().to_string() }))
-                    //     .collect(),
-                    move |i| documents.update(|d| d.set_current(i)),
-                );
-            },
-        )
+    v.keyboard_navigatable().on_key_down(
+        Key::Named(NamedKey::F10),
+        ModifiersState::empty(),
+        move |_| id.inspect(),
+    )
 }
 
 fn main() {
