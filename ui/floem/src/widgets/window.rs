@@ -12,6 +12,7 @@ use floem::{
 use ndoc::Document;
 
 use crate::documents::Documents;
+use crate::decorators::CustomDecorators;
 
 use super::palette;
 
@@ -59,6 +60,8 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
             }
         },
     );
+
+    let w = w.on_shortcut("Ctrl+m".parse().unwrap(), move |e| {dbg!("qdsfqsdf");});
 
     w
 }

@@ -1,6 +1,8 @@
 // 🤦‍♀️😊❤😂🤣
 mod documents;
 mod widgets;
+mod shortcut;
+mod decorators;
 
 use std::collections::HashMap;
 use std::{env, time};

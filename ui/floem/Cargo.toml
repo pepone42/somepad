@@ -14,3 +14,4 @@ crossbeam-channel = "0.5.12"
 floem = {git = "https://github.com/lapce/floem"}
 im = "15.1.0"
 ndoc = {path = "../../ndoc"}
+smol_str = "0.2.1"
