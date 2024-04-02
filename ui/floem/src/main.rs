@@ -31,6 +31,7 @@ use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
+use shortcut::event_match;
 
 use crate::widgets::palette;
 use crate::widgets::window;
@@ -455,63 +456,114 @@ impl Widget for TextEditor {
         event: floem::event::Event,
     ) -> floem::EventPropagation {
         //dbg!(event.clone());
+        if event_match(&event, shortcut!(Ctrl+c)) {
+            let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
+            cx.request_all(self.id());
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+v)) {
+            if let Ok(s) = Clipboard::get_contents() {
+                self.doc.update(|d| d.insert_many(&s));
+                self.scroll_to_main_cursor();
+                cx.request_all(self.id());
+            }
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+x)) {
+            let _ =
+                Clipboard::set_contents(self.doc.get().get_selection_content());
+            self.doc.update(|d| d.insert(""));
+            self.scroll_to_main_cursor();
+            cx.request_all(self.id());
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+z)) {
+            self.doc.update(|d| d.undo());
+            self.scroll_to_main_cursor();
+            cx.request_all(self.id());
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+y)) {
+            self.doc.update(|d| d.redo());
+            self.scroll_to_main_cursor();
+            cx.request_all(self.id());
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+Shift+s)) {
+            self.save_as();
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+s)) {
+            if let Some(ref file_name) = self.doc.get().file_name {
+                self.doc.update(|d| d.save_as(file_name).unwrap());
+            } else {
+                self.save_as();
+            }
+            return EventPropagation::Stop;
+        }
+        if event_match(&event, shortcut!(Ctrl+w)) {
+            let id = self.doc.get().id();
+            self.documents.update(|d| d.remove(id));
+            return EventPropagation::Stop;
+        }
+
         match event {
             Event::KeyDown(e) => {
-                //dbg!(&e);
+                
                 match e.key.text {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
                         match txt.as_str() {
-                            "c" if e.modifiers.control_key() => {
-                                let _ =
-                                    Clipboard::set_contents(self.doc.get().get_selection_content());
-                                cx.request_all(self.id());
-                                return EventPropagation::Stop;
-                            }
-                            "v" if e.modifiers.control_key() => {
-                                if let Ok(s) = Clipboard::get_contents() {
-                                    self.doc.update(|d| d.insert_many(&s));
-                                    self.scroll_to_main_cursor();
-                                    cx.request_all(self.id());
-                                }
-                                return EventPropagation::Stop;
-                            }
-                            "x" if e.modifiers.control_key() => {
-                                let _ =
-                                    Clipboard::set_contents(self.doc.get().get_selection_content());
-                                self.doc.update(|d| d.insert(""));
-                                self.scroll_to_main_cursor();
-                                cx.request_all(self.id());
-                                return EventPropagation::Stop;
-                            }
-                            "z" if e.modifiers.control_key() => {
-                                self.doc.update(|d| d.undo());
-                                self.scroll_to_main_cursor();
-                                cx.request_all(self.id());
-                                return EventPropagation::Stop;
-                            }
-                            "y" if e.modifiers.control_key() => {
-                                self.doc.update(|d| d.redo());
-                                self.scroll_to_main_cursor();
-                                cx.request_all(self.id());
-                                return EventPropagation::Stop;
-                            }
-                            "S" if e.modifiers.control_key() => {
-                                self.save_as();
-                                return EventPropagation::Stop;
-                            }
-                            "s" if e.modifiers.control_key() => {
-                                if let Some(ref file_name) = self.doc.get().file_name {
-                                    self.doc.update(|d| d.save_as(file_name).unwrap());
-                                } else {
-                                    self.save_as();
-                                }
-                                return EventPropagation::Stop;
-                            }
-                            "w" if e.modifiers.control_key() => {
-                                let id = self.doc.get().id();
-                                self.documents.update(|d| d.remove(id));
-                                return EventPropagation::Stop;
-                            }
+                            // "c" if e.modifiers.control_key() => {
+                            //     let _ =
+                            //         Clipboard::set_contents(self.doc.get().get_selection_content());
+                            //     cx.request_all(self.id());
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "v" if e.modifiers.control_key() => {
+                            //     if let Ok(s) = Clipboard::get_contents() {
+                            //         self.doc.update(|d| d.insert_many(&s));
+                            //         self.scroll_to_main_cursor();
+                            //         cx.request_all(self.id());
+                            //     }
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "x" if e.modifiers.control_key() => {
+                            //     let _ =
+                            //         Clipboard::set_contents(self.doc.get().get_selection_content());
+                            //     self.doc.update(|d| d.insert(""));
+                            //     self.scroll_to_main_cursor();
+                            //     cx.request_all(self.id());
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "z" if e.modifiers.control_key() => {
+                            //     self.doc.update(|d| d.undo());
+                            //     self.scroll_to_main_cursor();
+                            //     cx.request_all(self.id());
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "y" if e.modifiers.control_key() => {
+                            //     self.doc.update(|d| d.redo());
+                            //     self.scroll_to_main_cursor();
+                            //     cx.request_all(self.id());
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "S" if e.modifiers.control_key() => {
+                            //     self.save_as();
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "s" if e.modifiers.control_key() => {
+                            //     if let Some(ref file_name) = self.doc.get().file_name {
+                            //         self.doc.update(|d| d.save_as(file_name).unwrap());
+                            //     } else {
+                            //         self.save_as();
+                            //     }
+                            //     return EventPropagation::Stop;
+                            // }
+                            // "w" if e.modifiers.control_key() => {
+                            //     let id = self.doc.get().id();
+                            //     self.documents.update(|d| d.remove(id));
+                            //     return EventPropagation::Stop;
+                            // }
                             _ => {
                                 if !e.modifiers.control_key()
                                     && !e.modifiers.alt_key()

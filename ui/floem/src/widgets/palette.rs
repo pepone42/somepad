@@ -6,9 +6,11 @@ use floem::{
 };
 
 pub fn palette(
-    items: im::Vector<(usize, String)>,
+    //items: im::Vector<(usize, String)>,
+    items: impl Iterator<Item = (usize, String)>,
     action: impl FnOnce(usize) + 'static + Clone + Copy,
 ) {
+    let items = im::Vector::from_iter(items);
     add_overlay(Point::new(0., 0.), move |id| {
         virtual_list(
             VirtualDirection::Vertical,

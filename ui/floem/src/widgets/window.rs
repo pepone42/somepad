@@ -1,17 +1,13 @@
 use floem::{
     action::open_file,
-    event::Event,
     file::FileDialogOptions,
-    id::Id,
-    keyboard::{Key, ModifiersState, NamedKey},
     reactive::{create_rw_signal, RwSignal},
-    view::{View, ViewData, Widget},
-    views::{container, Container, Decorators},
-    EventPropagation,
+    view::View,
+    views::{container, Container},
 };
 use ndoc::Document;
 
-use crate::documents::Documents;
+use crate::{documents::Documents, shortcut};
 use crate::decorators::CustomDecorators;
 
 use super::palette;
@@ -19,18 +15,14 @@ use super::palette;
 pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Container {
     let w = container(child);
 
-    let w = w.on_key_down(
-        Key::Character("n".into()),
-        ModifiersState::CONTROL,
+    let w = w.on_shortcut(shortcut!(Ctrl+n),
         move |_| {
             let doc = create_rw_signal(Document::default());
             documents.update(|d| d.add(doc));
         },
     );
 
-    let w = w.on_key_down(
-        Key::Character("o".into()),
-        ModifiersState::CONTROL,
+    let w = w.on_shortcut(shortcut!(Ctrl+o),
         move |_| {
             let doc = create_rw_signal(Document::default());
             open_file(FileDialogOptions::new().title("Open new file"), move |p| {
@@ -42,9 +34,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
         },
     );
 
-    let w = w.on_key_down(
-        Key::Character("p".into()),
-        ModifiersState::CONTROL,
+    let w = w.on_shortcut(shortcut!(Ctrl+p),
         move |_| {
             if !documents.get().is_empty() {
                 palette(
@@ -53,15 +43,12 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
                         .order_by_mru()
                         .iter()
                         .enumerate()
-                        .map(|(_, d)| (d.get().id(), d.get().title().to_string()))
-                        .collect(),
+                        .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
                     move |i| documents.update(|d| d.set_current(i)),
                 );
             }
         },
     );
-
-    let w = w.on_shortcut("Ctrl+m".parse().unwrap(), move |e| {dbg!("qdsfqsdf");});
 
     w
 }
