@@ -49,7 +49,7 @@ impl PaletteItem for (usize, String, String) {
 }
 
 pub fn palette(
-    viewport: Rect,
+    viewport: RwSignal<Rect>,
     items: impl Iterator<Item = (usize, String)>,
     action: impl FnOnce(usize) + 'static + Clone + Copy,
 ) {
@@ -134,7 +134,7 @@ pub fn palette(
         .style(move |s| {
             s.flex()
                 .justify_center()
-                .size(viewport.width(), viewport.height())
+                .size(viewport.get().width(), viewport.get().height())
         })
         .on_click_stop(move |_| remove_overlay(id))
     });

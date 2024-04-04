@@ -63,7 +63,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
         disabled.set(true);
         if !documents.get().is_empty() {
             palette(
-                palette_viewport.get(),
+                palette_viewport,
                 documents
                     .get()
                     .order_by_mru()
