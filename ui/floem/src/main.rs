@@ -1,8 +1,9 @@
 // 🤦‍♀️😊❤😂🤣
-mod documents;
-mod widgets;
-mod shortcut;
 mod decorators;
+mod documents;
+mod shortcut;
+mod theme;
+mod widgets;
 
 use std::collections::HashMap;
 use std::{env, time};
@@ -57,8 +58,13 @@ pub struct TextEditor {
     selection_kind: SelectionKind,
     disable: RwSignal<bool>,
     documents: RwSignal<Documents>,
+    multiline: bool,
+    on_change: Option<Box<dyn Fn()>>,
+    on_arrow_up: Option<Box<dyn Fn()>>,
+    on_arrow_down: Option<Box<dyn Fn()>>,
+    on_return: Option<Box<dyn Fn()>>,
 }
-
+#[derive(Debug, Clone, Copy)]
 pub enum SelectionKind {
     Char,
     Word,
@@ -101,6 +107,12 @@ pub fn text_editor(
         }
     });
 
+    create_effect(move |_| {
+        if disable.get() {
+            id.clear_focus();
+        }
+    });
+
     TextEditor {
         data: ViewData::new(id),
         doc: ndoc,
@@ -112,10 +124,37 @@ pub fn text_editor(
         selection_kind: SelectionKind::Char,
         disable,
         documents,
+        multiline: true,
+        on_change: None,
+        on_arrow_up: None,
+        on_arrow_down: None,
+        on_return: None,
     }
     .disabled(move || disable.get())
 }
 impl TextEditor {
+    pub fn multiline(mut self, value: bool) -> Self {
+        self.multiline = value;
+        self
+    }
+
+    pub fn on_change(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_change = Some(Box::new(f));
+        self
+    }
+    pub fn on_arrow_down(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_arrow_down = Some(Box::new(f));
+        self
+    }
+    pub fn on_arrow_up(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_arrow_up = Some(Box::new(f));
+        self
+    }
+    pub fn on_return(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_return = Some(Box::new(f));
+        self
+    }
+
     pub fn scroll_to_main_cursor(&self) {
         self.id()
             .update_state_deferred(TextEditorCommand::FocusMainCursor);
@@ -346,7 +385,7 @@ impl Widget for TextEditor {
 
     fn layout(&mut self, cx: &mut floem::context::LayoutCx) -> floem::taffy::tree::NodeId {
         cx.layout_node(self.id(), true, |cx| {
-            let (width, height) = (
+            let (mut width, height) = (
                 1024.,
                 self.line_height * self.doc.get().rope.len_lines() as f64,
             ); //attrs.line_height. * self.rope.len_lines());
@@ -359,6 +398,12 @@ impl Widget for TextEditor {
                         .unwrap(),
                 );
             }
+
+            if !self.multiline {
+                let layout = self.layout_line(0);
+                width = layout.size().width;
+            }
+
             let text_node = self.text_node.unwrap();
             let style = floem::style::Style::new()
                 .width(width)
@@ -456,12 +501,12 @@ impl Widget for TextEditor {
         event: floem::event::Event,
     ) -> floem::EventPropagation {
         //dbg!(event.clone());
-        if event_match(&event, shortcut!(Ctrl+c)) {
+        if event_match(&event, shortcut!(Ctrl + c)) {
             let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
             cx.request_all(self.id());
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+v)) {
+        if event_match(&event, shortcut!(Ctrl + v)) {
             if let Ok(s) = Clipboard::get_contents() {
                 self.doc.update(|d| d.insert_many(&s));
                 self.scroll_to_main_cursor();
@@ -469,31 +514,30 @@ impl Widget for TextEditor {
             }
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+x)) {
-            let _ =
-                Clipboard::set_contents(self.doc.get().get_selection_content());
+        if event_match(&event, shortcut!(Ctrl + x)) {
+            let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
             self.doc.update(|d| d.insert(""));
             self.scroll_to_main_cursor();
             cx.request_all(self.id());
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+z)) {
+        if event_match(&event, shortcut!(Ctrl + z)) {
             self.doc.update(|d| d.undo());
             self.scroll_to_main_cursor();
             cx.request_all(self.id());
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+y)) {
+        if event_match(&event, shortcut!(Ctrl + y)) {
             self.doc.update(|d| d.redo());
             self.scroll_to_main_cursor();
             cx.request_all(self.id());
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+Shift+s)) {
+        if event_match(&event, shortcut!(Ctrl + Shift + s)) {
             self.save_as();
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+s)) {
+        if event_match(&event, shortcut!(Ctrl + s)) {
             if let Some(ref file_name) = self.doc.get().file_name {
                 self.doc.update(|d| d.save_as(file_name).unwrap());
             } else {
@@ -501,69 +545,12 @@ impl Widget for TextEditor {
             }
             return EventPropagation::Stop;
         }
-        if event_match(&event, shortcut!(Ctrl+w)) {
-            let id = self.doc.get().id();
-            self.documents.update(|d| d.remove(id));
-            return EventPropagation::Stop;
-        }
 
         match event {
             Event::KeyDown(e) => {
-                
                 match e.key.text {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
                         match txt.as_str() {
-                            // "c" if e.modifiers.control_key() => {
-                            //     let _ =
-                            //         Clipboard::set_contents(self.doc.get().get_selection_content());
-                            //     cx.request_all(self.id());
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "v" if e.modifiers.control_key() => {
-                            //     if let Ok(s) = Clipboard::get_contents() {
-                            //         self.doc.update(|d| d.insert_many(&s));
-                            //         self.scroll_to_main_cursor();
-                            //         cx.request_all(self.id());
-                            //     }
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "x" if e.modifiers.control_key() => {
-                            //     let _ =
-                            //         Clipboard::set_contents(self.doc.get().get_selection_content());
-                            //     self.doc.update(|d| d.insert(""));
-                            //     self.scroll_to_main_cursor();
-                            //     cx.request_all(self.id());
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "z" if e.modifiers.control_key() => {
-                            //     self.doc.update(|d| d.undo());
-                            //     self.scroll_to_main_cursor();
-                            //     cx.request_all(self.id());
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "y" if e.modifiers.control_key() => {
-                            //     self.doc.update(|d| d.redo());
-                            //     self.scroll_to_main_cursor();
-                            //     cx.request_all(self.id());
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "S" if e.modifiers.control_key() => {
-                            //     self.save_as();
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "s" if e.modifiers.control_key() => {
-                            //     if let Some(ref file_name) = self.doc.get().file_name {
-                            //         self.doc.update(|d| d.save_as(file_name).unwrap());
-                            //     } else {
-                            //         self.save_as();
-                            //     }
-                            //     return EventPropagation::Stop;
-                            // }
-                            // "w" if e.modifiers.control_key() => {
-                            //     let id = self.doc.get().id();
-                            //     self.documents.update(|d| d.remove(id));
-                            //     return EventPropagation::Stop;
-                            // }
                             _ => {
                                 if !e.modifiers.control_key()
                                     && !e.modifiers.alt_key()
@@ -572,6 +559,9 @@ impl Widget for TextEditor {
                                     self.doc.update(|d| d.insert(txt));
                                     self.scroll_to_main_cursor();
                                     cx.request_all(self.id());
+                                    if let Some(action) = self.on_change.as_ref() {
+                                        action();
+                                    }
                                     return EventPropagation::Stop;
                                 }
                             }
@@ -580,7 +570,9 @@ impl Widget for TextEditor {
                     }
                     _ => match e.key.logical_key {
                         Key::Named(NamedKey::ArrowDown)
-                            if e.modifiers.control_key() && e.modifiers.alt_key() =>
+                            if e.modifiers.control_key()
+                                && e.modifiers.alt_key()
+                                && self.multiline =>
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Down));
@@ -588,7 +580,9 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp)
-                            if e.modifiers.control_key() && e.modifiers.alt_key() =>
+                            if e.modifiers.control_key()
+                                && e.modifiers.alt_key()
+                                && self.multiline =>
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Up));
@@ -640,51 +634,68 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowDown) => {
-                            self.doc.update(|d| {
-                                d.move_selections(
-                                    ndoc::MoveDirection::Down,
-                                    e.modifiers.shift_key(),
-                                )
-                            });
-                            self.scroll_to_main_cursor();
-                            cx.request_all(self.id());
+                            if let Some(action) = self.on_arrow_down.as_ref() {
+                                action();
+                            } else {
+                                self.doc.update(|d| {
+                                    d.move_selections(
+                                        ndoc::MoveDirection::Down,
+                                        e.modifiers.shift_key(),
+                                    )
+                                });
+                                self.scroll_to_main_cursor();
+                                cx.request_all(self.id());
+                            }
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp) => {
-                            self.doc.update(|d| {
-                                d.move_selections(ndoc::MoveDirection::Up, e.modifiers.shift_key())
-                            });
-                            self.scroll_to_main_cursor();
-                            cx.request_all(self.id());
+                            if let Some(action) = self.on_arrow_up.as_ref() {
+                                action();
+                            } else {
+                                self.doc.update(|d| {
+                                    d.move_selections(
+                                        ndoc::MoveDirection::Up,
+                                        e.modifiers.shift_key(),
+                                    )
+                                });
+                                self.scroll_to_main_cursor();
+                                cx.request_all(self.id());
+                            }
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Delete) => {
                             self.doc.update(|d| d.delete());
+                            if let Some(action) = self.on_change.as_ref() {
+                                action();
+                            }
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Backspace) => {
                             self.doc.update(|d| d.backspace());
+                            if let Some(action) = self.on_change.as_ref() {
+                                action();
+                            }
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::Tab) if e.modifiers.shift_key() => {
+                        Key::Named(NamedKey::Tab) if e.modifiers.shift_key() && self.multiline => {
                             self.doc.update(|d| d.deindent());
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Tab)
-                            if self.doc.get().selections[0].is_single_line() =>
+                            if self.doc.get().selections[0].is_single_line() && self.multiline =>
                         {
                             self.doc.update(|d| d.indent(false));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::Tab) => {
+                        Key::Named(NamedKey::Tab) if self.multiline => {
                             //dbg!(self.doc.file_info.indentation);
                             self.doc.update(|d| d.indent(true));
                             self.scroll_to_main_cursor();
@@ -705,15 +716,19 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Enter) => {
-                            let line_feed = self.doc.get().file_info.linefeed.to_string();
-                            self.doc.update(|d| d.insert(&line_feed));
+                            if let Some(action) = self.on_return.as_ref() {
+                                action();
+                            } else if self.multiline{
+                                let line_feed = self.doc.get().file_info.linefeed.to_string();
+                                self.doc.update(|d| d.insert(&line_feed));
 
-                            self.scroll_to_main_cursor();
-                            cx.request_all(self.id());
+                                self.scroll_to_main_cursor();
+                                cx.request_all(self.id());
+                            }
 
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::PageUp) => {
+                        Key::Named(NamedKey::PageUp) if self.multiline => {
                             self.doc
                                 .update(|d| d.page_up(self.page_len, e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
@@ -721,7 +736,7 @@ impl Widget for TextEditor {
 
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::PageDown) => {
+                        Key::Named(NamedKey::PageDown) if self.multiline => {
                             self.doc
                                 .update(|d| d.page_down(self.page_len, e.modifiers.shift_key()));
                             self.scroll_to_main_cursor();
@@ -786,8 +801,8 @@ impl Widget for TextEditor {
                             self.doc.update(|d| d.expand_selection_by_line(position));
                         }
                     }
-
                     self.scroll_to_main_cursor();
+                    self.id().request_paint();
                     EventPropagation::Stop
                 } else {
                     EventPropagation::Continue

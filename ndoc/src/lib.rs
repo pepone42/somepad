@@ -14,3 +14,4 @@ pub use document::Position;
 pub use ropey::Rope;
 pub use document::position_to_char;
 pub use syntect::highlighting::Color;
+pub use syntect::highlighting::Theme as SyntectTheme;
