@@ -19,8 +19,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
 
     let id = w.id();
     let disabled = create_rw_signal(false);
-    let size = create_rw_signal(Size::new(100., 100.));
-    let palette_viewport = create_rw_signal(Rect::new(0., 0., 100., 100.));
+    let viewport = create_rw_signal(Rect::new(0., 0., 100., 100.));
 
     // create_effect(move |_| {
     //     if disabled.get() {
@@ -29,11 +28,6 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
     //         id.request_focus();
     //     }
     // });
-
-    create_effect(move |_| {
-        let s = size.get();
-        palette_viewport.set(Rect::new(0., 0., s.width, s.height));
-    });
 
     let w = w.disabled(move || disabled.get());
 
@@ -54,27 +48,29 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
 
     let w = w.on_event(floem::event::EventListener::WindowResized, move |s| {
         if let Event::WindowResized(s) = s {
-            size.set(*s);
+            viewport.set(Rect::new(0., 0., s.width, s.height));
         }
         floem::EventPropagation::Continue
     });
 
     let w = w.on_shortcut(shortcut!(Ctrl + p), move |_| {
-        disabled.set(true);
-        if !documents.get().is_empty() {
-            palette(
-                palette_viewport,
-                documents
-                    .get()
-                    .order_by_mru()
-                    .iter()
-                    .enumerate()
-                    .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
-                move |i| {
-                    documents.update(|d| d.set_current(i));
-                    disabled.set(false);
-                },
-            );
+        if !disabled.get() {
+            disabled.set(true);
+            if !documents.get().is_empty() {
+                palette(
+                    viewport,
+                    documents
+                        .get()
+                        .order_by_mru()
+                        .iter()
+                        .enumerate()
+                        .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
+                    move |i| {
+                        documents.update(|d| d.set_current(i));
+                        disabled.set(false);
+                    },
+                );
+            }
         }
     });
 
