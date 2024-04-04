@@ -5,7 +5,7 @@ use ndoc::Document;
 
 #[derive(Debug, Clone)]
 pub struct Documents {
-    documents: HashMap<usize,(time::Instant, RwSignal<Document>)>,
+    documents: HashMap<usize, (time::Instant, RwSignal<Document>)>,
     current: usize,
 }
 
@@ -17,13 +17,19 @@ impl Documents {
         }
     }
     pub fn add(&mut self, doc: RwSignal<Document>) {
-        self.documents.insert(doc.get().id(), (time::Instant::now(), doc));
+        self.documents
+            .insert(doc.get().id(), (time::Instant::now(), doc));
         self.current = doc.get().id();
     }
     pub fn remove(&mut self, id: usize) {
         self.documents.remove(&id);
         if !self.documents.is_empty() {
-            self.current = *self.documents.iter().max_by(|v1,v2| v1.0.cmp(v2.0)).unwrap().0;
+            self.current = *self
+                .documents
+                .iter()
+                .max_by(|v1, v2| v1.0.cmp(v2.0))
+                .unwrap()
+                .0;
         } else {
             self.current = 0;
         }
@@ -43,8 +49,8 @@ impl Documents {
     }
     pub fn order_by_mru(&self) -> im::Vector<RwSignal<Document>> {
         let mut v = self.documents.values().clone().collect::<im::Vector<_>>();
-        v.sort_by(|l,r| r.0.cmp(&l.0));
-        im::Vector::from_iter(v.iter().map(|(_,d)| *d))
+        v.sort_by(|l, r| r.0.cmp(&l.0));
+        im::Vector::from_iter(v.iter().map(|(_, d)| *d))
     }
     pub fn is_empty(&self) -> bool {
         self.documents.is_empty()

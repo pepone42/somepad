@@ -26,7 +26,9 @@ macro_rules! shortcut {
     };
     (Ctrl+Shift+$c:ident) => {
         crate::shortcut::Shortcut {
-            key: floem::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c).to_uppercase())),
+            key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
+                stringify!($c).to_uppercase(),
+            )),
             modifiers: floem::keyboard::ModifiersState::CONTROL
                 | floem::keyboard::ModifiersState::SHIFT,
         }
@@ -40,7 +42,9 @@ macro_rules! shortcut {
     };
     (Shift+Alt+$c:ident) => {
         crate::shortcut::Shortcut {
-            key: floem::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c).to_uppercase())),
+            key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
+                stringify!($c).to_uppercase(),
+            )),
             modifiers: floem::keyboard::ModifiersState::ALT
                 | floem::keyboard::ModifiersState::SHIFT,
         }

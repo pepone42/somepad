@@ -18,12 +18,12 @@ impl Default for Theme {
 }
 
 impl Theme {
-    pub fn from_ndoc_theme(theme : &ndoc::theme::Theme) -> Option<Self> {
-
-        let selection_border = color_art::Color::from_hex(&theme.vscode.colors.selection_background)
-        .unwrap()
-        .darken(0.1)
-        .hex_full();
+    pub fn from_ndoc_theme(theme: &ndoc::theme::Theme) -> Option<Self> {
+        let selection_border =
+            color_art::Color::from_hex(&theme.vscode.colors.selection_background)
+                .unwrap()
+                .darken(0.1)
+                .hex_full();
 
         Some(Theme {
             editor_foreground: Color::parse(&theme.vscode.colors.editor_foreground)?,

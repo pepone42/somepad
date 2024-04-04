@@ -32,8 +32,8 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Co
 
     create_effect(move |_| {
         let s = size.get();
-        palette_viewport.set(Rect::new(0.,0.,s.width,s.height));
-    } );
+        palette_viewport.set(Rect::new(0., 0., s.width, s.height));
+    });
 
     let w = w.disabled(move || disabled.get());
 

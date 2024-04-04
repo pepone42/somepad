@@ -1,8 +1,18 @@
 use floem::{
-    action::{add_overlay, remove_overlay}, id::Id, keyboard::{KeyEvent, ModifiersState, NamedKey}, kurbo::{Point, Rect}, peniko::Color, reactive::{create_effect, create_rw_signal, RwSignal}, unit::Auto, view::View, views::{
+    action::{add_overlay, remove_overlay},
+    id::Id,
+    keyboard::{KeyEvent, ModifiersState, NamedKey},
+    kurbo::{Point, Rect},
+    peniko::Color,
+    reactive::{create_effect, create_rw_signal, RwSignal},
+    unit::Auto,
+    view::View,
+    views::{
         container, editor::text, empty, h_stack, label, v_stack, virtual_list, Decorators,
         VirtualDirection, VirtualItemSize,
-    }, widgets::text_input, Application
+    },
+    widgets::text_input,
+    Application,
 };
 use ndoc::Document;
 
@@ -108,13 +118,24 @@ pub fn palette(
                                     s.background(Color::SKY_BLUE)
                                 } else {
                                     s.background(Color::DARK_BLUE)
-                                }.width(PALETTE_WIDTH)
+                                }
+                                .width(PALETTE_WIDTH)
                             })
                     },
-                )
+                ),
             ))
-            .style(move |s| s.flex().margin_bottom(Auto).width(PALETTE_WIDTH).background(Color::DARK_BLUE))
+            .style(move |s| {
+                s.flex()
+                    .margin_bottom(Auto)
+                    .width(PALETTE_WIDTH)
+                    .background(Color::DARK_BLUE)
+            }),
         )
-        .style(move |s| s.flex().justify_center().size(viewport.width(),viewport.height())).on_click_stop(move |_| remove_overlay(id))
+        .style(move |s| {
+            s.flex()
+                .justify_center()
+                .size(viewport.width(), viewport.height())
+        })
+        .on_click_stop(move |_| remove_overlay(id))
     });
 }

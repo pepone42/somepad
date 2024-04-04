@@ -1,5 +1,5 @@
-pub mod window;
 pub mod palette;
+pub mod window;
 
-pub use window::*;
 pub use palette::*;
+pub use window::*;

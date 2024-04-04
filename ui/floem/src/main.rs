@@ -718,7 +718,7 @@ impl Widget for TextEditor {
                         Key::Named(NamedKey::Enter) => {
                             if let Some(action) = self.on_return.as_ref() {
                                 action();
-                            } else if self.multiline{
+                            } else if self.multiline {
                                 let line_feed = self.doc.get().file_info.linefeed.to_string();
                                 self.doc.update(|d| d.insert(&line_feed));
 
