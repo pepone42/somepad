@@ -11,7 +11,7 @@ path = "src/main.rs"
 [dependencies]
 color-art = "0.3.7"
 crossbeam-channel = "0.5.12"
-floem = {git = "https://github.com/lapce/floem"}
+floem = {git = "https://github.com/lapce/floem", features = ["rfd-async-std"]}
 im = "15.1.0"
 ndoc = {path = "../../ndoc"}
 smol_str = "0.2.1"

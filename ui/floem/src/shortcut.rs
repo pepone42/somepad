@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use floem::keyboard::{Key, ModifiersState};
+use floem::keyboard::{Key, Modifiers};
 use smol_str::SmolStr;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -13,7 +13,7 @@ pub enum ParseError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shortcut {
     pub key: Key,
-    pub modifiers: ModifiersState,
+    pub modifiers: Modifiers,
 }
 
 #[macro_export]
@@ -21,7 +21,7 @@ macro_rules! shortcut {
     (Ctrl+$c:ident) => {
         crate::shortcut::Shortcut {
             key: floem::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c))),
-            modifiers: floem::keyboard::ModifiersState::CONTROL,
+            modifiers: floem::keyboard::Modifiers::CONTROL,
         }
     };
     (Ctrl+Shift+$c:ident) => {
@@ -29,15 +29,15 @@ macro_rules! shortcut {
             key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c).to_uppercase(),
             )),
-            modifiers: floem::keyboard::ModifiersState::CONTROL
-                | floem::keyboard::ModifiersState::SHIFT,
+            modifiers: floem::keyboard::Modifiers::CONTROL
+                | floem::keyboard::Modifiers::SHIFT,
         }
     };
     (Ctrl+Alt+$c:ident) => {
         crate::shortcut::Shortcut {
             key: floem::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c))),
-            modifiers: floem::keyboard::ModifiersState::CONTROL
-                | floem::keyboard::ModifiersState::ALT,
+            modifiers: floem::keyboard::Modifiers::CONTROL
+                | floem::keyboard::Modifiers::ALT,
         }
     };
     (Shift+Alt+$c:ident) => {
@@ -45,8 +45,8 @@ macro_rules! shortcut {
             key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c).to_uppercase(),
             )),
-            modifiers: floem::keyboard::ModifiersState::ALT
-                | floem::keyboard::ModifiersState::SHIFT,
+            modifiers: floem::keyboard::Modifiers::ALT
+                | floem::keyboard::Modifiers::SHIFT,
         }
     };
 }
@@ -59,12 +59,12 @@ pub fn event_match(event: &floem::event::Event, shortcut: Shortcut) -> bool {
     }
 }
 
-fn modifier_state_from_str(s: &str) -> Result<ModifiersState, ParseError> {
+fn modifier_state_from_str(s: &str) -> Result<Modifiers, ParseError> {
     match s {
-        "Ctrl" => Ok(ModifiersState::CONTROL),
-        "Shift" => Ok(ModifiersState::SHIFT),
-        "Alt" => Ok(ModifiersState::ALT),
-        "Super" => Ok(ModifiersState::SUPER),
+        "Ctrl" => Ok(Modifiers::CONTROL),
+        "Shift" => Ok(Modifiers::SHIFT),
+        "Alt" => Ok(Modifiers::ALT),
+        "Super" => Ok(Modifiers::META),
         _ => Err(ParseError::InvalidModifiers(s.to_string())),
     }
 }
@@ -80,7 +80,7 @@ impl FromStr for Shortcut {
         let keys = s.split('+').collect::<Vec<&str>>();
         let (mut modifiers, c) = match keys.as_slice() {
             [modifierstr @ .., c] => {
-                let mut modifiers = ModifiersState::empty();
+                let mut modifiers = Modifiers::empty();
                 for m in modifierstr {
                     modifiers = modifiers.union(modifier_state_from_str(m)?);
                 }
@@ -91,7 +91,7 @@ impl FromStr for Shortcut {
             }
             _ => return Err(ParseError::InvalidShortcut(s.to_string())),
         };
-        let key = if modifiers.shift_key() {
+        let key = if modifiers.shift() {
             Key::Character(SmolStr::new(c.to_uppercase()))
         } else {
             Key::Character(SmolStr::new(c))
@@ -103,7 +103,7 @@ impl FromStr for Shortcut {
 mod test {
     use std::{fmt::Error, str::FromStr};
 
-    use floem::keyboard::{Key, ModifiersState};
+    use floem::keyboard::{Key, Modifiers};
     use smol_str::SmolStr;
 
     use crate::shortcut::{ParseError, Shortcut};
@@ -114,7 +114,7 @@ mod test {
             Shortcut::from_str("Ctrl+s").unwrap(),
             Shortcut {
                 key: Key::Character(SmolStr::new("s")),
-                modifiers: ModifiersState::CONTROL
+                modifiers: Modifiers::CONTROL
             }
         )
     }
@@ -125,7 +125,7 @@ mod test {
             Shortcut::from_str("Ctrl+Shift+s").unwrap(),
             Shortcut {
                 key: Key::Character(SmolStr::new("S")),
-                modifiers: ModifiersState::CONTROL | ModifiersState::SHIFT
+                modifiers: Modifiers::CONTROL | Modifiers::SHIFT
             }
         )
     }
@@ -144,21 +144,21 @@ mod test {
             shortcut!(Ctrl + s),
             Shortcut {
                 key: Key::Character(SmolStr::new("s")),
-                modifiers: ModifiersState::CONTROL
+                modifiers: Modifiers::CONTROL
             }
         );
         assert_eq!(
             shortcut!(Ctrl + Shift + s),
             Shortcut {
                 key: Key::Character(SmolStr::new("S")),
-                modifiers: ModifiersState::CONTROL | ModifiersState::SHIFT
+                modifiers: Modifiers::CONTROL | Modifiers::SHIFT
             }
         );
         assert_eq!(
             shortcut!(Ctrl + Alt + s),
             Shortcut {
                 key: Key::Character(SmolStr::new("s")),
-                modifiers: ModifiersState::CONTROL | ModifiersState::ALT
+                modifiers: Modifiers::CONTROL | Modifiers::ALT
             }
         );
     }
