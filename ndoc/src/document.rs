@@ -5,8 +5,8 @@ use std::{
     io::{Read, Result, Write},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicUsize, Ordering},
-        mpsc::{self, Sender},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
     thread,
@@ -121,7 +121,7 @@ fn new_doc_id() {
 pub enum BackgroundWorkerMessage {
     Stop,
     RegisterDocument(usize, Box<dyn Send + Fn()>),
-    UpdateBuffer(usize, SyntaxReference, Rope, usize, StyledLinesCache),
+    UpdateBuffer(usize, SyntaxReference, Rope, usize, StyledLinesCache, Sender<()>),
     // WatchFile(PathBuf),
     // UnwatchFile(PathBuf),
 }
@@ -157,7 +157,6 @@ impl<'a> HighlighterState<'a> {
             self.current_index,
             self.current_index + self.chunk_len,
         );
-        // TODO : inform the users that the higlight is to refresh
         self.current_index += self.chunk_len;
         // subsequent chunck are bigger, for better performance
         self.chunk_len = 1000;
@@ -230,7 +229,7 @@ impl Document {
 
             loop {
                 match rx.try_recv() {
-                    Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache)) => {
+                    Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache, tx)) => {
                         let state = highlight_state
                             .entry(id)
                             .or_insert(HighlighterState::new(id));
@@ -239,6 +238,10 @@ impl Document {
                         state.current_index = start;
                         state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
                         state.lines_cache = cache;
+                        // smaller chunk for the first synchronous update
+                        state.chunk_len = 100;
+                        state.update_chunk();
+                        let _ = tx.send(());
                     }
                     Ok(BackgroundWorkerMessage::RegisterDocument(id, f)) => {
                         callback.insert(id, f);
@@ -279,7 +282,21 @@ impl Document {
         self.line_style_cache.get(line_idx)
     }
 
+    // fn update_highlight_from(&self, line_idx: usize) {
+    //     if let Some(tx) = self.message_sender.as_ref() {
+    //         let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(
+    //             self.id,
+    //             self.file_info.syntax.clone(),
+    //             self.rope.clone(),
+    //             line_idx,
+    //             self.line_style_cache.clone(),
+    //         ));
+    //         // TODO: log error
+    //     }
+    // }
+
     fn update_highlight_from(&self, line_idx: usize) {
+        let (sender, receiver) = mpsc::channel();
         if let Some(tx) = self.message_sender.as_ref() {
             let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(
                 self.id,
@@ -287,7 +304,10 @@ impl Document {
                 self.rope.clone(),
                 line_idx,
                 self.line_style_cache.clone(),
+                sender,
             ));
+            // block until first chunk is highlighted
+            let _  = receiver.recv();
             // TODO: log error
         }
     }
@@ -491,6 +511,7 @@ impl Document {
             self.history
                 .push(histo_rope, histo_selections, &saved_action);
             self.update_highlight_from(self.rope.char_to_line(start));
+            //self.update_highlight_from(self.rope.char_to_line(start));
         }
     }
 

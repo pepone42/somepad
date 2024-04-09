@@ -9,13 +9,13 @@ use std::collections::HashMap;
 use std::{env, time};
 
 use documents::Documents;
-use floem::action::{add_overlay, open_file, remove_overlay, save_as};
+use floem::action::{add_overlay, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
 use floem::ext_event::create_signal_from_channel;
-use floem::file::FileDialogOptions;
+use floem::file::{FileDialogOptions, FileSpec};
 use floem::id::Id;
-use floem::keyboard::{Key, ModifiersState, NamedKey};
+use floem::keyboard::{Key, Modifiers, ModifiersState, NamedKey};
 use floem::kurbo::{BezPath, PathEl, Point, Rect};
 use floem::menu::{Menu, MenuItem};
 use floem::peniko::{Brush, Color};
@@ -552,9 +552,9 @@ impl Widget for TextEditor {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
                         match txt.as_str() {
                             _ => {
-                                if !e.modifiers.control_key()
-                                    && !e.modifiers.alt_key()
-                                    && !e.modifiers.super_key()
+                                if !e.modifiers.control()
+                                    && !e.modifiers.alt()
+                                    && !e.modifiers.meta()
                                 {
                                     self.doc.update(|d| d.insert(txt));
                                     self.scroll_to_main_cursor();
@@ -570,8 +570,8 @@ impl Widget for TextEditor {
                     }
                     _ => match e.key.logical_key {
                         Key::Named(NamedKey::ArrowDown)
-                            if e.modifiers.control_key()
-                                && e.modifiers.alt_key()
+                            if e.modifiers.control()
+                                && e.modifiers.alt()
                                 && self.multiline =>
                         {
                             self.doc
@@ -580,8 +580,8 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp)
-                            if e.modifiers.control_key()
-                                && e.modifiers.alt_key()
+                            if e.modifiers.control()
+                                && e.modifiers.alt()
                                 && self.multiline =>
                         {
                             self.doc
@@ -589,22 +589,22 @@ impl Widget for TextEditor {
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::ArrowLeft) if e.modifiers.control_key() => {
+                        Key::Named(NamedKey::ArrowLeft) if e.modifiers.control() => {
                             self.doc.update(|d| {
                                 d.move_selections_word(
                                     ndoc::MoveDirection::Left,
-                                    e.modifiers.shift_key(),
+                                    e.modifiers.shift(),
                                 )
                             });
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::ArrowRight) if e.modifiers.control_key() => {
+                        Key::Named(NamedKey::ArrowRight) if e.modifiers.control() => {
                             self.doc.update(|d| {
                                 d.move_selections_word(
                                     ndoc::MoveDirection::Right,
-                                    e.modifiers.shift_key(),
+                                    e.modifiers.shift(),
                                 )
                             });
                             self.scroll_to_main_cursor();
@@ -615,7 +615,7 @@ impl Widget for TextEditor {
                             self.doc.update(|d| {
                                 d.move_selections(
                                     ndoc::MoveDirection::Left,
-                                    e.modifiers.shift_key(),
+                                    e.modifiers.shift(),
                                 )
                             });
                             self.scroll_to_main_cursor();
@@ -626,7 +626,7 @@ impl Widget for TextEditor {
                             self.doc.update(|d| {
                                 d.move_selections(
                                     ndoc::MoveDirection::Right,
-                                    e.modifiers.shift_key(),
+                                    e.modifiers.shift(),
                                 )
                             });
                             self.scroll_to_main_cursor();
@@ -640,7 +640,7 @@ impl Widget for TextEditor {
                                 self.doc.update(|d| {
                                     d.move_selections(
                                         ndoc::MoveDirection::Down,
-                                        e.modifiers.shift_key(),
+                                        e.modifiers.shift(),
                                     )
                                 });
                                 self.scroll_to_main_cursor();
@@ -655,7 +655,7 @@ impl Widget for TextEditor {
                                 self.doc.update(|d| {
                                     d.move_selections(
                                         ndoc::MoveDirection::Up,
-                                        e.modifiers.shift_key(),
+                                        e.modifiers.shift(),
                                     )
                                 });
                                 self.scroll_to_main_cursor();
@@ -681,7 +681,7 @@ impl Widget for TextEditor {
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
-                        Key::Named(NamedKey::Tab) if e.modifiers.shift_key() && self.multiline => {
+                        Key::Named(NamedKey::Tab) if e.modifiers.shift() && self.multiline => {
                             self.doc.update(|d| d.deindent());
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
@@ -703,13 +703,13 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::End) => {
-                            self.doc.update(|d| d.end(e.modifiers.shift_key()));
+                            self.doc.update(|d| d.end(e.modifiers.shift()));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Home) => {
-                            self.doc.update(|d| d.home(e.modifiers.shift_key()));
+                            self.doc.update(|d| d.home(e.modifiers.shift()));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
 
@@ -730,7 +730,7 @@ impl Widget for TextEditor {
                         }
                         Key::Named(NamedKey::PageUp) if self.multiline => {
                             self.doc
-                                .update(|d| d.page_up(self.page_len, e.modifiers.shift_key()));
+                                .update(|d| d.page_up(self.page_len, e.modifiers.shift()));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
 
@@ -738,7 +738,7 @@ impl Widget for TextEditor {
                         }
                         Key::Named(NamedKey::PageDown) if self.multiline => {
                             self.doc
-                                .update(|d| d.page_down(self.page_len, e.modifiers.shift_key()));
+                                .update(|d| d.page_down(self.page_len, e.modifiers.shift()));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
 
@@ -1016,7 +1016,7 @@ fn app_view() -> impl View {
 
     v.keyboard_navigatable().on_key_down(
         Key::Named(NamedKey::F10),
-        ModifiersState::empty(),
+        Modifiers::empty(),
         move |_| id.inspect(),
     )
 }
