@@ -5,9 +5,6 @@ mod shortcut;
 mod theme;
 mod widgets;
 
-use std::collections::HashMap;
-use std::{env, time};
-
 use documents::Documents;
 use floem::action::{add_overlay, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
@@ -20,6 +17,9 @@ use floem::kurbo::{BezPath, PathEl, Point, Rect};
 use floem::menu::{Menu, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::{env, time};
 
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
@@ -27,12 +27,13 @@ use floem::views::{
     Decorators, VirtualDirection, VirtualItemSize,
 };
 
-use floem::{Clipboard, EventPropagation, Renderer};
+use floem::{Application, Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
 use shortcut::event_match;
+use widgets::Palette;
 
 use crate::widgets::palette;
 use crate::widgets::window;
@@ -545,6 +546,18 @@ impl Widget for TextEditor {
             }
             return EventPropagation::Stop;
         }
+        if event_match(&event, shortcut!(Alt + c)) {
+            let id = self.id();
+            id.palette(
+                [(1usize, "oui".to_string()), (2, "non".to_string())].into_iter(),
+                move |x| {
+                    dbg!(x);
+                    id.palette([(1usize, "peutêtre".to_string()), (2, "pas".to_string())].into_iter(), |x| {
+                        dbg!(x);
+                    });
+                },
+            );
+        }
 
         match event {
             Event::KeyDown(e) => {
@@ -570,9 +583,7 @@ impl Widget for TextEditor {
                     }
                     _ => match e.key.logical_key {
                         Key::Named(NamedKey::ArrowDown)
-                            if e.modifiers.control()
-                                && e.modifiers.alt()
-                                && self.multiline =>
+                            if e.modifiers.control() && e.modifiers.alt() && self.multiline =>
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Down));
@@ -580,9 +591,7 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::ArrowUp)
-                            if e.modifiers.control()
-                                && e.modifiers.alt()
-                                && self.multiline =>
+                            if e.modifiers.control() && e.modifiers.alt() && self.multiline =>
                         {
                             self.doc
                                 .update(|d| d.duplicate_selection(ndoc::MoveDirection::Up));
@@ -613,10 +622,7 @@ impl Widget for TextEditor {
                         }
                         Key::Named(NamedKey::ArrowLeft) => {
                             self.doc.update(|d| {
-                                d.move_selections(
-                                    ndoc::MoveDirection::Left,
-                                    e.modifiers.shift(),
-                                )
+                                d.move_selections(ndoc::MoveDirection::Left, e.modifiers.shift())
                             });
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
@@ -624,10 +630,7 @@ impl Widget for TextEditor {
                         }
                         Key::Named(NamedKey::ArrowRight) => {
                             self.doc.update(|d| {
-                                d.move_selections(
-                                    ndoc::MoveDirection::Right,
-                                    e.modifiers.shift(),
-                                )
+                                d.move_selections(ndoc::MoveDirection::Right, e.modifiers.shift())
                             });
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
@@ -653,10 +656,7 @@ impl Widget for TextEditor {
                                 action();
                             } else {
                                 self.doc.update(|d| {
-                                    d.move_selections(
-                                        ndoc::MoveDirection::Up,
-                                        e.modifiers.shift(),
-                                    )
+                                    d.move_selections(ndoc::MoveDirection::Up, e.modifiers.shift())
                                 });
                                 self.scroll_to_main_cursor();
                                 cx.request_all(self.id());
@@ -1014,13 +1014,12 @@ fn app_view() -> impl View {
 
     let id = v.id();
 
-    v.keyboard_navigatable().on_key_down(
-        Key::Named(NamedKey::F10),
-        Modifiers::empty(),
-        move |_| id.inspect(),
-    )
+    v.keyboard_navigatable()
+        .on_key_down(Key::Named(NamedKey::F10), Modifiers::empty(), move |_| {
+            id.inspect()
+        })
 }
 
 fn main() {
-    floem::launch(app_view);
+    Application::new().window(move |_| app_view(), None).run()
 }

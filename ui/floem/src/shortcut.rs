@@ -40,6 +40,15 @@ macro_rules! shortcut {
                 | floem::keyboard::Modifiers::ALT,
         }
     };
+    (Alt+$c:ident) => {
+        crate::shortcut::Shortcut {
+            key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
+                stringify!($c),
+            )),
+            modifiers: floem::keyboard::Modifiers::ALT
+                
+        }
+    };
     (Shift+Alt+$c:ident) => {
         crate::shortcut::Shortcut {
             key: floem::keyboard::Key::Character(smol_str::SmolStr::new(
