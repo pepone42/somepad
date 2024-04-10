@@ -1,10 +1,12 @@
 // 🤦‍♀️😊❤😂🤣
+mod command;
 mod decorators;
 mod documents;
 mod shortcut;
 mod theme;
 mod widgets;
 
+use command::ViewCommand;
 use documents::Documents;
 use floem::action::{add_overlay, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
@@ -32,7 +34,7 @@ use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
-use shortcut::event_match;
+use shortcut::{event_match, Shortcut};
 use widgets::Palette;
 
 use crate::widgets::palette;
@@ -252,9 +254,7 @@ impl TextEditor {
     }
 
     fn save_as(&mut self) {
-        self.disable.set(true);
         let doc = self.doc.clone();
-        let disable = self.disable.clone();
         save_as(
             FileDialogOptions::new()
                 .default_name("new.txt")
@@ -262,7 +262,6 @@ impl TextEditor {
             move |file_info| {
                 if let Some(file) = file_info {
                     doc.update(|d| d.save_as(&file.path[0]).unwrap());
-                    disable.set(false);
                 }
             },
         );
@@ -502,62 +501,60 @@ impl Widget for TextEditor {
         event: floem::event::Event,
     ) -> floem::EventPropagation {
         //dbg!(event.clone());
-        if event_match(&event, shortcut!(Ctrl + c)) {
-            let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
-            cx.request_all(self.id());
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + v)) {
-            if let Ok(s) = Clipboard::get_contents() {
-                self.doc.update(|d| d.insert_many(&s));
-                self.scroll_to_main_cursor();
-                cx.request_all(self.id());
+        // if event_match(&event, shortcut!(Ctrl + c)) {
+        //     let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
+        //     cx.request_all(self.id());
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + v)) {
+        //     if let Ok(s) = Clipboard::get_contents() {
+        //         self.doc.update(|d| d.insert_many(&s));
+        //         self.scroll_to_main_cursor();
+        //         cx.request_all(self.id());
+        //     }
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + x)) {
+        //     let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
+        //     self.doc.update(|d| d.insert(""));
+        //     self.scroll_to_main_cursor();
+        //     cx.request_all(self.id());
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + z)) {
+        //     self.doc.update(|d| d.undo());
+        //     self.scroll_to_main_cursor();
+        //     cx.request_all(self.id());
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + y)) {
+        //     self.doc.update(|d| d.redo());
+        //     self.scroll_to_main_cursor();
+        //     cx.request_all(self.id());
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + Shift + s)) {
+        //     self.save_as();
+        //     return EventPropagation::Stop;
+        // }
+        // if event_match(&event, shortcut!(Ctrl + s)) {
+        //     if let Some(ref file_name) = self.doc.get().file_name {
+        //         self.doc.update(|d| d.save_as(file_name).unwrap());
+        //     } else {
+        //         self.save_as();
+        //     }
+        //     return EventPropagation::Stop;
+        // }
+
+        VIEW_SHORTCUT.with(|v| {
+            for (shortcut, cmd) in v.borrow().iter() {
+                if event_match(&event, shortcut.clone()) {
+                    (cmd.action)(self);
+                    return EventPropagation::Stop;
+                }
             }
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + x)) {
-            let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
-            self.doc.update(|d| d.insert(""));
-            self.scroll_to_main_cursor();
-            cx.request_all(self.id());
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + z)) {
-            self.doc.update(|d| d.undo());
-            self.scroll_to_main_cursor();
-            cx.request_all(self.id());
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + y)) {
-            self.doc.update(|d| d.redo());
-            self.scroll_to_main_cursor();
-            cx.request_all(self.id());
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + Shift + s)) {
-            self.save_as();
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Ctrl + s)) {
-            if let Some(ref file_name) = self.doc.get().file_name {
-                self.doc.update(|d| d.save_as(file_name).unwrap());
-            } else {
-                self.save_as();
-            }
-            return EventPropagation::Stop;
-        }
-        if event_match(&event, shortcut!(Alt + c)) {
-            let id = self.id();
-            id.palette(
-                [(1usize, "oui".to_string()), (2, "non".to_string())].into_iter(),
-                move |x| {
-                    dbg!(x);
-                    id.palette([(1usize, "peutêtre".to_string()), (2, "pas".to_string())].into_iter(), |x| {
-                        dbg!(x);
-                    });
-                },
-            );
-        }
+            EventPropagation::Continue
+        });
 
         match event {
             Event::KeyDown(e) => {
@@ -1020,6 +1017,91 @@ fn app_view() -> impl View {
         })
 }
 
+thread_local! {
+    pub static VIEW_SHORTCUT: RefCell<HashMap<Shortcut,ViewCommand>> = RefCell::new(HashMap::new());
+}
+
+const GOTOLINE_CMD: ViewCommand = ViewCommand {
+    name: "Go To Line",
+    action: |v| {
+        v.doc.update(|d| d.select_all());
+        v.id().request_paint();
+    },
+};
+
+const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Copy Selection",
+    action: |v| {
+        let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
+    },
+};
+
+const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Cut Selection",
+    action: |v| {
+        let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
+        v.doc.update(|d| d.insert(""));
+        v.scroll_to_main_cursor();
+    },
+};
+
+const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Paste Selection",
+    action: |v| {
+        if let Ok(s) = Clipboard::get_contents() {
+            v.doc.update(|d| d.insert_many(&s));
+            v.scroll_to_main_cursor();
+        }
+    },
+};
+
+const SAVE_DOC_AS_CMD: ViewCommand = ViewCommand {
+    name: "Save Document As",
+    action: |v| {
+        v.save_as();
+    },
+};
+
+const SAVE_DOC_CMD: ViewCommand = ViewCommand {
+    name: "Save Document",
+    action: |v| {
+        if let Some(ref file_name) = v.doc.get().file_name {
+            v.doc.update(|d| d.save_as(file_name).unwrap());
+        } else {
+            v.save_as();
+        }
+    },
+};
+
+const UNDO_CMD: ViewCommand = ViewCommand {
+    name: "Undo",
+    action: |v| {
+        v.doc.update(|d| d.undo());
+        v.scroll_to_main_cursor();
+    },
+};
+const REDO_CMD: ViewCommand = ViewCommand {
+    name: "redo",
+    action: |v| {
+        v.doc.update(|d| d.redo());
+        v.scroll_to_main_cursor();
+    },
+};
+
 fn main() {
+    VIEW_SHORTCUT.with(|v| {
+        v.borrow_mut().insert(shortcut!(Ctrl + g), GOTOLINE_CMD);
+        v.borrow_mut()
+            .insert(shortcut!(Ctrl + c), COPY_SELECTION_CMD);
+        v.borrow_mut()
+            .insert(shortcut!(Ctrl + v), PASTE_SELECTION_CMD);
+        v.borrow_mut()
+            .insert(shortcut!(Ctrl + x), CUT_SELECTION_CMD);
+        v.borrow_mut().insert(shortcut!(Ctrl + s), SAVE_DOC_CMD);
+        v.borrow_mut()
+            .insert(shortcut!(Ctrl + Shift + s), SAVE_DOC_AS_CMD);
+        v.borrow_mut().insert(shortcut!(Ctrl + z), UNDO_CMD);
+        v.borrow_mut().insert(shortcut!(Ctrl + y), REDO_CMD);
+    });
     Application::new().window(move |_| app_view(), None).run()
 }
