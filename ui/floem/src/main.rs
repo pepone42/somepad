@@ -1019,6 +1019,7 @@ fn app_view() -> impl View {
 
 thread_local! {
     pub static VIEW_SHORTCUT: RefCell<HashMap<Shortcut,ViewCommand>> = RefCell::new(HashMap::new());
+    pub static VIEW_COMMAND_REGISTRY: RefCell<HashMap<&'static str, ViewCommand>> = RefCell::new(HashMap::new());
 }
 
 const GOTOLINE_CMD: ViewCommand = ViewCommand {
@@ -1089,6 +1090,17 @@ const REDO_CMD: ViewCommand = ViewCommand {
 };
 
 fn main() {
+    VIEW_COMMAND_REGISTRY.with(|v| {
+        v.borrow_mut().insert("gotoline", GOTOLINE_CMD);
+        v.borrow_mut().insert("copyselection", COPY_SELECTION_CMD);
+        v.borrow_mut().insert("pasteselection", PASTE_SELECTION_CMD);
+        v.borrow_mut().insert("cutselection", CUT_SELECTION_CMD);
+        v.borrow_mut().insert("savedoc", SAVE_DOC_CMD);
+        v.borrow_mut().insert("savedocas", SAVE_DOC_AS_CMD);
+        v.borrow_mut().insert("undo", UNDO_CMD);
+        v.borrow_mut().insert("redo", REDO_CMD);
+    });
+
     VIEW_SHORTCUT.with(|v| {
         v.borrow_mut().insert(shortcut!(Ctrl + g), GOTOLINE_CMD);
         v.borrow_mut()
