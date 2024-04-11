@@ -10,7 +10,7 @@ pub enum ParseError {
     InvalidModifiers(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Shortcut {
     pub key: Key,
     pub modifiers: Modifiers,
