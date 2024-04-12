@@ -15,7 +15,7 @@ use ndoc::Document;
 use crate::{decorators::CustomDecorators, get_settings, settings::Settings};
 use crate::{documents::Documents, shortcut};
 
-use super::palette;
+use super::palette_list;
 
 pub struct EditorWindow {
     data: ViewData,
@@ -103,7 +103,7 @@ impl Palette for Id {
         items: impl Iterator<Item = (usize, String)>,
         on_select: impl Fn(usize) + 'static + Clone + Copy,
     ) {
-        palette(self, items, on_select);
+        palette_list(self, items, on_select);
     }
 }
 

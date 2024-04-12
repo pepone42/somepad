@@ -50,7 +50,55 @@ impl PaletteItem for (usize, String, String) {
     }
 }
 
-pub fn palette(
+pub fn palette_free(owner_id: Id,action: impl FnOnce(String) + 'static + Clone + Copy,) {
+    if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
+        for id in get_id_path(owner_id) {
+            if let Some(v) = w.borrow().get(&id) {
+                return Some(v.clone())
+            }
+        }
+        return None;
+    }) {
+        const PALETTE_WIDTH: f64 = 300.;
+
+        add_overlay(Point::new(0., 0.), move |id| {
+            id.request_focus();
+
+            let doc = create_rw_signal(Document::new(get_settings().indentation));
+
+            container(
+                container(
+                    text_editor(move || doc)
+                        .multiline(false)
+                        .on_return(move || {
+                            if doc.get().rope.len_chars() > 0 {
+                                action(doc.get().rope.to_string());
+                            }
+                            owner_id.request_focus();
+                            remove_overlay(id);
+                        }),
+                    )
+                .style(move |s| {
+                    s.flex()
+                        .margin_bottom(Auto)
+                        .width(PALETTE_WIDTH)
+                        .background(Color::DARK_BLUE)
+                }),
+            )
+            .style(move |s| {
+                s.flex()
+                    .justify_center()
+                    .size(viewport.get().width(), viewport.get().height())
+            })
+            .on_click_stop(move |_| {remove_overlay(id);owner_id.request_focus();})
+        });
+    } else {
+        //log error
+    }
+
+}
+
+pub fn palette_list(
     owner_id: Id,
     items: impl Iterator<Item = (usize, String)>,
     action: impl FnOnce(usize) + 'static + Clone + Copy,
@@ -93,7 +141,7 @@ pub fn palette(
 
             container(
                 v_stack((
-                    text_editor(move || doc.clone())
+                    text_editor(move || doc)
                         .multiline(false)
                         .on_arrow_up(move || {
                             if current.get() > 0 {

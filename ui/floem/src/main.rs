@@ -43,7 +43,7 @@ use ndoc::{Document, Indentation, Selection};
 use shortcut::{event_match, Shortcut};
 use widgets::Palette;
 
-use crate::widgets::palette;
+use crate::widgets::palette_list;
 use crate::widgets::window;
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
