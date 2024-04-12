@@ -2,10 +2,13 @@
 mod command;
 mod decorators;
 mod documents;
+#[macro_use]
 mod shortcut;
 mod theme;
 mod widgets;
+mod settings;
 
+use anyhow::Context;
 use command::ViewCommand;
 use documents::Documents;
 use floem::action::{add_overlay, remove_overlay, save_as};
@@ -19,8 +22,11 @@ use floem::kurbo::{BezPath, PathEl, Point, Rect};
 use floem::menu::{Menu, MenuItem};
 use floem::peniko::{Brush, Color};
 use floem::reactive::{create_effect, create_rw_signal, create_signal, RwSignal};
+use once_cell::sync::Lazy;
+use settings::Settings;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::{env, time};
 
 use floem::view::{View, ViewData, Widget};
@@ -60,7 +66,6 @@ pub struct TextEditor {
     char_base_width: f64,
     selection_kind: SelectionKind,
     disable: RwSignal<bool>,
-    documents: RwSignal<Documents>,
     multiline: bool,
     on_change: Option<Box<dyn Fn()>>,
     on_arrow_up: Option<Box<dyn Fn()>>,
@@ -75,7 +80,6 @@ pub enum SelectionKind {
 }
 
 pub fn text_editor(
-    documents: RwSignal<Documents>,
     doc: impl Fn() -> RwSignal<Document> + 'static,
 ) -> TextEditor {
     let id = Id::next();
@@ -95,7 +99,7 @@ pub fn text_editor(
 
     let ndoc = doc();
 
-    // create a system tu update the view when the highlighter is updated
+    // create a system to update the view when the highlighter is updated
     // on_lighter_update is called from an other thread
     // we need to send a message to the main thread to update the view
     let (s, r) = crossbeam_channel::unbounded();
@@ -126,7 +130,6 @@ pub fn text_editor(
         char_base_width,
         selection_kind: SelectionKind::Char,
         disable,
-        documents,
         multiline: true,
         on_change: None,
         on_arrow_up: None,
@@ -460,18 +463,6 @@ impl Widget for TextEditor {
                 cx.fill(&path, &bg, 0.);
                 cx.stroke(&path, &fg, 1.);
             }
-            // for n in path.elements() {
-            //     match n {
-            //         PathEl::QuadTo(p1, p2) => {
-            //             let bg = Brush::Solid(Color::BLACK);
-            //             let p = Circle::new(Point::new(p1.x, p1.y), 1.5);
-            //             cx.fill(&p, &bg, 1.0);
-            //             let p = Circle::new(Point::new(p2.x, p2.y), 1.5);
-            //             cx.fill(&p, &bg, 1.0);
-            //         }
-            //         _ => (),
-            //     }
-            // }
         }
 
         for (i, layout) in layouts {
@@ -500,51 +491,6 @@ impl Widget for TextEditor {
         _id_path: Option<&[Id]>,
         event: floem::event::Event,
     ) -> floem::EventPropagation {
-        //dbg!(event.clone());
-        // if event_match(&event, shortcut!(Ctrl + c)) {
-        //     let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
-        //     cx.request_all(self.id());
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + v)) {
-        //     if let Ok(s) = Clipboard::get_contents() {
-        //         self.doc.update(|d| d.insert_many(&s));
-        //         self.scroll_to_main_cursor();
-        //         cx.request_all(self.id());
-        //     }
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + x)) {
-        //     let _ = Clipboard::set_contents(self.doc.get().get_selection_content());
-        //     self.doc.update(|d| d.insert(""));
-        //     self.scroll_to_main_cursor();
-        //     cx.request_all(self.id());
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + z)) {
-        //     self.doc.update(|d| d.undo());
-        //     self.scroll_to_main_cursor();
-        //     cx.request_all(self.id());
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + y)) {
-        //     self.doc.update(|d| d.redo());
-        //     self.scroll_to_main_cursor();
-        //     cx.request_all(self.id());
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + Shift + s)) {
-        //     self.save_as();
-        //     return EventPropagation::Stop;
-        // }
-        // if event_match(&event, shortcut!(Ctrl + s)) {
-        //     if let Some(ref file_name) = self.doc.get().file_name {
-        //         self.doc.update(|d| d.save_as(file_name).unwrap());
-        //     } else {
-        //         self.save_as();
-        //     }
-        //     return EventPropagation::Stop;
-        // }
 
         VIEW_SHORTCUT.with(|v| {
             for (shortcut, cmd) in v.borrow().iter() {
@@ -811,11 +757,10 @@ impl Widget for TextEditor {
 }
 
 fn editor(
-    documents: RwSignal<Documents>,
     doc: impl Fn() -> RwSignal<Document> + 'static,
 ) -> impl View {
     let ndoc = doc(); //.clone();
-    let text_editor = text_editor(documents, move || ndoc);
+    let text_editor = text_editor(move || ndoc);
     let text_editor_id = text_editor.id();
 
     let (line_number_width, line_number_width_set) = create_signal(
@@ -908,10 +853,9 @@ fn app_view() -> impl View {
     let documents = create_rw_signal(Documents::new());
 
     if let Some(path) = env::args().nth(1) {
-        let doc = create_rw_signal(Document::from_file(path).unwrap());
+        let doc = create_rw_signal(Document::from_file(path).unwrap() );
         documents.update(|docs| docs.add(doc));
     }
-    dbg!(documents.get());
 
     let v = window(
         v_stack((
@@ -921,7 +865,7 @@ fn app_view() -> impl View {
                     if documents.get().is_empty() {
                         startup_screen().any()
                     } else {
-                        editor(documents, move || documents.get().get_doc(val)).any()
+                        editor(move || documents.get().get_doc(val)).any()
                     }
                 },
             )
@@ -1025,8 +969,11 @@ thread_local! {
 const GOTOLINE_CMD: ViewCommand = ViewCommand {
     name: "Go To Line",
     action: |v| {
-        v.doc.update(|d| d.select_all());
-        v.id().request_paint();
+        v.doc.update(|d| {
+            // let line_char_idx = d.rope.line_to_char(line_idx)
+            // d.set_main_selection(head, tail);
+        });
+        //v.id().request_paint();
     },
 };
 
@@ -1089,7 +1036,14 @@ const REDO_CMD: ViewCommand = ViewCommand {
     },
 };
 
-fn main() {
+pub static SETTINGS : Lazy<Arc<Mutex<Settings>>> = Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
+
+pub fn get_settings() -> Settings {
+    SETTINGS.lock().unwrap().clone()
+}
+
+fn main() -> anyhow::Result<()> {
+
     VIEW_COMMAND_REGISTRY.with(|v| {
         v.borrow_mut().insert("gotoline", GOTOLINE_CMD);
         v.borrow_mut().insert("copyselection", COPY_SELECTION_CMD);
@@ -1101,19 +1055,17 @@ fn main() {
         v.borrow_mut().insert("redo", REDO_CMD);
     });
 
-    VIEW_SHORTCUT.with(|v| {
-        v.borrow_mut().insert(shortcut!(Ctrl + g), GOTOLINE_CMD);
-        v.borrow_mut()
-            .insert(shortcut!(Ctrl + c), COPY_SELECTION_CMD);
-        v.borrow_mut()
-            .insert(shortcut!(Ctrl + v), PASTE_SELECTION_CMD);
-        v.borrow_mut()
-            .insert(shortcut!(Ctrl + x), CUT_SELECTION_CMD);
-        v.borrow_mut().insert(shortcut!(Ctrl + s), SAVE_DOC_CMD);
-        v.borrow_mut()
-            .insert(shortcut!(Ctrl + Shift + s), SAVE_DOC_AS_CMD);
-        v.borrow_mut().insert(shortcut!(Ctrl + z), UNDO_CMD);
-        v.borrow_mut().insert(shortcut!(Ctrl + y), REDO_CMD);
-    });
-    Application::new().window(move |_| app_view(), None).run()
+    for (command_id, shortcut) in get_settings().shortcuts.iter() {
+        VIEW_SHORTCUT.with(|v| {
+            VIEW_COMMAND_REGISTRY.with(|r| {
+                if let Some(cmd) = r.borrow().get(command_id.as_str()) {
+                    v.borrow_mut().insert(shortcut.clone(), *cmd);
+                }
+            });
+        });
+    }
+
+    Application::new().window(move |_| app_view(), None).run();
+
+    Ok(())
 }

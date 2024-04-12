@@ -12,7 +12,7 @@ use floem::{
 };
 use ndoc::Document;
 
-use crate::decorators::CustomDecorators;
+use crate::{decorators::CustomDecorators, get_settings, settings::Settings};
 use crate::{documents::Documents, shortcut};
 
 use super::palette;
@@ -135,7 +135,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
         if disabled.get() {
             return;
         };
-        let doc = create_rw_signal(Document::default());
+        let doc = create_rw_signal(Document::new(get_settings().indentation));
         documents.update(|d| {
             d.add(doc);
         });
@@ -146,7 +146,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
             return;
         };
         disabled.set(true);
-        let doc = create_rw_signal(Document::default());
+        let doc = create_rw_signal(Document::new(get_settings().indentation));
         open_file(FileDialogOptions::new().title("Open new file"), move |p| {
             if let Some(path) = p {
                 doc.set(Document::from_file(&path.path[0]).unwrap());

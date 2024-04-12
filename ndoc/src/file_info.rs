@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use encoding_rs::Encoding;
 use ropey::RopeSlice;
+use serde::{Deserialize, Serialize};
 use syntect::parsing::SyntaxReference;
 
 use crate::syntax::SYNTAXSET;
@@ -53,10 +54,16 @@ impl Display for LineFeed {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Indentation {
     Tab(usize),
     Space(usize),
+}
+
+impl Default for Indentation {
+    fn default() -> Self {
+        Indentation::Space(4)
+    }
 }
 
 impl Indentation {

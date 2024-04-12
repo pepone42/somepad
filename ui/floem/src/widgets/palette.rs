@@ -16,7 +16,7 @@ use floem::{
 };
 use ndoc::Document;
 
-use crate::{documents::Documents, editor, text_editor};
+use crate::{documents::Documents, editor, get_settings, text_editor};
 
 use super::{get_id_path, WINDOWS_VIEWPORT};
 
@@ -72,7 +72,7 @@ pub fn palette(
         add_overlay(Point::new(0., 0.), move |id| {
             id.request_focus();
 
-            let doc = create_rw_signal(Document::default());
+            let doc = create_rw_signal(Document::new(get_settings().indentation));
             let sorted_items = create_rw_signal(items.clone());
             create_effect(move |_| {
                 sorted_items.set(
@@ -93,7 +93,7 @@ pub fn palette(
 
             container(
                 v_stack((
-                    text_editor(create_rw_signal(Documents::new()), move || doc.clone())
+                    text_editor(move || doc.clone())
                         .multiline(false)
                         .on_arrow_up(move || {
                             if current.get() > 0 {
