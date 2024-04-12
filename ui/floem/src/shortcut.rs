@@ -1,6 +1,7 @@
-use std::str::FromStr;
+use std::{path::Display, str::FromStr};
 
 use floem::keyboard::{Key, Modifiers};
+use serde::{de::Visitor, Deserialize, Serialize};
 use smol_str::SmolStr;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -14,6 +15,56 @@ pub enum ParseError {
 pub struct Shortcut {
     pub key: Key,
     pub modifiers: Modifiers,
+}
+
+impl Serialize for Shortcut {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        let mut mods = Vec::new();
+        for m in self.modifiers {
+            if m.alt() {
+                mods.push("Alt");
+            }
+            if m.control() {
+                mods.push("Ctrl");
+            }
+            if m.shift() {
+                mods.push("Shift");
+            }
+            if m.meta() {
+                mods.push("Meta");
+            }
+        }
+        
+        if let Key::Character(c) = &self.key {
+
+            serializer.serialize_str(&format!("{}+{}",mods.join("+"),c))
+        } else {
+            Err(serde::ser::Error::custom("Unsupported Key format"))
+        }
+    }
+}
+
+struct ShortcutVisitor;
+
+impl<'de> Visitor<'de> for ShortcutVisitor {
+    type Value = Shortcut;
+    
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("A shorcut representation like 'Ctrl+c'")
+    }
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: serde::de::Error {
+        Shortcut::from_str(&value).map_err(|e| serde::de::Error::custom(format!("{:?}",e)))
+    }
+}
+
+impl<'de> Deserialize<'de> for Shortcut {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+            deserializer.deserialize_string(ShortcutVisitor)
+    }
 }
 
 #[macro_export]

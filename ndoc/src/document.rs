@@ -202,6 +202,12 @@ impl Document {
         DOCID.fetch_add(1, Ordering::Relaxed)
     }
 
+    pub fn new(indentation: Indentation) -> Self {
+        let mut d = Document::default();
+        d.file_info.indentation = indentation;
+        d
+    }
+
     pub fn id(&self) -> usize {
         self.id
     }
