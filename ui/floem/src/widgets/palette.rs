@@ -1,7 +1,7 @@
 use floem::{
     action::{add_overlay, remove_overlay},
     id::Id,
-    keyboard::{KeyEvent, ModifiersState, NamedKey},
+    keyboard::{KeyEvent, Modifiers, ModifiersState, NamedKey},
     kurbo::{Point, Rect},
     peniko::Color,
     reactive::{create_effect, create_rw_signal, RwSignal},
@@ -16,7 +16,7 @@ use floem::{
 };
 use ndoc::Document;
 
-use crate::{documents::Documents, editor, get_settings, text_editor};
+use crate::{documents::Documents, editor, focused_editor, get_settings, text_editor};
 
 use super::{get_id_path, WINDOWS_VIEWPORT};
 
@@ -50,16 +50,18 @@ impl PaletteItem for (usize, String, String) {
     }
 }
 
-pub fn palette_free(owner_id: Id,action: impl FnOnce(String) + 'static + Clone + Copy,) {
+pub fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone + Copy) {
     if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
         for id in get_id_path(owner_id) {
             if let Some(v) = w.borrow().get(&id) {
-                return Some(v.clone())
+                return Some(v.clone());
             }
         }
         return None;
     }) {
         const PALETTE_WIDTH: f64 = 300.;
+
+        let focused_id = focused_editor();
 
         add_overlay(Point::new(0., 0.), move |id| {
             id.request_focus();
@@ -74,10 +76,15 @@ pub fn palette_free(owner_id: Id,action: impl FnOnce(String) + 'static + Clone +
                             if doc.get().rope.len_chars() > 0 {
                                 action(doc.get().rope.to_string());
                             }
-                            owner_id.request_focus();
+                            focused_id.request_focus();
                             remove_overlay(id);
+                        })
+                        .on_escape(move || {
+                            dbg!(focused_id);
+                            remove_overlay(id);
+                            focused_id.request_focus();
                         }),
-                    )
+                )
                 .style(move |s| {
                     s.flex()
                         .margin_bottom(Auto)
@@ -90,12 +97,14 @@ pub fn palette_free(owner_id: Id,action: impl FnOnce(String) + 'static + Clone +
                     .justify_center()
                     .size(viewport.get().width(), viewport.get().height())
             })
-            .on_click_stop(move |_| {remove_overlay(id);owner_id.request_focus();})
+            .on_click_stop(move |_| {
+                remove_overlay(id);
+                focused_id.request_focus();
+            })
         });
     } else {
         //log error
     }
-
 }
 
 pub fn palette_list(
@@ -106,7 +115,7 @@ pub fn palette_list(
     if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
         for id in get_id_path(owner_id) {
             if let Some(v) = w.borrow().get(&id) {
-                return Some(v.clone())
+                return Some(v.clone());
             }
         }
         return None;
@@ -116,6 +125,7 @@ pub fn palette_list(
 
         let current = create_rw_signal(0);
         let current_key = create_rw_signal(0);
+        let focused_id = focused_editor();
 
         add_overlay(Point::new(0., 0.), move |id| {
             id.request_focus();
@@ -157,7 +167,11 @@ pub fn palette_list(
                             if !sorted_items.get().is_empty() {
                                 action(sorted_items.get()[current.get()].0);
                             }
-                            owner_id.request_focus();
+                            focused_id.request_focus();
+                            remove_overlay(id);
+                        })
+                        .on_escape(move || {
+                            focused_id.request_focus();
                             remove_overlay(id);
                         }),
                     //.style(|s| s.flex_grow(1.0)),
@@ -172,7 +186,7 @@ pub fn palette_list(
                                 .on_click_stop(move |_| {
                                     action(item.0);
                                     remove_overlay(id);
-                                    owner_id.request_focus();
+                                    focused_id.request_focus();
                                 })
                                 .style(move |s| {
                                     if current_key.get() == item.0 {
@@ -197,7 +211,10 @@ pub fn palette_list(
                     .justify_center()
                     .size(viewport.get().width(), viewport.get().height())
             })
-            .on_click_stop(move |_| {remove_overlay(id);owner_id.request_focus();})
+            .on_click_stop(move |_| {
+                remove_overlay(id);
+                focused_id.request_focus();
+            })
         });
     } else {
         //log error

@@ -4,9 +4,9 @@ mod decorators;
 mod documents;
 #[macro_use]
 mod shortcut;
+mod settings;
 mod theme;
 mod widgets;
-mod settings;
 
 use anyhow::Context;
 use command::ViewCommand;
@@ -26,6 +26,8 @@ use once_cell::sync::Lazy;
 use settings::Settings;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::os::raw;
+use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 use std::{env, time};
 
@@ -41,13 +43,21 @@ use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
 use shortcut::{event_match, Shortcut};
-use widgets::Palette;
+use widgets::{palette_free, Palette};
 
 use crate::widgets::palette_list;
 use crate::widgets::window;
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
+}
+
+pub static FOCUSED_TEXT_EDITOR: AtomicU64 = AtomicU64::new(0);
+
+pub fn focused_editor() -> Id {
+    let raw_id = FOCUSED_TEXT_EDITOR.load(std::sync::atomic::Ordering::Relaxed);
+    let id = unsafe{ std::mem::transmute::<u64, Id>(raw_id)};
+    id
 }
 
 #[derive(Debug)]
@@ -71,6 +81,7 @@ pub struct TextEditor {
     on_arrow_up: Option<Box<dyn Fn()>>,
     on_arrow_down: Option<Box<dyn Fn()>>,
     on_return: Option<Box<dyn Fn()>>,
+    on_escape: Option<Box<dyn Fn()>>,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum SelectionKind {
@@ -79,9 +90,7 @@ pub enum SelectionKind {
     Line,
 }
 
-pub fn text_editor(
-    doc: impl Fn() -> RwSignal<Document> + 'static,
-) -> TextEditor {
+pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor {
     let id = Id::next();
     let attrs = Attrs::new()
         .family(&[FamilyOwned::Monospace])
@@ -94,6 +103,7 @@ pub fn text_editor(
 
     let char_base_width = t.lines[0].layout_opt().as_ref().unwrap()[0].w as f64;
     id.request_focus();
+    FOCUSED_TEXT_EDITOR.store(id.to_raw(), std::sync::atomic::Ordering::Relaxed);
 
     let disable = RwSignal::new(false);
 
@@ -135,6 +145,7 @@ pub fn text_editor(
         on_arrow_up: None,
         on_arrow_down: None,
         on_return: None,
+        on_escape: None,
     }
     .disabled(move || disable.get())
 }
@@ -158,6 +169,10 @@ impl TextEditor {
     }
     pub fn on_return(mut self, f: impl Fn() + 'static) -> Self {
         self.on_return = Some(Box::new(f));
+        self
+    }
+    pub fn on_escape(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_escape = Some(Box::new(f));
         self
     }
 
@@ -256,7 +271,7 @@ impl TextEditor {
         layout.hit_position(grapheme_to_byte(&self.doc.get().rope.line(line), col))
     }
 
-    fn save_as(&mut self) {
+    fn save_as(&self) {
         let doc = self.doc.clone();
         save_as(
             FileDialogOptions::new()
@@ -491,7 +506,6 @@ impl Widget for TextEditor {
         _id_path: Option<&[Id]>,
         event: floem::event::Event,
     ) -> floem::EventPropagation {
-
         VIEW_SHORTCUT.with(|v| {
             for (shortcut, cmd) in v.borrow().iter() {
                 if event_match(&event, shortcut.clone()) {
@@ -503,6 +517,11 @@ impl Widget for TextEditor {
         });
 
         match event {
+            Event::FocusGained => {
+                dbg!(self.id());
+                FOCUSED_TEXT_EDITOR.store(self.id().to_raw(), std::sync::atomic::Ordering::Relaxed);
+                EventPropagation::Continue
+            }
             Event::KeyDown(e) => {
                 match e.key.text {
                     Some(ref txt) if txt.chars().any(|c| !c.is_control()) => {
@@ -671,6 +690,14 @@ impl Widget for TextEditor {
 
                             EventPropagation::Stop
                         }
+                        Key::Named(NamedKey::Escape) => {
+                            if let Some(action) = self.on_escape.as_ref() {
+                                action();
+                                EventPropagation::Stop
+                            } else {
+                                EventPropagation::Continue
+                            }
+                        }
                         Key::Named(NamedKey::PageUp) if self.multiline => {
                             self.doc
                                 .update(|d| d.page_up(self.page_len, e.modifiers.shift()));
@@ -756,9 +783,7 @@ impl Widget for TextEditor {
     }
 }
 
-fn editor(
-    doc: impl Fn() -> RwSignal<Document> + 'static,
-) -> impl View {
+fn editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> impl View {
     let ndoc = doc(); //.clone();
     let text_editor = text_editor(move || ndoc);
     let text_editor_id = text_editor.id();
@@ -853,7 +878,7 @@ fn app_view() -> impl View {
     let documents = create_rw_signal(Documents::new());
 
     if let Some(path) = env::args().nth(1) {
-        let doc = create_rw_signal(Document::from_file(path).unwrap() );
+        let doc = create_rw_signal(Document::from_file(path).unwrap());
         documents.update(|docs| docs.add(doc));
     }
 
@@ -969,11 +994,18 @@ thread_local! {
 const GOTOLINE_CMD: ViewCommand = ViewCommand {
     name: "Go To Line",
     action: |v| {
-        v.doc.update(|d| {
-            // let line_char_idx = d.rope.line_to_char(line_idx)
-            // d.set_main_selection(head, tail);
+        let doc = v.doc.clone();
+        let id = v.id();
+        palette_free(v.id(), move |line| {
+            doc.update(move |d| {
+                if let Ok(line_idx) = line.parse::<usize>() {
+                    let line_idx = line_idx.min(d.rope.len_lines()).max(1);
+                    let pos = d.char_to_position(d.rope.line_to_char(line_idx - 1));
+                    d.set_main_selection(pos, pos);
+                }
+            });
+            id.update_state_deferred(TextEditorCommand::FocusMainCursor);
         });
-        //v.id().request_paint();
     },
 };
 
@@ -1036,14 +1068,14 @@ const REDO_CMD: ViewCommand = ViewCommand {
     },
 };
 
-pub static SETTINGS : Lazy<Arc<Mutex<Settings>>> = Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
+pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
+    Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
 pub fn get_settings() -> Settings {
     SETTINGS.lock().unwrap().clone()
 }
 
 fn main() -> anyhow::Result<()> {
-
     VIEW_COMMAND_REGISTRY.with(|v| {
         v.borrow_mut().insert("gotoline", GOTOLINE_CMD);
         v.borrow_mut().insert("copyselection", COPY_SELECTION_CMD);

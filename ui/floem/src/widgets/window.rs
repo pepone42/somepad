@@ -121,14 +121,6 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
 
     WINDOWS_VIEWPORT.with(move |w| w.borrow_mut().insert(id, viewport.clone()));
 
-    // create_effect(move |_| {
-    //     if disabled.get() {
-    //         id.clear_focus();
-    //     } else {
-    //         id.request_focus();
-    //     }
-    // });
-
     let w = w.disabled(move || disabled.get());
 
     let w = w.on_shortcut(shortcut!(Ctrl + n), move |_| {
@@ -191,6 +183,8 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
         };
         documents.update(|d| d.remove(d.current_id()));
     });
+
+
 
     w
 }
