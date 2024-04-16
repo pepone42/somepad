@@ -9,9 +9,9 @@ mod theme;
 mod widgets;
 
 use anyhow::Context;
-use command::ViewCommand;
+use command::{ViewCommand, WindowCommand};
 use documents::Documents;
-use floem::action::{add_overlay, remove_overlay, save_as};
+use floem::action::{add_overlay, open_file, remove_overlay, save_as};
 use floem::cosmic_text::{Attrs, AttrsList, FamilyOwned, HitPosition, TextLayout};
 use floem::event::Event;
 use floem::ext_event::create_signal_from_channel;
@@ -30,6 +30,7 @@ use std::os::raw;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 use std::{env, time};
+use window::{get_id_path, WindowUpdateCommand};
 
 use floem::view::{View, ViewData, Widget};
 use floem::views::{
@@ -56,7 +57,7 @@ pub static FOCUSED_TEXT_EDITOR: AtomicU64 = AtomicU64::new(0);
 
 pub fn focused_editor() -> Id {
     let raw_id = FOCUSED_TEXT_EDITOR.load(std::sync::atomic::Ordering::Relaxed);
-    let id = unsafe{ std::mem::transmute::<u64, Id>(raw_id)};
+    let id = unsafe { std::mem::transmute::<u64, Id>(raw_id) };
     id
 }
 
@@ -503,7 +504,7 @@ impl Widget for TextEditor {
     fn event(
         &mut self,
         cx: &mut floem::context::EventCx,
-        _id_path: Option<&[Id]>,
+        id_path: Option<&[Id]>,
         event: floem::event::Event,
     ) -> floem::EventPropagation {
         VIEW_SHORTCUT.with(|v| {
@@ -511,6 +512,23 @@ impl Widget for TextEditor {
                 if event_match(&event, shortcut.clone()) {
                     (cmd.action)(self);
                     return EventPropagation::Stop;
+                }
+            }
+            EventPropagation::Continue
+        });
+
+        // Keyboard event does not bubble up to the root view
+        // we circumvent that by capturing event here, and sending update_state
+        WINDOW_SHORTCUT.with(|v| {
+            for (shortcut, cmd) in v.borrow().iter() {
+                if event_match(&event, shortcut.clone()) {
+                    let mut path = get_id_path(self.id());
+                    path.reverse();
+                    if let Some(root_id) = path.get(1) {
+                        root_id.update_state_deferred(WindowUpdateCommand::LaunchCommand(
+                            cmd.id.to_string(),
+                        ))
+                    }
                 }
             }
             EventPropagation::Continue
@@ -989,10 +1007,14 @@ fn app_view() -> impl View {
 thread_local! {
     pub static VIEW_SHORTCUT: RefCell<HashMap<Shortcut,ViewCommand>> = RefCell::new(HashMap::new());
     pub static VIEW_COMMAND_REGISTRY: RefCell<HashMap<&'static str, ViewCommand>> = RefCell::new(HashMap::new());
+
+    pub static WINDOW_SHORTCUT: RefCell<HashMap<Shortcut,WindowCommand>> = RefCell::new(HashMap::new());
+    pub static WINDOW_COMMAND_REGISTRY: RefCell<HashMap<&'static str, WindowCommand>> = RefCell::new(HashMap::new());
 }
 
 const GOTOLINE_CMD: ViewCommand = ViewCommand {
     name: "Go To Line",
+    id: "editor.gotoline",
     action: |v| {
         let doc = v.doc.clone();
         let id = v.id();
@@ -1011,6 +1033,7 @@ const GOTOLINE_CMD: ViewCommand = ViewCommand {
 
 const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
     name: "Copy Selection",
+    id: "editor.copyselection",
     action: |v| {
         let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
     },
@@ -1018,15 +1041,19 @@ const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
 
 const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
     name: "Cut Selection",
+    id: "editor.cutselection",
     action: |v| {
-        let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
-        v.doc.update(|d| d.insert(""));
-        v.scroll_to_main_cursor();
+        if v.doc.get().get_selection_content().len() > 0 {
+            let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
+            v.doc.update(|d| d.insert(""));
+            v.scroll_to_main_cursor();
+        }
     },
 };
 
 const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
     name: "Paste Selection",
+    id: "editor.pasteselection",
     action: |v| {
         if let Ok(s) = Clipboard::get_contents() {
             v.doc.update(|d| d.insert_many(&s));
@@ -1037,6 +1064,7 @@ const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
 
 const SAVE_DOC_AS_CMD: ViewCommand = ViewCommand {
     name: "Save Document As",
+    id: "editor.savedocas",
     action: |v| {
         v.save_as();
     },
@@ -1044,6 +1072,7 @@ const SAVE_DOC_AS_CMD: ViewCommand = ViewCommand {
 
 const SAVE_DOC_CMD: ViewCommand = ViewCommand {
     name: "Save Document",
+    id: "editor.savedoc",
     action: |v| {
         if let Some(ref file_name) = v.doc.get().file_name {
             v.doc.update(|d| d.save_as(file_name).unwrap());
@@ -1055,6 +1084,7 @@ const SAVE_DOC_CMD: ViewCommand = ViewCommand {
 
 const UNDO_CMD: ViewCommand = ViewCommand {
     name: "Undo",
+    id: "editor.undo",
     action: |v| {
         v.doc.update(|d| d.undo());
         v.scroll_to_main_cursor();
@@ -1062,9 +1092,66 @@ const UNDO_CMD: ViewCommand = ViewCommand {
 };
 const REDO_CMD: ViewCommand = ViewCommand {
     name: "redo",
+    id: "editor.redo",
     action: |v| {
         v.doc.update(|d| d.redo());
         v.scroll_to_main_cursor();
+    },
+};
+
+const NEW_DOC: WindowCommand = WindowCommand {
+    name: "New Document",
+    id: "window.newdoc",
+    action: |w| {
+        let doc = create_rw_signal(Document::new(get_settings().indentation));
+        w.documents.update(|docs| docs.add(doc));
+    },
+};
+
+const OPEN_DOC: WindowCommand = WindowCommand {
+    name: "Open Document",
+    id: "window.opendoc",
+    action: |w| {
+        let doc = create_rw_signal(Document::new(get_settings().indentation));
+        let documents = w.documents.clone();
+        open_file(FileDialogOptions::new().title("Open new file"), move |p| {
+            if let Some(path) = p {
+                doc.set(Document::from_file(&path.path[0]).unwrap());
+                documents.update(|d| d.add(doc));
+                //disabled.set(false);
+            }
+        });
+    },
+};
+
+const CLOSE_DOC: WindowCommand = WindowCommand {
+    name: "Close Document",
+    id: "window.closedoc",
+    action: |w| {
+        w.documents.update(|d| d.remove(d.current_id()));
+    },
+};
+
+const SHOW_OPENED_DOC: WindowCommand = WindowCommand {
+    name: "Show opened docuements",
+    id: "window.opendeddocs",
+    action: |w| {
+        let documents = w.documents.clone();
+        if !documents.get().is_empty() {
+            w.id().palette(
+                //viewport,
+                documents
+                    .get()
+                    .order_by_mru()
+                    .iter()
+                    .enumerate()
+                    .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
+                move |i| {
+                    documents.update(|d| d.set_current(i));
+                    //disabled.set(false);
+                },
+            );
+        }
     },
 };
 
@@ -1077,20 +1164,47 @@ pub fn get_settings() -> Settings {
 
 fn main() -> anyhow::Result<()> {
     VIEW_COMMAND_REGISTRY.with(|v| {
-        v.borrow_mut().insert("gotoline", GOTOLINE_CMD);
-        v.borrow_mut().insert("copyselection", COPY_SELECTION_CMD);
-        v.borrow_mut().insert("pasteselection", PASTE_SELECTION_CMD);
-        v.borrow_mut().insert("cutselection", CUT_SELECTION_CMD);
-        v.borrow_mut().insert("savedoc", SAVE_DOC_CMD);
-        v.borrow_mut().insert("savedocas", SAVE_DOC_AS_CMD);
-        v.borrow_mut().insert("undo", UNDO_CMD);
-        v.borrow_mut().insert("redo", REDO_CMD);
+        v.borrow_mut().insert(GOTOLINE_CMD.id, GOTOLINE_CMD);
+        v.borrow_mut()
+            .insert(COPY_SELECTION_CMD.id, COPY_SELECTION_CMD);
+        v.borrow_mut()
+            .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
+        v.borrow_mut()
+            .insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
+        v.borrow_mut().insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
+        v.borrow_mut().insert(SAVE_DOC_AS_CMD.id, SAVE_DOC_AS_CMD);
+        v.borrow_mut().insert(UNDO_CMD.id, UNDO_CMD);
+        v.borrow_mut().insert(REDO_CMD.id, REDO_CMD);
+    });
+    WINDOW_COMMAND_REGISTRY.with(|w| {
+        w.borrow_mut().insert(NEW_DOC.id, NEW_DOC);
+        w.borrow_mut().insert(OPEN_DOC.id, OPEN_DOC);
+        w.borrow_mut().insert(CLOSE_DOC.id, CLOSE_DOC);
+        w.borrow_mut().insert(SHOW_OPENED_DOC.id, SHOW_OPENED_DOC);
     });
 
-    for (command_id, shortcut) in get_settings().shortcuts.iter() {
+    for (command_id, shortcut) in get_settings()
+        .shortcuts
+        .iter()
+        .filter(|(id, _)| id.starts_with("editor."))
+    {
         VIEW_SHORTCUT.with(|v| {
             VIEW_COMMAND_REGISTRY.with(|r| {
                 if let Some(cmd) = r.borrow().get(command_id.as_str()) {
+                    v.borrow_mut().insert(shortcut.clone(), *cmd);
+                }
+            });
+        });
+    }
+    for (command_id, shortcut) in get_settings()
+        .shortcuts
+        .iter()
+        .filter(|(id, _)| id.starts_with("window."))
+    {
+        WINDOW_SHORTCUT.with(|v| {
+            WINDOW_COMMAND_REGISTRY.with(|r| {
+                if let Some(cmd) = r.borrow().get(command_id.as_str()) {
+                    dbg!(command_id);
                     v.borrow_mut().insert(shortcut.clone(), *cmd);
                 }
             });

@@ -23,15 +23,19 @@ impl Default for Settings {
     fn default() -> Self {
         let mut shortcuts = HashMap::new();
 
-        shortcuts.insert("gotoline".to_string(),shortcut!(Ctrl + g));
-        shortcuts.insert("copyselection".to_string(), shortcut!(Ctrl+c));
-        shortcuts.insert("pasteselection".to_string(),shortcut!(Ctrl + v));
-        shortcuts.insert("cutselection".to_string(),shortcut!(Ctrl + x));
-        shortcuts.insert("savedoc".to_string(),shortcut!(Ctrl + s));
-        shortcuts.insert("savedocas".to_string(),shortcut!(Ctrl + Shift + s));
-        shortcuts.insert("undo".to_string(),shortcut!(Ctrl + z));
-        shortcuts.insert("redo".to_string(),shortcut!(Ctrl + y));
+        shortcuts.insert(crate::GOTOLINE_CMD.id.to_string(),shortcut!(Ctrl + g));
+        shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
+        shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
+        shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));
+        shortcuts.insert(crate::SAVE_DOC_CMD.id.to_string(),shortcut!(Ctrl + s));
+        shortcuts.insert(crate::SAVE_DOC_AS_CMD.id.to_string(),shortcut!(Ctrl + Shift + s));
+        shortcuts.insert(crate::UNDO_CMD.id.to_string(),shortcut!(Ctrl + z));
+        shortcuts.insert(crate::REDO_CMD.id.to_string(),shortcut!(Ctrl + y));
 
+        shortcuts.insert(crate::NEW_DOC.id.to_string(),shortcut!(Ctrl + n));
+        shortcuts.insert(crate::OPEN_DOC.id.to_string(),shortcut!(Ctrl + o));
+        shortcuts.insert(crate::CLOSE_DOC.id.to_string(),shortcut!(Ctrl + w));
+        shortcuts.insert(crate::SHOW_OPENED_DOC.id.to_string(), shortcut!(Ctrl + p));
 
         Self { shortcuts, indentation: Default::default() }
     }

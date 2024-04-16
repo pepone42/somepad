@@ -9,18 +9,27 @@ use floem::{
     reactive::{create_effect, create_rw_signal, RwSignal},
     view::{self, default_compute_layout, View, ViewData, Widget},
     views::{container, Container, Decorators},
+    EventPropagation,
 };
 use ndoc::Document;
 
-use crate::{decorators::CustomDecorators, get_settings, settings::Settings};
+use crate::{
+    decorators::CustomDecorators, get_settings, settings::Settings, shortcut::event_match,
+    WINDOW_COMMAND_REGISTRY, WINDOW_SHORTCUT,
+};
 use crate::{documents::Documents, shortcut};
 
 use super::palette_list;
+
+pub enum WindowUpdateCommand {
+    LaunchCommand(String),
+}
 
 pub struct EditorWindow {
     data: ViewData,
     child: Box<dyn Widget>,
     pub viewport: RwSignal<Rect>,
+    pub documents: RwSignal<Documents>,
 }
 
 impl View for EditorWindow {
@@ -40,6 +49,19 @@ impl View for EditorWindow {
 impl Widget for EditorWindow {
     fn view_data(&self) -> &ViewData {
         &self.data
+    }
+
+    fn update(&mut self, _cx: &mut floem::context::UpdateCx, state: Box<dyn std::any::Any>) {
+        if let Some(state) = state.downcast_ref::<WindowUpdateCommand>() {
+            match state {
+                WindowUpdateCommand::LaunchCommand(cmdid) => WINDOW_COMMAND_REGISTRY.with(|registry| {
+                    dbg!(&cmdid);
+                    if let Some(cmd) = registry.borrow().get(cmdid.as_str()) {
+                        (cmd.action)(self);
+                    }
+                }),
+            }
+        }
     }
 
     fn view_data_mut(&mut self) -> &mut ViewData {
@@ -112,7 +134,8 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
         data: ViewData::new(Id::next()),
         child: child.build(),
         viewport: create_rw_signal(Default::default()),
-    };
+        documents,
+    }; //.keyboard_navigatable();
 
     let id = dbg!(w.id());
 
@@ -123,68 +146,12 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
 
     let w = w.disabled(move || disabled.get());
 
-    let w = w.on_shortcut(shortcut!(Ctrl + n), move |_| {
-        if disabled.get() {
-            return;
-        };
-        let doc = create_rw_signal(Document::new(get_settings().indentation));
-        documents.update(|d| {
-            d.add(doc);
-        });
-    });
-
-    let w = w.on_shortcut(shortcut!(Ctrl + o), move |_| {
-        if disabled.get() {
-            return;
-        };
-        disabled.set(true);
-        let doc = create_rw_signal(Document::new(get_settings().indentation));
-        open_file(FileDialogOptions::new().title("Open new file"), move |p| {
-            if let Some(path) = p {
-                doc.set(Document::from_file(&path.path[0]).unwrap());
-                documents.update(|d| d.add(doc));
-                disabled.set(false);
-            }
-        });
-    });
-
     let w = w.on_event(floem::event::EventListener::WindowResized, move |s| {
         if let Event::WindowResized(s) = s {
             viewport.set(Rect::new(0., 0., s.width, s.height));
         }
         floem::EventPropagation::Continue
     });
-
-    let w = w.on_shortcut(shortcut!(Ctrl + p), move |_| {
-        if disabled.get() {
-            return;
-        };
-        disabled.set(true);
-        if !documents.get().is_empty() {
-            id.palette(
-                //viewport,
-                documents
-                    .get()
-                    .order_by_mru()
-                    .iter()
-                    .enumerate()
-                    .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
-                move |i| {
-                    documents.update(|d| d.set_current(i));
-                    disabled.set(false);
-                },
-            );
-        }
-    });
-
-    let w = w.on_shortcut(shortcut!(Ctrl + w), move |_| {
-        if disabled.get() {
-            return;
-        };
-        documents.update(|d| d.remove(d.current_id()));
-    });
-
-
 
     w
 }

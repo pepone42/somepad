@@ -146,6 +146,9 @@ pub fn palette_list(
                 if sorted_items.get().len() == 0 {
                     return;
                 }
+                if current.get() >= sorted_items.get().len() {
+                    current.set(sorted_items.get().len() - 1);
+                }
                 current_key.set(sorted_items.get()[current.get()].0);
             });
 
