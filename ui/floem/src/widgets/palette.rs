@@ -20,13 +20,13 @@ use crate::{documents::Documents, editor, focused_editor, get_settings, text_edi
 
 use super::{get_id_path, WINDOWS_VIEWPORT};
 
-pub trait PaletteItem {
-    fn id(&self) -> usize;
+pub trait PaletteItem<K: Clone + Copy> {
+    fn id(&self) -> K;
     fn name(&self) -> String;
     fn description(&self) -> Option<String>;
 }
 
-impl PaletteItem for (usize, String) {
+impl PaletteItem<usize> for (usize, String) {
     fn id(&self) -> usize {
         self.0
     }
@@ -38,7 +38,7 @@ impl PaletteItem for (usize, String) {
     }
 }
 
-impl PaletteItem for (usize, String, String) {
+impl PaletteItem<usize> for (usize, String, String) {
     fn id(&self) -> usize {
         self.0
     }
@@ -107,10 +107,10 @@ pub fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone 
     }
 }
 
-pub fn palette_list(
+pub fn palette_list<K: Clone + Copy>(
     owner_id: Id,
-    items: impl Iterator<Item = (usize, String)>,
-    action: impl FnOnce(usize) + 'static + Clone + Copy,
+    items: impl Iterator<Item = (K, String)>,
+    action: impl FnOnce(K) + 'static + Clone + Copy,
 ) {
     if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
         for id in get_id_path(owner_id) {
@@ -223,3 +223,47 @@ pub fn palette_list(
         //log error
     }
 }
+
+trait FnOnceCopyable<K>: FnOnce(K) + 'static + Clone + Copy {}
+
+pub struct PaletteBuilder<K: Clone + Copy> {
+    owner_id: Id,
+    description: Option<String>,
+    items: Option<im::Vector<(K,String)>>,
+    action: Option<Box<dyn FnOnce(K) + 'static>>,
+}
+
+impl<K: Clone + Copy> PaletteBuilder<K> {
+    pub fn new(owner_id: Id) -> Self {
+        Self {
+            owner_id,
+            description: None,
+            items: None,
+            action: None,
+        }
+    }
+
+    pub fn description(mut self, description: impl ToString) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    pub fn items(mut self, items: impl Iterator<Item = (K, String)>,) -> Self {
+        self.items = Some(im::Vector::from_iter(items));
+        self
+    }
+
+    pub fn action(mut self, action: impl FnOnce(K) + 'static) -> Self {
+        self.action = Some(Box::new(action));
+        self
+    }
+
+    pub fn build(self) {
+        if let Some(items) = self.items {
+            if let Some(action) = self.action {
+                palette_list(self.owner_id, items.iter().map(|(k, s)| (*k, s.clone())), action);
+            }
+        }
+    }
+}
+
