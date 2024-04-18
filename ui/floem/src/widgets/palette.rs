@@ -1,3 +1,5 @@
+use std::{default, hash::Hash, marker::PhantomData};
+
 use floem::{
     action::{add_overlay, remove_overlay},
     id::Id,
@@ -50,7 +52,7 @@ impl PaletteItem<usize> for (usize, String, String) {
     }
 }
 
-pub fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone + Copy) {
+fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone + Copy) {
     if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
         for id in get_id_path(owner_id) {
             if let Some(v) = w.borrow().get(&id) {
@@ -107,10 +109,10 @@ pub fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone 
     }
 }
 
-pub fn palette_list<K: Clone + Copy>(
+fn palette_list(
     owner_id: Id,
-    items: impl Iterator<Item = (K, String)>,
-    action: impl FnOnce(K) + 'static + Clone + Copy,
+    items: im::Vector<(usize, String)>,
+    action: impl FnOnce(usize) + 'static + Clone + Copy,
 ) {
     if let Some(viewport) = WINDOWS_VIEWPORT.with(|w| {
         for id in get_id_path(owner_id) {
@@ -120,7 +122,6 @@ pub fn palette_list<K: Clone + Copy>(
         }
         return None;
     }) {
-        let items = im::Vector::from_iter(items);
         const PALETTE_WIDTH: f64 = 300.;
 
         let current = create_rw_signal(0);
@@ -137,7 +138,7 @@ pub fn palette_list<K: Clone + Copy>(
                     items
                         .iter()
                         .filter(|(_, name)| name.contains(&doc.get().rope.to_string()))
-                        .map(|(id, name)| (*id, name.clone()))
+                        .map(|(id, name)| (id.clone(), name.clone()))
                         .collect(),
                 );
                 current.set(0);
@@ -149,7 +150,7 @@ pub fn palette_list<K: Clone + Copy>(
                 if current.get() >= sorted_items.get().len() {
                     current.set(sorted_items.get().len() - 1);
                 }
-                current_key.set(sorted_items.get()[current.get()].0);
+                current_key.set(sorted_items.get()[current.get()].0.clone());
             });
 
             container(
@@ -168,7 +169,7 @@ pub fn palette_list<K: Clone + Copy>(
                         })
                         .on_return(move || {
                             if !sorted_items.get().is_empty() {
-                                action(sorted_items.get()[current.get()].0);
+                                action(current_key.get());
                             }
                             focused_id.request_focus();
                             remove_overlay(id);
@@ -185,14 +186,16 @@ pub fn palette_list<K: Clone + Copy>(
                         move || sorted_items.get().clone(),
                         move |item: &(usize, String)| item.clone(),
                         move |item| {
+                            let key1 = item.0.clone();
+                            let key2 = item.0.clone();
                             label(move || item.1.to_string())
                                 .on_click_stop(move |_| {
-                                    action(item.0);
+                                    action(key1);
                                     remove_overlay(id);
                                     focused_id.request_focus();
                                 })
                                 .style(move |s| {
-                                    if current_key.get() == item.0 {
+                                    if current_key.get() == key2 {
                                         s.background(Color::SKY_BLUE)
                                     } else {
                                         s.background(Color::DARK_BLUE)
@@ -224,22 +227,24 @@ pub fn palette_list<K: Clone + Copy>(
     }
 }
 
-trait FnOnceCopyable<K>: FnOnce(K) + 'static + Clone + Copy {}
-
-pub struct PaletteBuilder<K: Clone + Copy> {
+pub struct PaletteBuilder {
     owner_id: Id,
     description: Option<String>,
-    items: Option<im::Vector<(K,String)>>,
-    action: Option<Box<dyn FnOnce(K) + 'static>>,
 }
 
-impl<K: Clone + Copy> PaletteBuilder<K> {
+pub struct PaletteListBuilder {
+    owner_id: Id,
+    description: Option<String>,
+    items: im::Vector<(usize, String)>,
+}
+
+
+
+impl PaletteBuilder {
     pub fn new(owner_id: Id) -> Self {
         Self {
             owner_id,
             description: None,
-            items: None,
-            action: None,
         }
     }
 
@@ -248,22 +253,20 @@ impl<K: Clone + Copy> PaletteBuilder<K> {
         self
     }
 
-    pub fn items(mut self, items: impl Iterator<Item = (K, String)>,) -> Self {
-        self.items = Some(im::Vector::from_iter(items));
-        self
-    }
-
-    pub fn action(mut self, action: impl FnOnce(K) + 'static) -> Self {
-        self.action = Some(Box::new(action));
-        self
-    }
-
-    pub fn build(self) {
-        if let Some(items) = self.items {
-            if let Some(action) = self.action {
-                palette_list(self.owner_id, items.iter().map(|(k, s)| (*k, s.clone())), action);
-            }
+    pub fn items(mut self, items: im::Vector<(usize, String)>) -> PaletteListBuilder {
+        PaletteListBuilder {
+            owner_id: self.owner_id,
+            description: self.description,
+            items: im::Vector::from_iter(items),
         }
+    }
+    pub fn build(self, action: impl FnOnce(String) + 'static + Clone + Copy) {
+        palette_free(self.owner_id, action);
     }
 }
 
+impl PaletteListBuilder {
+    pub fn build(self, action: impl FnOnce(usize) + 'static + Clone + Copy) {
+        palette_list(self.owner_id, self.items, action);
+    }
+}

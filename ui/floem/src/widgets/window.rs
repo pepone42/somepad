@@ -19,8 +19,6 @@ use crate::{
 };
 use crate::{documents::Documents, shortcut};
 
-use super::palette_list;
-
 pub enum WindowUpdateCommand {
     LaunchCommand(String),
 }
@@ -111,23 +109,23 @@ pub fn get_id_path(id: Id) -> Vec<Id> {
     v
 }
 
-pub trait Palette {
-    fn palette(
-        self,
-        items: impl Iterator<Item = (usize, String)>,
-        on_select: impl Fn(usize) + 'static + Clone + Copy,
-    );
-}
+// pub trait Palette {
+//     fn palette(
+//         self,
+//         items: impl Iterator<Item = (usize, String)>,
+//         on_select: impl Fn(usize) + 'static + Clone + Copy,
+//     );
+// }
 
-impl Palette for Id {
-    fn palette(
-        self,
-        items: impl Iterator<Item = (usize, String)>,
-        on_select: impl Fn(usize) + 'static + Clone + Copy,
-    ) {
-        palette_list(self, items, on_select);
-    }
-}
+// impl Palette for Id {
+//     fn palette<usize>(
+//         self,
+//         items: impl Iterator<Item = (usize, String)>,
+//         on_select: impl FnOnceCopyable<usize>,
+//     ) {
+//         palette_list(self, items, Box::new(on_select));
+//     }
+// }
 
 pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> EditorWindow {
     let w = EditorWindow {

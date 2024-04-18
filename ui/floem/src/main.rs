@@ -30,6 +30,7 @@ use std::os::raw;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::{Arc, Mutex};
 use std::{env, time};
+use widgets::PaletteBuilder;
 use window::{get_id_path, WindowUpdateCommand};
 
 use floem::view::{View, ViewData, Widget};
@@ -41,13 +42,10 @@ use floem::views::{
 use floem::{Application, Clipboard, EventPropagation, Renderer};
 use ndoc::rope_utils::{byte_to_grapheme, grapheme_to_byte};
 
+use crate::widgets::window;
 use ndoc::theme::THEME;
 use ndoc::{Document, Indentation, Selection};
 use shortcut::{event_match, Shortcut};
-use widgets::{palette_free, Palette};
-
-use crate::widgets::palette_list;
-use crate::widgets::window;
 
 pub fn color_syntect_to_peniko(col: ndoc::Color) -> Color {
     Color::rgba8(col.r, col.g, col.b, col.a)
@@ -121,6 +119,7 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     create_effect(move |_| match x.get() {
         _ => {
+            
             id.request_paint();
         }
     });
@@ -1018,16 +1017,29 @@ const GOTOLINE_CMD: ViewCommand = ViewCommand {
     action: |v| {
         let doc = v.doc.clone();
         let id = v.id();
-        palette_free(v.id(), move |line| {
-            doc.update(move |d| {
-                if let Ok(line_idx) = line.parse::<usize>() {
-                    let line_idx = line_idx.min(d.rope.len_lines()).max(1);
-                    let pos = d.char_to_position(d.rope.line_to_char(line_idx - 1));
-                    d.set_main_selection(pos, pos);
-                }
+        PaletteBuilder::new(id)
+            .description("Go To Line")
+            .build(move |line| {
+                doc.update(move |d| {
+                    if let Ok(line_idx) = line.parse::<usize>() {
+                        let line_idx = line_idx.min(d.rope.len_lines()).max(1);
+                        let pos = d.char_to_position(d.rope.line_to_char(line_idx - 1));
+                        d.set_main_selection(pos, pos);
+                    }
+                });
+                id.update_state_deferred(TextEditorCommand::FocusMainCursor);
             });
-            id.update_state_deferred(TextEditorCommand::FocusMainCursor);
-        });
+
+        // palette_free(v.id(), move |line| {
+        //     doc.update(move |d| {
+        //         if let Ok(line_idx) = line.parse::<usize>() {
+        //             let line_idx = line_idx.min(d.rope.len_lines()).max(1);
+        //             let pos = d.char_to_position(d.rope.line_to_char(line_idx - 1));
+        //             d.set_main_selection(pos, pos);
+        //         }
+        //     });
+        //     id.update_state_deferred(TextEditorCommand::FocusMainCursor);
+        // });
     },
 };
 
@@ -1138,19 +1150,18 @@ const SHOW_OPENED_DOC: WindowCommand = WindowCommand {
     action: |w| {
         let documents = w.documents.clone();
         if !documents.get().is_empty() {
-            w.id().palette(
-                //viewport,
-                documents
-                    .get()
-                    .order_by_mru()
-                    .iter()
-                    .enumerate()
-                    .map(|(_, d)| (d.get().id(), d.get().title().to_string())),
-                move |i| {
+            PaletteBuilder::new(w.id())
+                .items(
+                    documents
+                        .get()
+                        .order_by_mru()
+                        .iter()
+                        .map(|d| (d.get().id(), d.get().title().to_string()))
+                        .collect(),
+                )
+                .build(move |i| {
                     documents.update(|d| d.set_current(i));
-                    //disabled.set(false);
-                },
-            );
+                });
         }
     },
 };
