@@ -119,7 +119,6 @@ pub fn text_editor(doc: impl Fn() -> RwSignal<Document> + 'static) -> TextEditor
 
     create_effect(move |_| match x.get() {
         _ => {
-            
             id.request_paint();
         }
     });

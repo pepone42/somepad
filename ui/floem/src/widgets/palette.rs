@@ -253,7 +253,7 @@ impl PaletteBuilder {
         self
     }
 
-    pub fn items(mut self, items: im::Vector<(usize, String)>) -> PaletteListBuilder {
+    pub fn items(self, items: im::Vector<(usize, String)>) -> PaletteListBuilder {
         PaletteListBuilder {
             owner_id: self.owner_id,
             description: self.description,
