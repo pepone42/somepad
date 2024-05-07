@@ -332,6 +332,22 @@ impl Widget for TextEditor {
                     self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
+                Key::Named(NamedKey::ArrowLeft) if context.modifiers().word_select() => {
+                    self.doc.lock().move_selections_word(
+                        ndoc::MoveDirection::Left,
+                        context.modifiers().only_shift(),
+                    );
+                    self.refocus_main_selection(context.kludgine.font_system());
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::ArrowRight) if context.modifiers().word_select() => {
+                    self.doc.lock().move_selections_word(
+                        ndoc::MoveDirection::Right,
+                        context.modifiers().only_shift(),
+                    );
+                    self.refocus_main_selection(context.kludgine.font_system());
+                    return HANDLED;
+                }
                 Key::Named(NamedKey::ArrowLeft) => {
                     self.doc.lock().move_selections(
                         ndoc::MoveDirection::Left,
