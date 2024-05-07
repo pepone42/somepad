@@ -1,0 +1,20 @@
+[package]
+name = "somepad-cushy"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "xncode"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.82"
+cushy = {git = "https://github.com/khonsulabs/cushy"}
+ndoc = { version = "0.1.0", path = "../../ndoc" }
+serde = { version = "1.0.200", features = ["derive"] }
+smol_str = "0.2.1"
+toml = { version = "0.8.12", features = ["preserve_order"] }
+toml_edit = { version = "0.22.9", features = ["serde"] }
+directories = "5.0.1"

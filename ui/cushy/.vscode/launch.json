@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'somepad-cushy'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=somepad-cushy",
+                    "--package=somepad-cushy"
+                ],
+                "filter": {
+                    "name": "somepad-cushy",
+                    "kind": "bin"
+                }
+            },
+            "args": ["../somepad/ui/floem/src/main.rs"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'somepad-cushy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=somepad-cushy",
+                    "--package=somepad-cushy"
+                ],
+                "filter": {
+                    "name": "somepad-cushy",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
