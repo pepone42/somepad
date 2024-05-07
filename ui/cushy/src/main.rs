@@ -96,6 +96,23 @@ impl TextEditor {
             .0
             .into()
     }
+
+    fn refocus_main_selection(&self, font_system: &mut FontSystem) {
+        if self.doc.get().selections.len() == 1 {
+            let main_selection_head_x = self.grapheme_to_point(
+                self.doc.get().selections[0].head.line,
+                self.doc.get().selections[0].head.column,
+                font_system,
+            );
+            self.scroll_controller.lock().make_region_visible(Rect::new(
+                Point::new(
+                    Px::ZERO + main_selection_head_x - 10,
+                    Px::ZERO + Px::new(self.doc.get().selections[0].head.line as i32 * 20) - 10,
+                ),
+                Size::new(Px::new(35), Px::new(40)),
+            ));
+        }
+    }
 }
 
 impl Widget for TextEditor {
@@ -149,7 +166,7 @@ impl Widget for TextEditor {
                     cushy::kludgine::cosmic_text::Shaping::Advanced,
                 );
                 buffer.set_size(context.gfx.font_system(), 1000., 1000.);
-                
+
                 // context.gfx.draw_text(
                 //     Text::new(&i.to_string(), Color::WHITE).translate_by(Point::new(-translation.x, y)),
                 // );
@@ -292,7 +309,6 @@ impl Widget for TextEditor {
         is_synthetic: bool,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
-        
 
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
             let v = VIEW_SHORTCUT.lock().unwrap();
@@ -304,67 +320,52 @@ impl Widget for TextEditor {
             }
         }
 
-        let main_selection_head_x = self.grapheme_to_point(self.doc.get().selections[0].head.line, self.doc.get().selections[0].head.column, context.kludgine.font_system());
-        let _h = self.scroll_controller.with_clone(|sc| {
-            self.doc.for_each(move |d| {
-                if d.selections.len() == 1 {
-                    
-                    sc.lock().make_region_visible(Rect::new(
-                        Point::new(
-                            Px::ZERO + main_selection_head_x - 10,
-                            Px::ZERO + Px::new(d.selections[0].head.line as i32 * 20) -10 ,
-                        ),
-                        Size::new(Px::new(35), Px::new(40)),
-                    ));
-                }
-            })
-        });
-
         if input.state == ElementState::Pressed && matches!(input.logical_key, Key::Named(_)) {
             match input.logical_key {
                 Key::Named(NamedKey::Backspace) => {
-                    let mut doc = self.doc.lock();
-                    doc.backspace();
+                    self.doc.lock().backspace();
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Delete) => {
-                    let mut doc = self.doc.lock();
-                    doc.delete();
+                    self.doc.lock().delete();
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowLeft) => {
-                    let mut doc = self.doc.lock();
-                    doc.move_selections(
+                    self.doc.lock().move_selections(
                         ndoc::MoveDirection::Left,
                         context.modifiers().only_shift(),
                     );
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowRight) => {
-                    let mut doc = self.doc.lock();
-                    doc.move_selections(
+                    self.doc.lock().move_selections(
                         ndoc::MoveDirection::Right,
                         context.modifiers().only_shift(),
                     );
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowUp) => {
-                    let mut doc = self.doc.lock();
-                    doc.move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
+                    self.doc.lock().move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowDown) => {
-                    let mut doc = self.doc.lock();
-                    doc.move_selections(
+                    self.doc.lock().move_selections(
                         ndoc::MoveDirection::Down,
                         context.modifiers().only_shift(),
                     );
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Enter) => {
                     let mut doc = self.doc.lock();
                     let linefeed = doc.file_info.linefeed.to_string();
                     doc.insert(&linefeed);
+                    self.refocus_main_selection(context.kludgine.font_system());
                     return HANDLED;
                 }
                 _ => {}
@@ -373,11 +374,8 @@ impl Widget for TextEditor {
 
         match input.text {
             Some(t) if !context.modifiers().possible_shortcut() => {
-                let mut doc = self.doc.lock();
-
-                doc.insert(&t);
-
-                
+                self.doc.lock().insert(&t);
+                self.refocus_main_selection(context.kludgine.font_system());
 
                 HANDLED
             }

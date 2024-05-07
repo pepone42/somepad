@@ -112,46 +112,6 @@ impl MyScroll {
         enabled: Point<bool>,
         scroll_controller: Dynamic<ScrollController>,
     ) -> Self {
-        // let control_size = Dynamic::new(Size::default());
-
-        // let scroll = Dynamic::new(Point::default());
-
-        // scroll.with_clone(|s| {
-        //     control_size.with_clone(|c| {
-        //         let h = scroll_controller.for_each(move |sc| {
-        //             let viewport = Rect::new(-s.get(), c.get());
-        //             if viewport.contains(sc.region.origin)
-        //                 && viewport.contains(sc.region.origin + sc.region.size)
-        //             {
-        //                 return;
-        //             }
-
-        //             let x = if sc.region.origin.x <= viewport.origin.x {
-        //                 -sc.region.origin.x
-        //             } else if sc.region.origin.x + sc.region.size.width
-        //                 >= viewport.origin.x + viewport.size.width
-        //             {
-        //                 viewport.size.width - (sc.region.origin.x + sc.region.size.width)
-        //             } else {
-        //                 s.get().x
-        //             };
-
-        //             let y = if sc.region.origin.y <= viewport.origin.y {
-        //                 -sc.region.origin.y
-        //             } else if sc.region.origin.y + sc.region.size.height
-        //                 >= viewport.origin.y + viewport.size.height
-        //             {
-        //                 viewport.size.height - (sc.region.origin.y + sc.region.size.height)
-        //             } else {
-        //                 s.get().y
-        //             };
-
-        //             s.set(dbg!(Point::new(x, y)));
-        //         });
-        //         //TODO: we should store the callback handle in self, so it can be droped
-        //         h.persist();
-        //     });
-        // });
 
         Self {
             contents: WidgetRef::new(contents),
