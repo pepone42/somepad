@@ -22,19 +22,62 @@ use cushy::widgets::scroll::{self, ScrollBarThickness};
 use cushy::window::DeviceId;
 use cushy::{define_components, ConstraintLimit};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ScrollController {
     scroll: Point<Px>,
-    region: Rect<Px>,
+    //region: Rect<Px>,
+    control_size: Size<Px>,
+    max_scroll: Point<Px>,
 }
 
 impl ScrollController {
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
-        self.region = region;
+        let viewport = Rect::new(-self.scroll, self.control_size);
+        if viewport.contains(region.origin)
+            && viewport.contains(region.origin + region.size)
+        {
+            return;
+        }
+
+        let x = if region.origin.x <= viewport.origin.x {
+            -region.origin.x
+        } else if region.origin.x + region.size.width
+            >= viewport.origin.x + viewport.size.width
+        {
+            viewport.size.width - (region.origin.x + region.size.width)
+        } else {
+            self.scroll.x
+        };
+
+        let y = if region.origin.y <= viewport.origin.y {
+            -region.origin.y
+        } else if region.origin.y + region.size.height
+            >= viewport.origin.y + viewport.size.height
+        {
+            viewport.size.height - (region.origin.y + region.size.height)
+        } else {
+            self.scroll.y
+        };
+
+        self.scroll = Point::new(x, y);
     }
 
     pub fn scroll_to(&mut self, scroll: Point<Px>) {
         self.scroll = scroll;
+    }
+
+    fn constrained_scroll(scroll: Point<Px>, max_scroll: Point<Px>) -> Point<Px> {
+        scroll.max(max_scroll).min(Point::default())
+    }
+
+    fn constrain_scroll(&mut self) -> (Point<Px>, Point<Px>) {
+        let scroll = dbg!(self.scroll);
+        let max_scroll = self.max_scroll;
+        let clamped = Self::constrained_scroll(scroll, max_scroll);
+        if clamped != scroll {
+            self.scroll = clamped;
+        }
+        (clamped, max_scroll)
     }
 }
 
@@ -43,11 +86,9 @@ impl ScrollController {
 pub struct MyScroll {
     contents: WidgetRef,
     content_size: Size<Px>,
-    control_size: Dynamic<Size<Px>>,
-    scroll: Dynamic<Point<Px>>,
-    scroll_controller: DynamicReader<ScrollController>,
+    controller: Dynamic<ScrollController>,
     enabled: Point<bool>,
-    max_scroll: Dynamic<Point<Px>>,
+
     scrollbar_opacity: Dynamic<ZeroToOne>,
     scrollbar_opacity_animation: OpacityAnimationState,
     horizontal_bar: ScrollbarInfo,
@@ -71,50 +112,52 @@ impl MyScroll {
         enabled: Point<bool>,
         scroll_controller: Dynamic<ScrollController>,
     ) -> Self {
-        let scroll_controller = scroll_controller.into_reader();
-        let control_size = Dynamic::new(Size::default());
+        // let control_size = Dynamic::new(Size::default());
 
-        let scroll = Dynamic::new(Point::default());
+        // let scroll = Dynamic::new(Point::default());
 
-        scroll.with_clone(|s| {
-            control_size.with_clone(|c| {
-                let h = scroll_controller.for_each(move |sc| {
-                    let viewport = Rect::new(-s.get(), c.get());
-                    if viewport.contains(sc.region.origin) && viewport.contains(sc.region.origin + sc.region.size) {
-                        return;
-                    }
+        // scroll.with_clone(|s| {
+        //     control_size.with_clone(|c| {
+        //         let h = scroll_controller.for_each(move |sc| {
+        //             let viewport = Rect::new(-s.get(), c.get());
+        //             if viewport.contains(sc.region.origin)
+        //                 && viewport.contains(sc.region.origin + sc.region.size)
+        //             {
+        //                 return;
+        //             }
 
-                    let x = if sc.region.origin.x <= viewport.origin.x {
-                        -sc.region.origin.x
-                    } else if sc.region.origin.x + sc.region.size.width >= viewport.origin.x + viewport.size.width {
-                        viewport.size.width - (sc.region.origin.x + sc.region.size.width)
-                    } else {
-                        s.get().x
-                    };
+        //             let x = if sc.region.origin.x <= viewport.origin.x {
+        //                 -sc.region.origin.x
+        //             } else if sc.region.origin.x + sc.region.size.width
+        //                 >= viewport.origin.x + viewport.size.width
+        //             {
+        //                 viewport.size.width - (sc.region.origin.x + sc.region.size.width)
+        //             } else {
+        //                 s.get().x
+        //             };
 
-                    let y = if sc.region.origin.y <= viewport.origin.y {
-                        -sc.region.origin.y
-                    } else if sc.region.origin.y + sc.region.size.height >= viewport.origin.y + viewport.size.height {
-                        viewport.size.height - (sc.region.origin.y + sc.region.size.height)
-                    } else {
-                        s.get().y
-                    };
+        //             let y = if sc.region.origin.y <= viewport.origin.y {
+        //                 -sc.region.origin.y
+        //             } else if sc.region.origin.y + sc.region.size.height
+        //                 >= viewport.origin.y + viewport.size.height
+        //             {
+        //                 viewport.size.height - (sc.region.origin.y + sc.region.size.height)
+        //             } else {
+        //                 s.get().y
+        //             };
 
-                    s.set(dbg!(Point::new(x, y)));
-                });
-                //TODO: we should store the callback handle in self, so it can be droped
-                h.persist();
-            });
-        });
+        //             s.set(dbg!(Point::new(x, y)));
+        //         });
+        //         //TODO: we should store the callback handle in self, so it can be droped
+        //         h.persist();
+        //     });
+        // });
 
         Self {
             contents: WidgetRef::new(contents),
             enabled,
             content_size: Size::default(),
-            control_size,
-            scroll,
-            scroll_controller,
-            max_scroll: Dynamic::new(Point::default()),
+            controller: scroll_controller,
             scrollbar_opacity: Dynamic::default(),
             scrollbar_opacity_animation: OpacityAnimationState {
                 handle: AnimationHandle::new(),
@@ -150,20 +193,6 @@ impl MyScroll {
         scroll_controller: Dynamic<ScrollController>,
     ) -> Self {
         Self::construct(contents, Point::new(false, true), scroll_controller)
-    }
-
-    fn constrained_scroll(scroll: Point<Px>, max_scroll: Point<Px>) -> Point<Px> {
-        scroll.max(max_scroll).min(Point::default())
-    }
-
-    fn constrain_scroll(&mut self) -> (Point<Px>, Point<Px>) {
-        let scroll = dbg!(self.scroll.get());
-        let max_scroll = self.max_scroll.get();
-        let clamped = Self::constrained_scroll(scroll, max_scroll);
-        if clamped != scroll {
-            self.scroll.set(clamped);
-        }
-        (clamped, max_scroll)
     }
 
     fn show_scrollbars(&mut self, context: &mut EventContext<'_>) {
@@ -269,12 +298,14 @@ impl Widget for MyScroll {
         available_space: Size<ConstraintLimit>,
         context: &mut LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
+        let control_size = self.controller.get().control_size;
+
         self.bar_width = context
             .get(&ScrollBarThickness)
             .into_px(context.gfx.scale());
         self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
 
-        let (mut scroll, current_max_scroll) = dbg!(self.constrain_scroll());
+        let (mut scroll, current_max_scroll) = dbg!(self.controller.get().constrain_scroll());
 
         let max_extents = Size::new(
             if self.enabled.x {
@@ -325,13 +356,13 @@ impl Widget for MyScroll {
         };
         let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
         if current_max_scroll != new_max_scroll {
-            self.max_scroll.set(new_max_scroll);
+            self.controller.lock().max_scroll = new_max_scroll;
             scroll = scroll.max(new_max_scroll);
         }
 
         // Preserve the current scroll if the widget has resized
         if self.content_size.width != new_content_size.width
-            || self.control_size.get().width != control_size.width
+            || self.controller.get().control_size.width != control_size.width
         {
             self.content_size.width = new_content_size.width;
             let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
@@ -339,7 +370,7 @@ impl Widget for MyScroll {
         }
 
         if self.content_size.height != new_content_size.height
-            || self.control_size.get().height != control_size.height
+            || self.controller.get().control_size.height != control_size.height
         {
             self.content_size.height = new_content_size.height;
             let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
@@ -348,12 +379,13 @@ impl Widget for MyScroll {
         // Set the current scroll, but prevent immediately triggering
         // invalidate.
         {
-            let mut current_scroll = self.scroll.lock();
-            current_scroll.prevent_notifications();
-            *current_scroll = scroll;
+            let mut controller = self.controller.lock();
+            controller.prevent_notifications();
+            controller.scroll = scroll;
+            controller.control_size = control_size;
         }
-        context.invalidate_when_changed(&self.scroll);
-        self.control_size.set(control_size);
+        context.invalidate_when_changed(&self.controller);
+
         self.content_size = new_content_size;
 
         // Round the scroll to the nearest pixel to prevent text artefacts
@@ -381,15 +413,17 @@ impl Widget for MyScroll {
             MouseScrollDelta::LineDelta(x, y) => Point::new(x, y) * self.line_height.into_float(),
             MouseScrollDelta::PixelDelta(px) => Point::new(px.x.cast(), px.y.cast()),
         };
-        let mut scroll = self.scroll.lock();
-        let old_scroll = *scroll;
-        let new_scroll =
-            Self::constrained_scroll(*scroll + amount.cast::<Px>(), self.max_scroll.get());
+        let mut controller = self.controller.lock();
+        let old_scroll = controller.scroll;
+        let new_scroll = ScrollController::constrained_scroll(
+            controller.scroll + amount.cast::<Px>(),
+            controller.max_scroll,
+        );
         if old_scroll == new_scroll {
             IGNORED
         } else {
-            *scroll = new_scroll;
-            drop(scroll);
+            controller.scroll = new_scroll;
+            drop(controller);
 
             self.show_scrollbars(context);
             context.set_needs_redraw();
@@ -405,10 +439,10 @@ impl Widget for MyScroll {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
-        let relative_x = (self.control_size.get().width - location.x).max(Px::ZERO);
+        let relative_x = (self.controller.get().control_size.width - location.x).max(Px::ZERO);
         let in_vertical_area = self.enabled.y && relative_x <= self.bar_width;
 
-        let relative_y = (self.control_size.get().height - location.y).max(Px::ZERO);
+        let relative_y = (self.controller.get().control_size.height - location.y).max(Px::ZERO);
         let in_horizontal_area = self.enabled.x && relative_y <= self.bar_width;
 
         if matches!(
@@ -419,7 +453,7 @@ impl Widget for MyScroll {
         }
 
         self.drag.start = location;
-        self.drag.start_scroll = self.scroll.get();
+        self.drag.start_scroll = self.controller.get().scroll;
         self.drag.horizontal = in_horizontal_area;
         self.drag.in_bar = if in_horizontal_area {
             let relative = location.x - self.horizontal_bar.offset;
@@ -432,13 +466,12 @@ impl Widget for MyScroll {
         // If we clicked in the open area, we need to jump to the new location
         // immediately.
         if !self.drag.in_bar {
+            let controller = self.controller.get();
             self.drag.update(
                 location,
-                &self.scroll,
+                &self.controller,
                 &self.horizontal_bar,
                 &self.vertical_bar,
-                self.max_scroll.get(),
-                self.control_size.get(),
             );
         }
 
@@ -457,11 +490,9 @@ impl Widget for MyScroll {
     ) {
         self.drag.update(
             location,
-            &self.scroll,
+            &self.controller,
             &self.horizontal_bar,
             &self.vertical_bar,
-            self.max_scroll.get(),
-            self.control_size.get(),
         );
     }
 
@@ -476,7 +507,7 @@ impl Widget for MyScroll {
 
         if self.drag.mouse_buttons_down == 0 {
             if location.map_or(false, |location| {
-                Rect::from(self.control_size.get()).contains(location)
+                Rect::from(self.controller.get().control_size).contains(location)
             }) {
                 self.scrollbar_opacity_animation.handle.clear();
                 self.show_scrollbars(context);
@@ -497,6 +528,7 @@ impl Widget for MyScroll {
 #[derive(Default, Debug)]
 struct DragInfo {
     mouse_buttons_down: usize,
+    controller: Dynamic<ScrollController>,
     start: Point<Px>,
     start_scroll: Point<Px>,
     horizontal: bool,
@@ -507,33 +539,32 @@ impl DragInfo {
     fn update(
         &self,
         location: Point<Px>,
-        dynamic_scroll: &Dynamic<Point<Px>>,
+        controller: &Dynamic<ScrollController>,
         horizontal_bar: &ScrollbarInfo,
         vertical_bar: &ScrollbarInfo,
-        max_scroll: Point<Px>,
-        control_size: Size<Px>,
+        //max_scroll: Point<Px>,
+        //control_size: Size<Px>,
     ) {
-        let mut scroll = dynamic_scroll.get();
+        let mut controller = controller.lock();
         if self.horizontal {
-            scroll.x = self.update_bar(
+            controller.scroll.x = self.update_bar(
                 location.x,
                 self.start.x,
-                max_scroll.x,
+                controller.max_scroll.x,
                 self.start_scroll.x,
                 horizontal_bar,
-                control_size.width,
+                controller.control_size.width,
             );
         } else {
-            scroll.y = self.update_bar(
+            controller.scroll.y = self.update_bar(
                 location.y,
                 self.start.y,
-                max_scroll.y,
+                controller.max_scroll.y,
                 self.start_scroll.y,
                 vertical_bar,
-                control_size.height,
+                controller.control_size.height,
             );
         }
-        dbg!(dynamic_scroll.set(scroll));
     }
 
     fn update_bar(
