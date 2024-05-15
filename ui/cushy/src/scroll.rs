@@ -71,7 +71,7 @@ impl ScrollController {
     }
 
     fn constrain_scroll(&mut self) -> (Point<Px>, Point<Px>) {
-        let scroll = dbg!(self.scroll);
+        let scroll = self.scroll;
         let max_scroll = self.max_scroll;
         let clamped = Self::constrained_scroll(scroll, max_scroll);
         if clamped != scroll {
@@ -265,7 +265,7 @@ impl Widget for MyScroll {
             .into_px(context.gfx.scale());
         self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
 
-        let (mut scroll, current_max_scroll) = dbg!(self.controller.get().constrain_scroll());
+        let (mut scroll, current_max_scroll) = self.controller.get().constrain_scroll();
 
         let max_extents = Size::new(
             if self.enabled.x {
@@ -353,7 +353,7 @@ impl Widget for MyScroll {
         scroll.x = scroll.x.ceil();
 
         let region = Rect::new(
-            dbg!(scroll),
+            scroll,
             self.content_size
                 .min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
         );

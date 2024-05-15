@@ -9,8 +9,10 @@ use std::collections::HashMap;
 use std::default;
 use std::ops::Deref;
 use std::os::raw;
+use std::process::Child;
 use std::sync::{Arc, Mutex};
 
+use cushy::context::EventContext;
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
     Abs, FloatConversion, IntoSigned, Point, Px2D, Rect, Roots, Round, ScreenScale, Size, Zero,
@@ -24,13 +26,17 @@ use cushy::kludgine::shapes::{Path, PathBuilder, Shape};
 use cushy::kludgine::text::{MeasuredText, Text};
 use cushy::kludgine::{Drawable, DrawableExt};
 use cushy::styles::components::CornerRadius;
-use cushy::styles::{Color, CornerRadii, Dimension, FamilyOwned};
-use cushy::value::{Destination, Dynamic, IntoReadOnly, Source};
-use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetInstance, WidgetRef, WidgetTag,
-    WrapperWidget, HANDLED, IGNORED,
+use cushy::styles::{Color, CornerRadii, Dimension, FamilyOwned, VisualOrder};
+use cushy::value::{
+    Destination, Dynamic, IntoDynamic, IntoReadOnly, IntoValue, Source, Switchable,
 };
-use cushy::widgets::{color, Custom, Data, Resize};
+use cushy::widget::{
+    self, EventHandling, MakeWidget, MakeWidgetList, MakeWidgetWithTag, Widget, WidgetId,
+    WidgetInstance, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED,
+};
+use cushy::widgets::input::{self, InputValue};
+use cushy::widgets::layers::{OverlayLayer, Overlayable};
+use cushy::widgets::{color, Custom, Data, Input, Layers, Resize, Switcher};
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy, ModifiersExt, Run};
 use ndoc::{rope_utils, Document};
@@ -48,16 +54,16 @@ pub struct TextEditor {
 
 impl TextEditor {
     fn point_to_grapheme(
-        &self,
+        doc: &ndoc::Document,
         line: usize,
         point: Point<Px>,
         font_system: &mut FontSystem,
     ) -> usize {
         // TODO: tab support
-        let raw_text = self.doc.get().rope.line(line).to_string();
+        let raw_text = doc.rope.line(line).to_string();
         //cushy::kludgine::cosmic_text::Buffer::new(font_system, Metrics::new(font_size, line_height))
         let mut buffer = Buffer::new(font_system, Metrics::new(15.0, 20.0));
-        buffer.set_size(font_system, 1000., 1000.);
+        buffer.set_size(font_system, 10000., 20.);
         buffer.set_text(
             font_system,
             &raw_text,
@@ -68,12 +74,17 @@ impl TextEditor {
             .hit(point.x.into_float(), point.y.into_float())
             .unwrap_or_default()
             .index;
-        rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), byte_idx)
+        rope_utils::byte_to_grapheme(&doc.rope.line(line as _), byte_idx)
     }
 
-    fn grapheme_to_point(&self, line: usize, index: usize, font_system: &mut FontSystem) -> Px {
+    fn grapheme_to_point(
+        doc: &ndoc::Document,
+        line: usize,
+        index: usize,
+        font_system: &mut FontSystem,
+    ) -> Px {
         // TODO: tab support
-        let raw_text = self.doc.get().rope.line(line).to_string();
+        let raw_text = doc.rope.line(line).to_string();
         //cushy::kludgine::cosmic_text::Buffer::new(font_system, Metrics::new(font_size, line_height))
         let mut buffer = Buffer::new(font_system, Metrics::new(15.0, 20.0));
         buffer.set_size(font_system, 1000., 1000.);
@@ -83,7 +94,7 @@ impl TextEditor {
             Attrs::new().family(Family::Monospace),
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
-        let col = rope_utils::grapheme_to_byte(&self.doc.get().rope.line(line), index);
+        let col = rope_utils::grapheme_to_byte(&doc.rope.line(line), index);
         let c_start = Cursor::new(0, col);
         let c_end = Cursor::new(0, col + 1);
         buffer.line_layout(font_system, 0);
@@ -97,12 +108,13 @@ impl TextEditor {
             .into()
     }
 
-    fn refocus_main_selection(&self, font_system: &mut FontSystem) {
+    fn refocus_main_selection(&self) {
         if self.doc.get().selections.len() == 1 {
-            let main_selection_head_x = self.grapheme_to_point(
+            let main_selection_head_x = TextEditor::grapheme_to_point(
+                &self.doc.get(),
                 self.doc.get().selections[0].head.line,
                 self.doc.get().selections[0].head.column,
-                font_system,
+                &mut FONT_SYSTEM.lock().unwrap(),
             );
             self.scroll_controller.lock().make_region_visible(Rect::new(
                 Point::new(
@@ -118,7 +130,6 @@ impl TextEditor {
 impl Widget for TextEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let first_line = -context.gfx.translation().y / 20.0;
-        let translation = context.gfx.translation();
         let last_line = first_line
             + (context
                 .gfx
@@ -145,7 +156,7 @@ impl Widget for TextEditor {
             context.gfx.set_text_attributes(attrs);
 
             if let Some(sl) = doc.get_style_line_info(i as _) {
-                let mut buffer = Buffer::new(context.gfx.font_system(), Metrics::new(15.0, 20.0));
+                let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), Metrics::new(15.0, 20.0));
                 let mut spans = Vec::new();
                 for s in sl.iter() {
                     let t = &raw_text[s.range.start..s.range.end];
@@ -160,12 +171,12 @@ impl Widget for TextEditor {
                     spans.push((t, attrs.color(col)));
                 }
                 buffer.set_rich_text(
-                    context.gfx.font_system(),
+                    &mut FONT_SYSTEM.lock().unwrap(),
                     spans,
                     attrs,
                     cushy::kludgine::cosmic_text::Shaping::Advanced,
                 );
-                buffer.set_size(context.gfx.font_system(), 1000., 1000.);
+                buffer.set_size(&mut FONT_SYSTEM.lock().unwrap(), 10000., 20.);
 
                 // context.gfx.draw_text(
                 //     Text::new(&i.to_string(), Color::WHITE).translate_by(Point::new(-translation.x, y)),
@@ -193,9 +204,13 @@ impl Widget for TextEditor {
             .filter(|s| s.head.line >= first_line && s.head.line < last_line)
         {
             //dbg!(s.start(), s.end());
-            let head = self
-                .grapheme_to_point(s.head.line, s.head.column, context.gfx.font_system())
-                .floor();
+            let head = TextEditor::grapheme_to_point(
+                &doc,
+                s.head.line,
+                s.head.column,
+                &mut FONT_SYSTEM.lock().unwrap(),
+            )
+            .floor();
             //dbg!(start, end);
 
             context.gfx.draw_shape(
@@ -254,14 +269,15 @@ impl Widget for TextEditor {
         available_space: Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
-        let doc = self.doc.get();
-        let height = doc.rope.len_lines() as f32 * 20.0;
+        let height = self.doc.get().rope.len_lines() as f32 * 20.0;
 
         //dbg!(context.gfx.translation());
         self.viewport.set(Rect::new(
             context.gfx.translation().abs(),
             context.gfx.size().into_px(context.gfx.scale()),
         ));
+        // dbg!("qsdfqsdf");
+        // //self.refocus_main_selection(&mut FONT_SYSTEM.lock().unwrap());
 
         Size::new(UPx::new(1000), UPx::new(height.ceil() as _))
     }
@@ -285,13 +301,17 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
+        if !context.enabled() {
+            return IGNORED;
+        }
         context.focus();
 
         let line = ((self.viewport.get().origin.y + location.y) / 20)
             .floor()
             .get();
 
-        let char_idx = self.point_to_grapheme(
+        let char_idx = TextEditor::point_to_grapheme(
+            &self.doc.get(),
             line as _,
             Point::new(location.x, 1.into()),
             context.kludgine.font_system(),
@@ -309,12 +329,16 @@ impl Widget for TextEditor {
         is_synthetic: bool,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
+        if !context.enabled() {
+            return IGNORED;
+        }
 
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
             let v = VIEW_SHORTCUT.lock().unwrap();
+            let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
-                    (cmd.action)(self);
+                    (cmd.action)(id, self);
                     return HANDLED;
                 }
             }
@@ -324,12 +348,12 @@ impl Widget for TextEditor {
             match input.logical_key {
                 Key::Named(NamedKey::Backspace) => {
                     self.doc.lock().backspace();
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Delete) => {
                     self.doc.lock().delete();
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowLeft) if context.modifiers().word_select() => {
@@ -337,7 +361,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Left,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowRight) if context.modifiers().word_select() => {
@@ -345,7 +369,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Right,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowLeft) => {
@@ -353,7 +377,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Left,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowRight) => {
@@ -361,12 +385,14 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Right,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowUp) => {
-                    self.doc.lock().move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.doc
+                        .lock()
+                        .move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowDown) => {
@@ -374,14 +400,14 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Down,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Enter) => {
                     let mut doc = self.doc.lock();
                     let linefeed = doc.file_info.linefeed.to_string();
                     doc.insert(&linefeed);
-                    self.refocus_main_selection(context.kludgine.font_system());
+                    self.refocus_main_selection();
                     return HANDLED;
                 }
                 _ => {}
@@ -391,7 +417,7 @@ impl Widget for TextEditor {
         match input.text {
             Some(t) if !context.modifiers().possible_shortcut() => {
                 self.doc.lock().insert(&t);
-                self.refocus_main_selection(context.kludgine.font_system());
+                self.refocus_main_selection();
 
                 HANDLED
             }
@@ -400,18 +426,173 @@ impl Widget for TextEditor {
     }
 }
 
+#[derive(PartialEq, Eq, Clone)]
+pub struct Palette {
+    child: WidgetRef,
+    action: Dynamic<Option<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>>,
+    input: Dynamic<String>,
+}
+
+impl Palette {
+    pub fn new() -> Self {
+        let input = Dynamic::new(String::default());
+        let child = "test"
+            .and(
+                Custom::new(
+                    Input::new(input.clone()), // .on_key(move |k| {
+                                               //     match dbg!(k).logical_key {
+                                               //         Key::Named(NamedKey::Enter) => {
+                                               //             if let Some(pa) = pa.get() {
+                                               //                 (pa)(0, input.get().clone());
+                                               //             }
+                                               //             //pr.set(PaletteResult::Value(input.get().clone()));
+                                               //             pal.set(false);
+                                               //             HANDLED
+                                               //         }
+                                               //         _ => IGNORED,
+                                               //     }
+                                               // })
+                )
+                .on_mounted(move |c| c.focus()),
+            )
+            .into_rows()
+            .centered()
+            .align_top();
+        Palette {
+            child: child.make_widget().widget_ref(),
+            action: PALETTE_ACTION.clone(),
+            input,
+        }
+    }
+}
+
+impl std::fmt::Debug for Palette {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Palette")
+            .field("child", &self.child)
+            .field("action", &"(closure Fn Skipped)")
+            .finish()
+    }
+}
+
+impl WrapperWidget for Palette {
+    fn child_mut(&mut self) -> &mut WidgetRef {
+        &mut self.child
+    }
+
+    fn keyboard_input(
+        &mut self,
+        device_id: cushy::window::DeviceId,
+        input: KeyEvent,
+        is_synthetic: bool,
+        context: &mut context::EventContext<'_>,
+    ) -> EventHandling {
+        match input.logical_key {
+            Key::Named(NamedKey::Enter) => {
+                self.action.get().unwrap()(
+                    &mut context.for_other(&PALETTE_OWNER.get().unwrap()).unwrap(),
+                    0,
+                    self.input.get().clone(),
+                );
+                PALETTE.set(false);
+
+                HANDLED
+            }
+            _ => IGNORED,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+pub enum PaletteResult {
+    #[default]
+    None,
+    Value(String),
+    ListItem(usize),
+}
+
 #[derive(Debug)]
 pub struct EditorWindow {
     child: WidgetRef,
     documents: Dynamic<Vec<Dynamic<Document>>>,
+    // palette: Dynamic<bool>,
+    // palette_action: Dynamic<Option<Arc<dyn Fn(usize, String) + 'static + Send + Sync>>>,
+    // palette_result: Dynamic<PaletteResult>,
+}
+
+// impl std::fmt::Debug for EditorWindow {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("EditorWindow")
+//             .field("child", &self.child)
+//             .field("documents", &self.documents)
+//             .field("palette", &self.palette)
+//             .field("palette_result", &self.palette_result)
+//             .finish()
+//     }
+// }
+
+static PALETTE: Lazy<Dynamic<bool>> = Lazy::new(|| Dynamic::new(false));
+static PALETTE_ACTION: Lazy<
+    Dynamic<Option<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>>,
+> = Lazy::new(|| Dynamic::new(None));
+static PALETTE_OWNER: Lazy<Dynamic<Option<WidgetId>>> = Lazy::new(|| Dynamic::new(None));
+
+pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+    owner: WidgetId,
+    action: F,
+) {
+    *PALETTE_ACTION.lock() = Some(Arc::new(action));
+    PALETTE.set(true);
+    PALETTE_OWNER.set(Some(owner));
 }
 
 impl EditorWindow {
     #[must_use]
     pub fn new(child: impl MakeWidget) -> impl MakeWidget {
+        let palette = PALETTE.clone();
+        let enabled = palette.map_each(|p| !*p);
+
+        let child = child.make_widget();
+        let child_id = child.id();
+        let input = Dynamic::new(String::new());
+        let palette_result = Dynamic::new(PaletteResult::None);
+        let palette_action = PALETTE_ACTION.clone();
+        let pr = palette_result.clone();
+        let pal = palette.clone();
+        let pa = palette_action.clone();
+
+        let w = child
+            .with_enabled(enabled)
+            .and(palette.clone().switcher(move |current, active| {
+                if *current {
+                    let pr = pr.clone();
+                    let input = input.clone();
+                    let pal = pal.clone();
+                    let pa = pa.clone();
+
+                    Palette::new().make_widget()
+                } else {
+                    match pr.clone().get() {
+                        PaletteResult::Value(v) => {
+                            dbg!(v);
+                        }
+                        PaletteResult::ListItem(i) => {
+                            dbg!(i);
+                        }
+                        PaletteResult::None => (),
+                    }
+                    Custom::empty()
+                        .on_mounted(move |c| c.for_other(&child_id).unwrap().focus())
+                        .make_widget()
+                }
+            }))
+            .into_layers();
         EditorWindow {
-            child: child.widget_ref(),
+            child: w.widget_ref(),
             documents: Dynamic::new(Vec::new()),
+            // palette,
+            // palette_action,
+            // palette_result: palette_result.clone(),
         }
     }
 
@@ -450,7 +631,7 @@ impl WrapperWidget for EditorWindow {
 pub struct ViewCommand {
     pub name: &'static str,
     pub id: &'static str,
-    pub action: fn(&TextEditor),
+    pub action: fn(WidgetId, &TextEditor),
 }
 
 #[derive(Clone, Copy)]
@@ -470,12 +651,38 @@ pub static WINDOW_SHORTCUT: Lazy<Arc<Mutex<HashMap<Shortcut, WindowCommand>>>> =
 pub static WINDOW_COMMAND_REGISTRY: Lazy<Arc<Mutex<HashMap<&'static str, WindowCommand>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
+pub static FONT_SYSTEM: Lazy<Arc<Mutex<FontSystem>>> =
+    Lazy::new(|| Arc::new(Mutex::new(FontSystem::new())));
+
 const NEW_DOC: WindowCommand = WindowCommand {
     name: "New Document",
     id: "window.newdoc",
     action: |w| {
         dbg!("New doc!");
         w.add_new_doc(Dynamic::new(Document::default()));
+    },
+};
+
+const GOTO_LINE: ViewCommand = ViewCommand {
+    name: "Go to Line",
+    id: "editor.goto_line",
+    action: |id, v| {
+        let doc = v.doc.clone();
+
+        ask(id, move |c, _, s| {
+            if let Ok(line) = s.parse() {
+                {
+                    let mut doc = doc.lock();
+                    let p = ndoc::Position::new(line, 0);
+                    doc.set_main_selection(p, p);
+                }
+                c.widget()
+                    .lock()
+                    .downcast_ref::<TextEditor>()
+                    .unwrap()
+                    .refocus_main_selection();
+            }
+        });
     },
 };
 
@@ -491,6 +698,10 @@ fn main() -> anyhow::Result<()> {
         .lock()
         .unwrap()
         .insert(NEW_DOC.id, NEW_DOC);
+    VIEW_COMMAND_REGISTRY
+        .lock()
+        .unwrap()
+        .insert(GOTO_LINE.id, GOTO_LINE);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts

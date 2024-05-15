@@ -23,7 +23,7 @@ impl Default for Settings {
     fn default() -> Self {
         let mut shortcuts = HashMap::new();
 
-        // shortcuts.insert(crate::GOTOLINE_CMD.id.to_string(),shortcut!(Ctrl + g));
+        shortcuts.insert(crate::GOTO_LINE.id.to_string(),shortcut!(Ctrl + g));
         // shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
         // shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
         // shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));
