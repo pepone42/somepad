@@ -7,7 +7,7 @@ use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
 use cushy::value::{Destination, Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, WidgetId, WidgetRef, WrapperWidget, HANDLED, IGNORED,
+    EventHandling, MakeWidget, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED,
 };
 
 use cushy::widgets::{Custom, Input};
@@ -18,7 +18,7 @@ use cushy::{context, Lazy};
 pub struct Palette {
     description: Dynamic<String>,
     child: WidgetRef,
-    action: Dynamic<Option<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>>,
+    action: Dynamic<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>,
     input: Dynamic<String>,
 }
 
@@ -26,7 +26,8 @@ impl Palette {
     pub fn new() -> Self {
         let input = Dynamic::new(String::default());
         let pal = Custom::new(
-            PALETTE_DESC.clone()
+            PALETTE_STATE.get().description
+                .clone()
                 .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
                 .into_rows()
                 .width(Lp::new(250))
@@ -46,9 +47,9 @@ impl Palette {
         //let child = Custom::empty().size(Size::new(width, height))
 
         Palette {
-            description: PALETTE_DESC.clone(),
+            description: PALETTE_STATE.get().description.into(),
             child: pal.make_widget().widget_ref(),
-            action: PALETTE_ACTION.clone(),
+            action: Dynamic::new(PALETTE_STATE.get().action.clone()),
             input,
         }
     }
@@ -77,17 +78,17 @@ impl WrapperWidget for Palette {
     ) -> EventHandling {
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
-                self.action.get().unwrap()(
-                    &mut context.for_other(&PALETTE_OWNER.get().unwrap()).unwrap(),
+                self.action.get()(
+                    &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                     0,
                     self.input.get().clone(),
                 );
-                PALETTE.set(false);
+                PALETTE_STATE.lock().active = false;
 
                 HANDLED
             }
             Key::Named(NamedKey::Escape) => {
-                PALETTE.set(false);
+                PALETTE_STATE.lock().active = false;
                 HANDLED
             }
             _ => IGNORED,
@@ -109,25 +110,50 @@ impl WrapperWidget for Palette {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut EventContext<'_>,
     ) -> EventHandling {
-        PALETTE.set(false);
+        PALETTE_STATE.lock().active = false;
         HANDLED
     }
 }
 
-pub static PALETTE: Lazy<Dynamic<bool>> = Lazy::new(|| Dynamic::new(false));
-static PALETTE_DESC: Lazy<Dynamic<String>> = Lazy::new(|| Dynamic::new(String::default()));
-static PALETTE_ACTION: Lazy<
-    Dynamic<Option<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>>,
-> = Lazy::new(|| Dynamic::new(None));
-static PALETTE_OWNER: Lazy<Dynamic<Option<WidgetId>>> = Lazy::new(|| Dynamic::new(None));
+#[derive(Clone)]
+pub(super) struct PaletteState {
+    description: String,
+    action: Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>,
+    owner: WidgetId,
+    active: bool,
+}
+
+impl std::fmt::Debug for PaletteState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PaletteState").field("description", &self.description).field("action", &"Skipped").field("owner", &self.owner).field("active", &self.active).finish()
+    }
+}
+
+impl PaletteState {
+    fn new() -> Self {
+        PaletteState {
+            description: String::default(),
+            action: Arc::new(|_, _, _| ()),
+            owner: WidgetTag::unique().id(),
+            active: false,
+        }
+    }
+    pub fn active(&self) -> bool {
+        self.active
+    }
+}
+
+pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
+    Lazy::new(|| Dynamic::new(PaletteState::new()));
 
 pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
     owner: WidgetId,
     description: &str,
     action: F,
 ) {
-    PALETTE_DESC.set(description.to_string());
-    *PALETTE_ACTION.lock() = Some(Arc::new(action));
-    PALETTE.set(true);
-    PALETTE_OWNER.set(Some(owner));
+    let mut p = PALETTE_STATE.lock();
+    p.description = description.to_string();
+    p.action = Arc::new(action);
+    p.owner = owner;
+    p.active = true;
 }

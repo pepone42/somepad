@@ -94,7 +94,7 @@ pub fn get_settings() -> Settings {
 
 fn main() -> anyhow::Result<()> {
     let theme = ThemePair::from_scheme(&ColorScheme::from_primary(ColorSource::new(142.0, 0.1)));
-
+    
     WINDOW_COMMAND_REGISTRY
         .lock()
         .unwrap()

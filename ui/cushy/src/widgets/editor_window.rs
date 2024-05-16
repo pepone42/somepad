@@ -13,7 +13,7 @@ use ndoc::Document;
 use crate::shortcut::event_match;
 use crate::WINDOW_SHORTCUT;
 
-use super::palette::Palette;
+use super::palette::{Palette, PALETTE_STATE};
 
 #[derive(Debug)]
 pub struct EditorWindow {
@@ -24,7 +24,7 @@ pub struct EditorWindow {
 impl EditorWindow {
     #[must_use]
     pub fn new(child: impl MakeWidget) -> impl MakeWidget {
-        let palette = super::palette::PALETTE.clone();
+        let palette = PALETTE_STATE.map_each(|p| p.active());// super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
         let child = child.make_widget();
@@ -36,15 +36,6 @@ impl EditorWindow {
                 if *current {
                     Palette::new().make_widget()
                 } else {
-                    // match pr.clone().get() {
-                    //     PaletteResult::Value(v) => {
-                    //         dbg!(v);
-                    //     }
-                    //     PaletteResult::ListItem(i) => {
-                    //         dbg!(i);
-                    //     }
-                    //     PaletteResult::None => (),
-                    // }
                     Custom::empty()
                         .on_mounted(move |c| c.for_other(&child_id).unwrap().focus())
                         .make_widget()
