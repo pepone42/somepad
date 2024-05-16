@@ -23,7 +23,6 @@ use cushy::ConstraintLimit;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ScrollController {
     scroll: Point<Px>,
-    //region: Rect<Px>,
     control_size: Size<Px>,
     max_scroll: Point<Px>,
 }
