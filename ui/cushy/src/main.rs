@@ -15,7 +15,7 @@ use cushy::figures::units::Lp;
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::CornerRadius;
 use cushy::styles::{CornerRadii, Dimension};
-use cushy::value::Dynamic;
+use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetId};
 
 use cushy::{Lazy, Run};
@@ -67,9 +67,13 @@ const GOTO_LINE: ViewCommand = ViewCommand {
         let doc = v.doc.clone();
 
         ask(id, move |c, _, s| {
-            if let Ok(line) = s.parse() {
+            if let Ok(line) = s.parse::<usize>() {
                 {
-                    let p = ndoc::Position::new(line, 0);
+                    if line == 0 || line > doc.get().rope.len_lines() {
+                        return;
+                    }
+
+                    let p = ndoc::Position::new(line-1, 0);
                     doc.lock().set_main_selection(p, p);
                 }
                 c.widget()
