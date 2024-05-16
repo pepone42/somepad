@@ -78,15 +78,6 @@ impl WrapperWidget for Palette {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
-pub enum PaletteResult {
-    #[default]
-    None,
-    Value(String),
-    ListItem(usize),
-}
-
-
 pub static PALETTE: Lazy<Dynamic<bool>> = Lazy::new(|| Dynamic::new(false));
 static PALETTE_ACTION: Lazy<
     Dynamic<Option<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>>,
