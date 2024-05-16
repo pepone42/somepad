@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use cushy::context::EventContext;
@@ -25,11 +24,17 @@ pub struct Palette {
 impl Palette {
     pub fn new() -> Self {
         let input = Dynamic::new(String::default());
-        let pal = "palette"
-            .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
-            .into_rows().size(Size::new(Px::new(200), Px::new(200))).background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
-            .centered()
-            .align_top();
+        let pal = Custom::new(
+            "palette"
+                .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
+                .into_rows()
+                .size(Size::new(Px::new(200), Px::new(200)))
+                .background_color(Color::new(0x34, 0x3D, 0x46, 0xFF)),
+        )
+        .on_hit_test(|_, _| true)
+        .on_mouse_down(|_, _, _, _| HANDLED)
+        .centered()
+        .align_top();
 
         //let child = Custom::empty().size(Size::new(width, height))
 
@@ -73,8 +78,31 @@ impl WrapperWidget for Palette {
 
                 HANDLED
             }
+            Key::Named(NamedKey::Escape) => {
+                PALETTE.set(false);
+                HANDLED
+            }
             _ => IGNORED,
         }
+    }
+
+    fn hit_test(
+        &mut self,
+        location: cushy::figures::Point<Px>,
+        context: &mut EventContext<'_>,
+    ) -> bool {
+        true
+    }
+
+    fn mouse_down(
+        &mut self,
+        location: cushy::figures::Point<Px>,
+        device_id: cushy::window::DeviceId,
+        button: cushy::kludgine::app::winit::event::MouseButton,
+        context: &mut EventContext<'_>,
+    ) -> EventHandling {
+        PALETTE.set(false);
+        HANDLED
     }
 }
 
