@@ -1,10 +1,9 @@
 //! A container that scrolls its contents on a virtual surface.
-use std::borrow::BorrowMut;
 use std::time::{Duration, Instant};
 
-use cushy::figures::units::{Lp, Px, UPx};
+use cushy::figures::units::{Px, UPx};
 use cushy::figures::{
-    FloatConversion, IntoSigned, IntoUnsigned, Point, Rect, Round, ScreenScale, Size, Unit, Zero,
+    FloatConversion, IntoSigned, IntoUnsigned, Point, Rect, Round, ScreenScale, Size, Zero,
 };
 use cushy::kludgine::app::winit::dpi::Pixel;
 use cushy::kludgine::app::winit::event::{MouseScrollDelta, TouchPhase};
@@ -15,12 +14,11 @@ use cushy::kludgine::Color;
 use cushy::animation::{AnimationHandle, AnimationTarget, IntoAnimate, Spawn, ZeroToOne};
 use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
-use cushy::styles::Dimension;
-use cushy::value::{Destination, Dynamic, DynamicRead, DynamicReader, Source};
+use cushy::value::{Dynamic, Source};
 use cushy::widget::{EventHandling, MakeWidget, Widget, WidgetRef, HANDLED, IGNORED};
-use cushy::widgets::scroll::{self, ScrollBarThickness};
+use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::window::DeviceId;
-use cushy::{define_components, ConstraintLimit};
+use cushy::ConstraintLimit;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ScrollController {
