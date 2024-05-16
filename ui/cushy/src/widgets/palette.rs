@@ -96,18 +96,18 @@ impl WrapperWidget for Palette {
 
     fn hit_test(
         &mut self,
-        location: cushy::figures::Point<Px>,
-        context: &mut EventContext<'_>,
+        _location: cushy::figures::Point<Px>,
+        _context: &mut EventContext<'_>,
     ) -> bool {
         true
     }
 
     fn mouse_down(
         &mut self,
-        location: cushy::figures::Point<Px>,
-        device_id: cushy::window::DeviceId,
-        button: cushy::kludgine::app::winit::event::MouseButton,
-        context: &mut EventContext<'_>,
+        _location: cushy::figures::Point<Px>,
+        _device_id: cushy::window::DeviceId,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut EventContext<'_>,
     ) -> EventHandling {
         PALETTE.set(false);
         HANDLED
