@@ -14,7 +14,7 @@ use cushy::figures::units::Lp;
 
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::CornerRadius;
-use cushy::styles::{CornerRadii, Dimension};
+use cushy::styles::{ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetId};
 
@@ -66,16 +66,15 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     action: |id, v| {
         let doc = v.doc.clone();
 
-        ask(id, move |c, _, s| {
+        ask(id, "Got to line", move |c, _, s| {
             if let Ok(line) = s.parse::<usize>() {
-                {
-                    if line == 0 || line > doc.get().rope.len_lines() {
-                        return;
-                    }
-
-                    let p = ndoc::Position::new(line-1, 0);
-                    doc.lock().set_main_selection(p, p);
+                if line == 0 || line > doc.get().rope.len_lines() {
+                    return;
                 }
+
+                let p = ndoc::Position::new(line - 1, 0);
+                doc.lock().set_main_selection(p, p);
+
                 c.widget()
                     .lock()
                     .downcast_ref::<TextEditor>()
@@ -94,6 +93,8 @@ pub fn get_settings() -> Settings {
 }
 
 fn main() -> anyhow::Result<()> {
+    let theme = ThemePair::from_scheme(&ColorScheme::from_primary(ColorSource::new(142.0, 0.1)));
+
     WINDOW_COMMAND_REGISTRY
         .lock()
         .unwrap()
@@ -150,6 +151,7 @@ fn main() -> anyhow::Result<()> {
             ),
         scroll_controller,
     ))
+    .themed(theme)
     .expand()
     .run()?;
 
