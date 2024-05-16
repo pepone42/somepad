@@ -63,6 +63,10 @@ impl ScrollController {
         self.scroll = scroll;
     }
 
+    pub fn scroll(&self) -> Point<Px> {
+        self.scroll
+    }
+
     fn constrained_scroll(scroll: Point<Px>, max_scroll: Point<Px>) -> Point<Px> {
         scroll.max(max_scroll).min(Point::default())
     }

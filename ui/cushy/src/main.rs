@@ -5,7 +5,7 @@ mod widgets;
 
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
-use widgets::text_editor::{self, TextEditor};
+use widgets::text_editor::{self, CodeEditor, TextEditor};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -94,7 +94,7 @@ pub fn get_settings() -> Settings {
 
 fn main() -> anyhow::Result<()> {
     let theme = ThemePair::from_scheme(&ColorScheme::from_primary(ColorSource::new(142.0, 0.1)));
-    
+
     WINDOW_COMMAND_REGISTRY
         .lock()
         .unwrap()
@@ -137,20 +137,19 @@ fn main() -> anyhow::Result<()> {
         ndoc::Document::default()
     };
     let scroll_controller = Dynamic::new(ScrollController::default());
-    EditorWindow::new(MyScroll::new(
-        text_editor::TextEditor::new(Dynamic::new(doc))
-            .with_scroller(scroll_controller.clone())
-            // TextEditor {
-            //     doc: Dynamic::new(doc),
-            //     viewport: Dynamic::new(Rect::default()),
-            //     scroll_controller: scroll_controller.clone(),
-            // }
-            .with(
-                &CornerRadius,
-                CornerRadii::from(Dimension::Lp(Lp::points(0))),
-            ),
-        scroll_controller,
-    ))
+    EditorWindow::new(
+        CodeEditor::new(Dynamic::new(doc))
+        // MyScroll::new(
+        // text_editor::TextEditor::new(Dynamic::new(doc))
+        //     .with_scroller(scroll_controller.clone())
+
+    //         .with(
+    //             &CornerRadius,
+    //             CornerRadii::from(Dimension::Lp(Lp::points(0))),
+    //         ),
+    //     scroll_controller,
+    // ))
+    )
     .themed(theme)
     .expand()
     .run()?;

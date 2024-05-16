@@ -1,3 +1,5 @@
+use cushy::kludgine::text::Text;
+use cushy::styles::components::{CornerRadius, SurfaceColor};
 use cushy::value::Dynamic;
 
 use cushy::figures::units::{self, Lp, Px, UPx};
@@ -8,18 +10,18 @@ use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Me
 use cushy::kludgine::shapes::Shape;
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::Color;
+use cushy::styles::{Color, CornerRadii, Dimension};
 use cushy::value::{Destination, Source};
-use cushy::widget::{EventHandling, Widget, HANDLED, IGNORED};
+use cushy::widget::{EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget, HANDLED, IGNORED};
 
 use cushy::ModifiersExt;
-use ndoc::rope_utils;
+use ndoc::{rope_utils, Document};
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
 use crate::{FONT_SYSTEM, VIEW_SHORTCUT};
 
-use super::scroll;
+use super::scroll::{self, MyScroll};
 
 #[derive(Debug)]
 pub struct TextEditor {
@@ -364,5 +366,107 @@ impl Widget for TextEditor {
             }
             _ => IGNORED,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Gutter {
+    doc: Dynamic<Document>,
+    scroller: Dynamic<ScrollController>,
+}
+
+impl Gutter {
+    pub fn new(doc: Dynamic<Document>, scroller: Dynamic<ScrollController>) -> Self {
+        Self { doc, scroller}
+    }
+}
+
+impl Widget for Gutter {
+    fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let first_line = -self.scroller.get().scroll().y / 20.0;
+        let last_line = first_line
+            + (context
+                .gfx
+                .clip_rect()
+                .size
+                .height
+                .into_px(context.gfx.scale())
+                / 20.0);
+
+        let first_line = first_line.get() as usize;
+        let last_line = last_line.get() as usize;
+
+        context.gfx.set_font_size(Lp::points(12));
+
+        context.fill(Color::new(0x34, 0x3D, 0x46, 0xFF));
+        let doc = self.doc.get_tracking_redraw(context);
+
+        for i in first_line..last_line {
+            let y = self.scroller.get().scroll().y + (units::Px::new(i as _) * 20);
+            let slice = doc.rope.slice(..);
+            let raw_text = ndoc::rope_utils::get_line_info(&slice, i as _, 4);
+            let attrs = Attrs::new().family(Family::Monospace);
+
+            context.gfx.set_text_attributes(attrs);
+
+            context.gfx.draw_text(
+                Text::new(&format!("{}", i), Color::WHITE).translate_by(Point::new(Px::ZERO, y)),
+            );
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CodeEditor {
+    doc: Dynamic<Document>,
+    child: cushy::widget::WidgetRef,
+    scroll_id: WidgetId,
+}
+
+impl CodeEditor {
+    pub fn new(doc: Dynamic<Document>) -> Self {
+        let (scroll_tag,scroll_id) = WidgetTag::new();
+        let scroller = Dynamic::new(ScrollController::default());
+        let child = Gutter::new(doc.clone(), scroller.clone())
+            .expand_vertically()
+            .width(Px::new(50)).contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
+            .and(
+                MyScroll::new(
+                    TextEditor::new(doc.clone())
+                        .with_scroller(scroller.clone())
+                        ,
+                    scroller,
+                ).make_with_tag(scroll_tag).contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
+                .expand(),
+            )
+            .into_columns().gutter(Px::new(1)).with(
+                &CornerRadius,
+                CornerRadii::from(Dimension::Lp(Lp::points(0))),
+            );
+        Self {
+            doc,
+            child: child.widget_ref(),
+            scroll_id
+        }
+    }
+}
+
+impl WrapperWidget for CodeEditor {
+    fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
+        &mut self.child
+    }
+    fn hit_test(&mut self, location: Point<Px>, context: &mut cushy::context::EventContext<'_>) -> bool {
+        true
+    }
+
+    fn mouse_wheel(
+            &mut self,
+            device_id: cushy::window::DeviceId,
+            delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
+            phase: cushy::kludgine::app::winit::event::TouchPhase,
+            context: &mut cushy::context::EventContext<'_>,
+        ) -> EventHandling {
+            context.for_other(&self.scroll_id).unwrap().mouse_wheel(device_id, delta, phase);
+            IGNORED
     }
 }
