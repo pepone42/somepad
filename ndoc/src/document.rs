@@ -526,14 +526,19 @@ impl Document {
             .history
             .undo(self.rope.clone(), self.selections.clone())
         {
+            
             self.rope = rope;
             self.selections = selections;
+            // TODO: potential perf issue
+            self.update_highlight_from(0);
         }
     }
     pub fn redo(&mut self) {
         if let Some((rope, selections)) = self.history.redo() {
             self.rope = rope;
             self.selections = selections;
+            // TODO: potential perf issue
+            self.update_highlight_from(0);
         }
     }
 
