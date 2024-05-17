@@ -26,7 +26,7 @@ impl Default for Settings {
         shortcuts.insert(crate::GOTO_LINE.id.to_string(),shortcut!(Ctrl + g));
         shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
         shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
-        // shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));
+        shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));
         // shortcuts.insert(crate::SAVE_DOC_CMD.id.to_string(),shortcut!(Ctrl + s));
         // shortcuts.insert(crate::SAVE_DOC_AS_CMD.id.to_string(),shortcut!(Ctrl + Shift + s));
         shortcuts.insert(crate::UNDO_CMD.id.to_string(),shortcut!(Ctrl + z));

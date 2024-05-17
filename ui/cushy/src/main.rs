@@ -106,17 +106,19 @@ const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
     },
 };
 
-// const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
-//     name: "Cut Selection",
-//     id: "editor.cutselection",
-//     action: |_id, v, _c| {
-//         if v.doc.get().get_selection_content().len() > 0 {
-//             let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
-//             v.doc.update(|d| d.insert(""));
-//             v.scroll_to_main_cursor();
-//         }
-//     },
-// };
+const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Cut Selection",
+    id: "editor.cutselection",
+    action: |_id, v, c| {
+        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+            if v.doc.get().get_selection_content().len() > 0 {
+                let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
+                v.doc.lock().insert("");
+                v.refocus_main_selection();
+            }
+        }
+    },
+};
 
 const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
     name: "Paste Selection",
@@ -172,6 +174,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg
         .view
         .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
+    cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
