@@ -418,7 +418,6 @@ impl Widget for Gutter {
 
 #[derive(Debug)]
 pub struct CodeEditor {
-    doc: Dynamic<Document>,
     child: cushy::widget::WidgetRef,
     scroll_id: WidgetId,
 }
@@ -444,7 +443,6 @@ impl CodeEditor {
                 CornerRadii::from(Dimension::Lp(Lp::points(0))),
             );
         Self {
-            doc,
             child: child.widget_ref(),
             scroll_id
         }
