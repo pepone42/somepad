@@ -1,4 +1,7 @@
+use std::os::raw;
+
 use cushy::kludgine::text::Text;
+use cushy::kludgine::wgpu::hal::auxil::db;
 use cushy::styles::components::{CornerRadius, SurfaceColor};
 use cushy::value::Dynamic;
 
@@ -144,7 +147,7 @@ impl Widget for TextEditor {
         context.gfx.set_font_size(Lp::points(12));
 
         context.fill(Color::new(0x34, 0x3D, 0x46, 0xFF));
-        let doc = self.doc.get_tracking_redraw(context);
+        let doc = self.doc.get();
 
         for i in first_line..last_line {
             let y = units::Px::new(i as _) * self.line_height;
@@ -412,23 +415,16 @@ impl Gutter {
         Self {
             doc,
             scroller,
-            font_metrics: Default::default(),
-            font_size: Px::ZERO,
-            line_height: Px::ZERO,
-            scale: Fraction::ZERO,
+            font_metrics: Metrics::new(15., 15.),
+            font_size: Px::ZERO + 15,
+            line_height: Px::ZERO + 15,
+            scale: Fraction::ZERO + 1,
         }
     }
 }
 
 impl Widget for Gutter {
-    fn mounted(&mut self, context: &mut cushy::context::EventContext<'_>) {
-        self.line_height = context.get(&LineHeight).into_px(context.kludgine.scale());
-        self.font_size = context.get(&TextSize).into_px(context.kludgine.scale());
-        self.font_metrics =
-            Metrics::new(self.font_size.into_float(), self.line_height.into_float());
-        self.font_metrics =
-            Metrics::new(self.font_size.into_float(), self.line_height.into_float());
-    }
+
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let first_line = (-self.scroller.get().scroll().y / self.font_metrics.line_height) - 1;
         let last_line = first_line
@@ -477,7 +473,8 @@ impl Widget for Gutter {
                 Metrics::new(self.font_size.into_float(), self.line_height.into_float());
         }
         // I don't understand why the +1 is needed. Without it, the gutter is too short by 1pixel vs the text editor
-        Size::new(UPx::new(50), available_space.height.max() + 1) 
+        // But if I add it, the layout/redraw of the gutter/texteditor is called in a loop
+        Size::new(UPx::new(50), available_space.height.max()) 
     }
     fn full_control_redraw(&self) -> bool {
         true
@@ -492,7 +489,7 @@ pub struct CodeEditor {
 
 impl CodeEditor {
     pub fn new(doc: Dynamic<Document>) -> Self {
-        let (scroll_tag, scroll_id) = WidgetTag::new();
+         let (scroll_tag, scroll_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let child = Gutter::new(doc.clone(), scroller.clone())
             // .expand_vertically()

@@ -1,8 +1,8 @@
+use cushy::context::AsEventContext;
+use cushy::figures::IntoSigned;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::value::{Dynamic, Source, Switchable};
-use cushy::widget::{
-    EventHandling, MakeWidget, WidgetRef, WrapperWidget, HANDLED, IGNORED,
-};
+use cushy::widget::{EventHandling, MakeWidget, WidgetRef, WrapperWidget, HANDLED, IGNORED};
 
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
@@ -24,7 +24,7 @@ pub struct EditorWindow {
 impl EditorWindow {
     #[must_use]
     pub fn new(child: impl MakeWidget) -> impl MakeWidget {
-        let palette = PALETTE_STATE.map_each(|p| p.active());// super::palette::PALETTE.clone();
+        let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
         let child = child.make_widget();
@@ -67,9 +67,10 @@ impl WrapperWidget for EditorWindow {
     ) -> EventHandling {
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
             let v = WINDOW_SHORTCUT.lock().unwrap();
+            let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
-                    (cmd.action)(self);
+                    (cmd.action)(id, self);
                     return HANDLED;
                 }
             }

@@ -3,8 +3,9 @@ mod shortcut;
 mod settings;
 mod widgets;
 
+use cushy::debug::DebugContext;
 use cushy::figures::Zero;
-use cushy::widgets::Space;
+use cushy::widgets::{Custom, Space};
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
 use widgets::text_editor::{self, CodeEditor, TextEditor};
@@ -20,7 +21,7 @@ use cushy::styles::{Color, ColorScheme, ColorSource, CornerRadii, Dimension, The
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetId};
 
-use cushy::{Lazy, Run};
+use cushy::{Lazy, Open, PendingApp, Run};
 use ndoc::{Document, Indentation};
 use settings::Settings;
 use shortcut::Shortcut;
@@ -37,7 +38,7 @@ pub struct ViewCommand {
 pub struct WindowCommand {
     pub name: &'static str,
     pub id: &'static str,
-    pub action: fn(&EditorWindow),
+    pub action: fn(WidgetId, &EditorWindow),
 }
 
 pub static VIEW_SHORTCUT: Lazy<Arc<Mutex<HashMap<Shortcut, ViewCommand>>>> =
@@ -56,7 +57,7 @@ pub static FONT_SYSTEM: Lazy<Arc<Mutex<FontSystem>>> =
 const NEW_DOC: WindowCommand = WindowCommand {
     name: "New Document",
     id: "window.newdoc",
-    action: |w| {
+    action: |_id, w| {
         dbg!("New doc!");
         w.add_new_doc(Dynamic::new(Document::default()));
     },
@@ -87,6 +88,23 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     },
 };
 
+const UNDO_CMD: ViewCommand = ViewCommand {
+    name: "Undo",
+    id: "editor.undo",
+    action: |_id, v| {
+        v.doc.lock().undo();
+        v.refocus_main_selection();
+    },
+};
+const REDO_CMD: ViewCommand = ViewCommand {
+    name: "redo",
+    id: "editor.redo",
+    action: |_id, v| {
+        v.doc.lock().redo();
+        v.refocus_main_selection();
+    },
+};
+
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
@@ -105,6 +123,14 @@ fn main() -> anyhow::Result<()> {
         .lock()
         .unwrap()
         .insert(GOTO_LINE.id, GOTO_LINE);
+    VIEW_COMMAND_REGISTRY
+        .lock()
+        .unwrap()
+        .insert(UNDO_CMD.id, UNDO_CMD);
+    VIEW_COMMAND_REGISTRY
+        .lock()
+        .unwrap()
+        .insert(REDO_CMD.id, REDO_CMD);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
@@ -184,7 +210,8 @@ fn main() -> anyhow::Result<()> {
                 .and(eol)
                 .and(syntax)
                 .into_columns()
-                .centered().pad_by(Px::new(2)),
+                .centered()
+                .pad_by(Px::new(2)),
         )
         .into_rows()
         .gutter(Px::ZERO)
