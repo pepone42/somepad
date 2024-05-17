@@ -139,11 +139,15 @@ fn main() -> anyhow::Result<()> {
         ndoc::Document::default()
     });
     let file_name = doc.map_each(move |d| {
-        if let Some(file_name) = &d.file_name {
-            file_name.file_name().unwrap().to_string_lossy().to_string()
-        } else {
-            "Untilted".to_string()
-        }
+        format!(
+            "{}{}",
+            if let Some(file_name) = &d.file_name {
+                file_name.file_name().unwrap().to_string_lossy().to_string()
+            } else {
+                "Untilted".to_string()
+            },
+            if d.is_dirty() { "*" } else { "" }
+        )
     });
     let selection = doc.map_each(|d| {
         if d.selections.len() > 1 {
@@ -179,9 +183,11 @@ fn main() -> anyhow::Result<()> {
                 .and(encoding)
                 .and(eol)
                 .and(syntax)
-                .into_columns().centered(),
+                .into_columns()
+                .centered().pad_by(Px::new(2)),
         )
-        .into_rows().gutter(Px::ZERO)
+        .into_rows()
+        .gutter(Px::ZERO)
         .themed(theme)
         .with(&TextSize, Lp::points(10))
         .run()?;
