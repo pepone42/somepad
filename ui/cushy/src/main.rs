@@ -3,6 +3,8 @@ mod shortcut;
 mod settings;
 mod widgets;
 
+use cushy::figures::Zero;
+use cushy::widgets::Space;
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
 use widgets::text_editor::{self, CodeEditor, TextEditor};
@@ -10,16 +12,16 @@ use widgets::text_editor::{self, CodeEditor, TextEditor};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use cushy::figures::units::Lp;
+use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::CornerRadius;
-use cushy::styles::{ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
+use cushy::styles::components::{CornerRadius, TextSize};
+use cushy::styles::{Color, ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetId};
 
 use cushy::{Lazy, Run};
-use ndoc::Document;
+use ndoc::{Document, Indentation};
 use settings::Settings;
 use shortcut::Shortcut;
 use widgets::scroll::{MyScroll, ScrollController};
@@ -131,28 +133,58 @@ fn main() -> anyhow::Result<()> {
     }
 
     ndoc::Document::init_highlighter();
-    let doc = if let Some(path) = std::env::args().nth(1) {
+    let doc = Dynamic::new(if let Some(path) = std::env::args().nth(1) {
         ndoc::Document::from_file(path)?
     } else {
         ndoc::Document::default()
-    };
-    let scroll_controller = Dynamic::new(ScrollController::default());
-    EditorWindow::new(
-        CodeEditor::new(Dynamic::new(doc))
-        // MyScroll::new(
-        // text_editor::TextEditor::new(Dynamic::new(doc))
-        //     .with_scroller(scroll_controller.clone())
+    });
+    let file_name = doc.map_each(move |d| {
+        if let Some(file_name) = &d.file_name {
+            file_name.file_name().unwrap().to_string_lossy().to_string()
+        } else {
+            "Untilted".to_string()
+        }
+    });
+    let selection = doc.map_each(|d| {
+        if d.selections.len() > 1 {
+            format!("{} selections", d.selections.len())
+        } else {
+            format!(
+                "Ln {}, Col {}",
+                d.selections[0].head.line + 1,
+                d.selections[0].head.column + 1
+            )
+        }
+    });
+    let indentation = doc.map_each(|d| match d.file_info.indentation {
+        Indentation::Space(spaces) => format!("Space({})", spaces),
+        Indentation::Tab(spaces) => format!("Tab({})", spaces),
+    });
+    let encoding = doc.map_each(|d| d.file_info.encoding.name());
+    let eol = doc.map_each(|d| match d.file_info.linefeed {
+        ndoc::LineFeed::CR => "CR",
+        ndoc::LineFeed::LF => "LF",
+        ndoc::LineFeed::CRLF => "CRLF",
+    });
+    let syntax = doc.map_each(|d| d.file_info.syntax.name.clone());
 
-    //         .with(
-    //             &CornerRadius,
-    //             CornerRadii::from(Dimension::Lp(Lp::points(0))),
-    //         ),
-    //     scroll_controller,
-    // ))
-    )
-    .themed(theme)
-    .expand()
-    .run()?;
+    EditorWindow::new(CodeEditor::new(doc.clone()))
+        .expand()
+        .and(
+            file_name
+                .align_left()
+                .and(Space::clear().expand_horizontally())
+                .and(selection)
+                .and(indentation)
+                .and(encoding)
+                .and(eol)
+                .and(syntax)
+                .into_columns().centered(),
+        )
+        .into_rows().gutter(Px::ZERO)
+        .themed(theme)
+        .with(&TextSize, Lp::points(10))
+        .run()?;
 
     Ok(())
 }

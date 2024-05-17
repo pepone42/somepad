@@ -118,7 +118,7 @@ impl TextEditor {
 
 impl Widget for TextEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        let first_line = -context.gfx.translation().y / 20.0;
+        let first_line = (-context.gfx.translation().y / 20.0) -1;
         let last_line = first_line
             + (context
                 .gfx
@@ -126,9 +126,9 @@ impl Widget for TextEditor {
                 .size
                 .height
                 .into_px(context.gfx.scale())
-                / 20.0);
+                / 20.0) + 1;
 
-        let first_line = first_line.get() as usize;
+        let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
 
         context.gfx.set_font_size(Lp::points(12));
@@ -383,7 +383,7 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        let first_line = -self.scroller.get().scroll().y / 20.0;
+        let first_line = (-self.scroller.get().scroll().y / 20.0)-1;
         let last_line = first_line
             + (context
                 .gfx
@@ -391,9 +391,9 @@ impl Widget for Gutter {
                 .size
                 .height
                 .into_px(context.gfx.scale())
-                / 20.0);
+                / 20.0) + 1;
 
-        let first_line = first_line.get() as usize;
+        let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
 
         context.gfx.set_font_size(Lp::points(12));
@@ -410,7 +410,7 @@ impl Widget for Gutter {
             context.gfx.set_text_attributes(attrs);
 
             context.gfx.draw_text(
-                Text::new(&format!("{}", i), Color::WHITE).translate_by(Point::new(Px::ZERO, y)),
+                Text::new(&format!(" {} ", i+1), Color::WHITE).translate_by(Point::new(Px::ZERO, y)),
             );
         }
     }
@@ -428,14 +428,14 @@ impl CodeEditor {
         let scroller = Dynamic::new(ScrollController::default());
         let child = Gutter::new(doc.clone(), scroller.clone())
             .expand_vertically()
-            .width(Px::new(50)).contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
+            .width(Px::new(50))//.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
             .and(
                 MyScroll::new(
                     TextEditor::new(doc.clone())
                         .with_scroller(scroller.clone())
                         ,
                     scroller,
-                ).make_with_tag(scroll_tag).contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
+                ).make_with_tag(scroll_tag)//.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
                 .expand(),
             )
             .into_columns().gutter(Px::new(1)).with(

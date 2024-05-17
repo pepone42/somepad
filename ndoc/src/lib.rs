@@ -6,6 +6,7 @@ pub mod theme;
 
 pub use document::Document;
 pub use file_info::FileInfo;
+pub use file_info::LineFeed;
 pub use file_info::Indentation;
 pub use document::MoveDirection;
 pub use document::Selection;
