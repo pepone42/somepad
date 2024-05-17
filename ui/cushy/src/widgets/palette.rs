@@ -31,7 +31,7 @@ impl Palette {
                 .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
                 .into_rows()
                 .width(Lp::new(250))
-                .height(Lp::ZERO..Lp::new(250)), //.size(Size::new(Px::new(200), Px::new(200))),
+                .height(Lp::ZERO..Lp::new(250)),
         )
         .on_redraw(|c| {
             c.gfx.set_font_family(cushy::styles::FamilyOwned::SansSerif);
@@ -43,8 +43,6 @@ impl Palette {
         .on_mouse_down(|_, _, _, _| HANDLED)
         .centered()
         .align_top();
-
-        //let child = Custom::empty().size(Size::new(width, height))
 
         Palette {
             description: PALETTE_STATE.get().description.into(),

@@ -11,7 +11,7 @@ use cushy::ModifiersExt;
 use ndoc::Document;
 
 use crate::shortcut::event_match;
-use crate::WINDOW_SHORTCUT;
+use crate::{CommandsRegistry};
 
 use super::palette::{Palette, PALETTE_STATE};
 
@@ -19,11 +19,12 @@ use super::palette::{Palette, PALETTE_STATE};
 pub struct EditorWindow {
     child: WidgetRef,
     documents: Dynamic<Vec<Dynamic<Document>>>,
+    cmd_reg: Dynamic<CommandsRegistry>,
 }
 
 impl EditorWindow {
     #[must_use]
-    pub fn new(child: impl MakeWidget) -> impl MakeWidget {
+    pub fn new(child: impl MakeWidget, cmd_reg: Dynamic<CommandsRegistry>) -> impl MakeWidget {
         let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
@@ -45,6 +46,7 @@ impl EditorWindow {
         EditorWindow {
             child: w.widget_ref(),
             documents: Dynamic::new(Vec::new()),
+            cmd_reg,
         }
     }
 
@@ -66,7 +68,7 @@ impl WrapperWidget for EditorWindow {
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
-            let v = WINDOW_SHORTCUT.lock().unwrap();
+            let v = self.cmd_reg.get().window_shortcut;
             let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {

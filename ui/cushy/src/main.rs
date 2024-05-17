@@ -27,29 +27,19 @@ use settings::Settings;
 use shortcut::Shortcut;
 use widgets::scroll::{MyScroll, ScrollController};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ViewCommand {
     pub name: &'static str,
     pub id: &'static str,
     pub action: fn(WidgetId, &TextEditor),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct WindowCommand {
     pub name: &'static str,
     pub id: &'static str,
     pub action: fn(WidgetId, &EditorWindow),
 }
-
-pub static VIEW_SHORTCUT: Lazy<Arc<Mutex<HashMap<Shortcut, ViewCommand>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-pub static VIEW_COMMAND_REGISTRY: Lazy<Arc<Mutex<HashMap<&'static str, ViewCommand>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-
-pub static WINDOW_SHORTCUT: Lazy<Arc<Mutex<HashMap<Shortcut, WindowCommand>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-pub static WINDOW_COMMAND_REGISTRY: Lazy<Arc<Mutex<HashMap<&'static str, WindowCommand>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 pub static FONT_SYSTEM: Lazy<Arc<Mutex<FontSystem>>> =
     Lazy::new(|| Arc::new(Mutex::new(FontSystem::new())));
@@ -112,36 +102,43 @@ pub fn get_settings() -> Settings {
     SETTINGS.lock().unwrap().clone()
 }
 
+#[derive(Debug, Clone)]
+pub struct CommandsRegistry {
+    pub view: HashMap<&'static str, ViewCommand>,
+    pub window: HashMap<&'static str, WindowCommand>,
+    pub view_shortcut: HashMap<Shortcut, ViewCommand>,
+    pub window_shortcut: HashMap<Shortcut, WindowCommand>,
+}
+
+impl CommandsRegistry {
+    pub fn new() -> Self {
+        Self {
+            view: HashMap::new(),
+            window: HashMap::new(),
+            view_shortcut: HashMap::new(),
+            window_shortcut: HashMap::new(),
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let theme = ThemePair::from_scheme(&ColorScheme::from_primary(ColorSource::new(142.0, 0.1)));
 
-    WINDOW_COMMAND_REGISTRY
-        .lock()
-        .unwrap()
-        .insert(NEW_DOC.id, NEW_DOC);
-    VIEW_COMMAND_REGISTRY
-        .lock()
-        .unwrap()
-        .insert(GOTO_LINE.id, GOTO_LINE);
-    VIEW_COMMAND_REGISTRY
-        .lock()
-        .unwrap()
-        .insert(UNDO_CMD.id, UNDO_CMD);
-    VIEW_COMMAND_REGISTRY
-        .lock()
-        .unwrap()
-        .insert(REDO_CMD.id, REDO_CMD);
+    let mut cmd_reg = CommandsRegistry::new();
+
+    cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
+    cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
+    cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
+    cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
         .iter()
         .filter(|(id, _)| id.starts_with("editor."))
     {
-        let mut v = VIEW_SHORTCUT.lock().unwrap();
-        let r = VIEW_COMMAND_REGISTRY.lock().unwrap();
-        if let Some(cmd) = r.get(command_id.as_str()) {
+        if let Some(cmd) = cmd_reg.view.get(command_id.as_str()) {
             dbg!(command_id, shortcut);
-            v.insert(shortcut.clone(), *cmd);
+            cmd_reg.view_shortcut.insert(shortcut.clone(), *cmd);
         }
     }
 
@@ -150,13 +147,13 @@ fn main() -> anyhow::Result<()> {
         .iter()
         .filter(|(id, _)| id.starts_with("window."))
     {
-        let mut v = WINDOW_SHORTCUT.lock().unwrap();
-        let r = WINDOW_COMMAND_REGISTRY.lock().unwrap();
-        if let Some(cmd) = r.get(command_id.as_str()) {
+        if let Some(cmd) = cmd_reg.window.get(command_id.as_str()) {
             dbg!(command_id, shortcut);
-            v.insert(shortcut.clone(), *cmd);
+            cmd_reg.window_shortcut.insert(shortcut.clone(), *cmd);
         }
     }
+
+    let cmd_reg = Dynamic::new(cmd_reg);
 
     ndoc::Document::init_highlighter();
     let doc = Dynamic::new(if let Some(path) = std::env::args().nth(1) {
@@ -198,7 +195,7 @@ fn main() -> anyhow::Result<()> {
     });
     let syntax = doc.map_each(|d| d.file_info.syntax.name.clone());
 
-    EditorWindow::new(CodeEditor::new(doc.clone()))
+    EditorWindow::new(CodeEditor::new(doc.clone(), cmd_reg.clone()), cmd_reg.clone())
         .expand()
         .and(
             file_name

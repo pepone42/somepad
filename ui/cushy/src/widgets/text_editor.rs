@@ -25,7 +25,7 @@ use ndoc::{rope_utils, Document};
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
-use crate::{FONT_SYSTEM, VIEW_SHORTCUT};
+use crate::{CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, MyScroll};
 
@@ -38,10 +38,11 @@ pub struct TextEditor {
     font_size: Px,
     line_height: Px,
     scale: Fraction,
+    cmd_reg: Dynamic<CommandsRegistry>,
 }
 
 impl TextEditor {
-    pub fn new(doc: Dynamic<ndoc::Document>) -> Self {
+    pub fn new(doc: Dynamic<ndoc::Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
@@ -50,6 +51,7 @@ impl TextEditor {
             font_size: Px::ZERO,
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
+            cmd_reg,
         }
     }
 
@@ -306,7 +308,7 @@ impl Widget for TextEditor {
         }
 
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
-            let v = VIEW_SHORTCUT.lock().unwrap();
+            let v = self.cmd_reg.get().view_shortcut;
             let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
@@ -416,9 +418,9 @@ impl Gutter {
             doc,
             scroller,
             font_metrics: Metrics::new(15., 15.),
-            font_size: Px::ZERO + 15,
-            line_height: Px::ZERO + 15,
-            scale: Fraction::ZERO + 1,
+            font_size: Px::ZERO,
+            line_height: Px::ZERO,
+            scale: Fraction::ZERO,
         }
     }
 }
@@ -488,7 +490,7 @@ pub struct CodeEditor {
 }
 
 impl CodeEditor {
-    pub fn new(doc: Dynamic<Document>) -> Self {
+    pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
          let (scroll_tag, scroll_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let child = Gutter::new(doc.clone(), scroller.clone())
@@ -496,7 +498,7 @@ impl CodeEditor {
             // .width(Px::new(50))
             .and(
                 MyScroll::new(
-                    TextEditor::new(doc.clone()).with_scroller(scroller.clone()),
+                    TextEditor::new(doc.clone(), cmd_reg).with_scroller(scroller.clone()),
                     scroller,
                 )
                 .make_with_tag(scroll_tag) //.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
