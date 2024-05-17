@@ -312,7 +312,7 @@ impl Widget for TextEditor {
             let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
-                    (cmd.action)(id, self);
+                    (cmd.action)(id, self, context);
                     return HANDLED;
                 }
             }

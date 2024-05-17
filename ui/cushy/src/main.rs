@@ -3,6 +3,7 @@ mod shortcut;
 mod settings;
 mod widgets;
 
+use cushy::context::EventContext;
 use cushy::debug::DebugContext;
 use cushy::figures::Zero;
 use cushy::widgets::{Custom, Space};
@@ -31,7 +32,7 @@ use widgets::scroll::{MyScroll, ScrollController};
 pub struct ViewCommand {
     pub name: &'static str,
     pub id: &'static str,
-    pub action: fn(WidgetId, &TextEditor),
+    pub action: fn(WidgetId, &TextEditor, &mut EventContext),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,7 +57,7 @@ const NEW_DOC: WindowCommand = WindowCommand {
 const GOTO_LINE: ViewCommand = ViewCommand {
     name: "Go to Line",
     id: "editor.goto_line",
-    action: |id, v| {
+    action: |id, v, _c| {
         let doc = v.doc.clone();
 
         ask(id, "Got to line", move |c, _, s| {
@@ -81,7 +82,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
 const UNDO_CMD: ViewCommand = ViewCommand {
     name: "Undo",
     id: "editor.undo",
-    action: |_id, v| {
+    action: |_id, v, _c| {
         v.doc.lock().undo();
         v.refocus_main_selection();
     },
@@ -89,9 +90,44 @@ const UNDO_CMD: ViewCommand = ViewCommand {
 const REDO_CMD: ViewCommand = ViewCommand {
     name: "redo",
     id: "editor.redo",
-    action: |_id, v| {
+    action: |_id, v, _c| {
         v.doc.lock().redo();
         v.refocus_main_selection();
+    },
+};
+
+const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Copy Selection",
+    id: "editor.copyselection",
+    action: |_id, v, c| {
+        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+            let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
+        }
+    },
+};
+
+// const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
+//     name: "Cut Selection",
+//     id: "editor.cutselection",
+//     action: |_id, v, _c| {
+//         if v.doc.get().get_selection_content().len() > 0 {
+//             let _ = Clipboard::set_contents(v.doc.get().get_selection_content());
+//             v.doc.update(|d| d.insert(""));
+//             v.scroll_to_main_cursor();
+//         }
+//     },
+// };
+
+const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
+    name: "Paste Selection",
+    id: "editor.pasteselection",
+    action: |_id, v, c| {
+        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+            if let Ok(s) = clipboard.get_text() {
+                v.doc.lock().insert_many(&s);
+                v.refocus_main_selection();
+            }
+        }
     },
 };
 
@@ -130,6 +166,12 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
     cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
+    cmd_reg
+        .view
+        .insert(COPY_SELECTION_CMD.id, COPY_SELECTION_CMD);
+    cmd_reg
+        .view
+        .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
@@ -195,26 +237,29 @@ fn main() -> anyhow::Result<()> {
     });
     let syntax = doc.map_each(|d| d.file_info.syntax.name.clone());
 
-    EditorWindow::new(CodeEditor::new(doc.clone(), cmd_reg.clone()), cmd_reg.clone())
-        .expand()
-        .and(
-            file_name
-                .align_left()
-                .and(Space::clear().expand_horizontally())
-                .and(selection)
-                .and(indentation)
-                .and(encoding)
-                .and(eol)
-                .and(syntax)
-                .into_columns()
-                .centered()
-                .pad_by(Px::new(2)),
-        )
-        .into_rows()
-        .gutter(Px::ZERO)
-        .themed(theme)
-        .with(&TextSize, Lp::points(10))
-        .run()?;
+    EditorWindow::new(
+        CodeEditor::new(doc.clone(), cmd_reg.clone()),
+        cmd_reg.clone(),
+    )
+    .expand()
+    .and(
+        file_name
+            .align_left()
+            .and(Space::clear().expand_horizontally())
+            .and(selection)
+            .and(indentation)
+            .and(encoding)
+            .and(eol)
+            .and(syntax)
+            .into_columns()
+            .centered()
+            .pad_by(Px::new(2)),
+    )
+    .into_rows()
+    .gutter(Px::ZERO)
+    .themed(theme)
+    .with(&TextSize, Lp::points(10))
+    .run()?;
 
     Ok(())
 }
