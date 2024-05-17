@@ -517,7 +517,6 @@ impl Document {
             self.history
                 .push(histo_rope, histo_selections, &saved_action);
             self.update_highlight_from(self.rope.char_to_line(start));
-            //self.update_highlight_from(self.rope.char_to_line(start));
         }
     }
 
