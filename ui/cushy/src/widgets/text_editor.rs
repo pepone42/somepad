@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::os::raw;
 
 use cushy::kludgine::text::Text;
@@ -6,11 +7,13 @@ use cushy::styles::components::{CornerRadius, SurfaceColor};
 use cushy::value::Dynamic;
 
 use cushy::figures::units::{self, Lp, Px, UPx};
-use cushy::figures::{Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero};
+use cushy::figures::{
+    fraction, Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero,
+};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
-use cushy::kludgine::shapes::Shape;
+use cushy::kludgine::shapes::{Path, PathBuilder, Shape};
 use cushy::kludgine::{Drawable, DrawableExt};
 
 use cushy::styles::{Color, CornerRadii, Dimension};
@@ -21,7 +24,7 @@ use cushy::widget::{
 };
 
 use cushy::{define_components, ModifiersExt};
-use ndoc::{rope_utils, Document};
+use ndoc::{rope_utils, Document, Selection};
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
@@ -128,6 +131,95 @@ impl TextEditor {
             ));
         }
     }
+
+    fn layout_line(&self, line_idx: usize) -> Option<Buffer> {
+        let raw_text =
+            ndoc::rope_utils::get_line_info(&self.doc.get().rope.slice(..), line_idx as _, 4)
+                .to_string();
+        let attrs = Attrs::new().family(Family::Monospace);
+
+        //context.gfx.set_text_attributes(attrs);
+
+        if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
+            let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
+            let mut spans = Vec::new();
+            for s in sl.iter() {
+                let t = &raw_text[s.range.start..s.range.end];
+
+                let col = cushy::kludgine::cosmic_text::Color::rgba(
+                    s.style.foreground.r,
+                    s.style.foreground.g,
+                    s.style.foreground.b,
+                    s.style.foreground.a,
+                );
+
+                spans.push((t, attrs.color(col)));
+            }
+            buffer.set_rich_text(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                spans,
+                attrs,
+                cushy::kludgine::cosmic_text::Shaping::Advanced,
+            );
+            buffer.set_size(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                10000.,
+                self.font_metrics.line_height,
+            );
+            Some(buffer)
+        } else {
+            None
+        }
+    }
+
+    fn get_selection_shape(
+        &self,
+        selection: Selection,
+        layouts: &HashMap<usize, Option<Buffer>>,
+    ) -> Option<Path<Px, false>> {
+        let rope = &self.doc.get().rope;
+
+        let rects = selection
+            .areas(rope)
+            .iter()
+            .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
+            .map(|a| {
+                // TODO: Use the buffers instead of recalculating it
+                let start = self.grapheme_to_point(a.line, a.col_start);
+                let end = self.grapheme_to_point(a.line, a.col_end);
+                let y = self.line_height * Px::new(a.line as i32);
+
+                Rect::new(
+                    Point::new(start.ceil(), y.ceil()),
+                    Size::new(
+                        end.ceil()
+                            + if a.include_eol {
+                                //self.char_base_width.ceil()
+                                Px::new(15) // TODO, calculate grapheme width
+                            } else {
+                                Px::ZERO
+                            }
+                            - start.ceil(),
+                        self.line_height.ceil(),
+                    ),
+                )
+            })
+            .collect::<Vec<Rect<Px>>>();
+
+        make_selection_path(&rects)
+    }
+
+    fn get_selections_shapes(
+        &self,
+        layouts: &HashMap<usize, Option<Buffer>>,
+    ) -> Vec<Path<Px, false>> {
+        self.doc
+            .get()
+            .selections
+            .iter()
+            .filter_map(|s| self.get_selection_shape(*s, layouts))
+            .collect()
+    }
 }
 
 impl Widget for TextEditor {
@@ -145,59 +237,60 @@ impl Widget for TextEditor {
 
         let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
+        let total_line = last_line - first_line;
 
         context.gfx.set_font_size(Lp::points(12));
 
         context.fill(Color::new(0x34, 0x3D, 0x46, 0xFF));
         let doc = self.doc.get();
 
+        let buffers = self
+            .doc
+            .get()
+            .rope
+            .lines()
+            .enumerate()
+            .skip(first_line)
+            .take(total_line)
+            .map(|(i, _)| (i, self.layout_line(i)))
+            .collect::<HashMap<usize, Option<Buffer>>>();
+
+        let selections = self
+            .doc
+            .get()
+            .selections
+            .iter()
+            .map(|s| (s.head.line, s.head.column))
+            .collect::<HashMap<usize, usize>>();
+
+        // draw selections
+        for path in self.get_selections_shapes(&buffers) {
+            // TODO: use correct color
+            context
+                .gfx
+                .draw_shape(path.fill(Color::ALICEBLUE).translate_by(Point::ZERO));
+            context
+                .gfx
+                .draw_shape(path.stroke(Color::BLUE).translate_by(Point::ZERO));
+        }
+
         for i in first_line..last_line {
             let y = units::Px::new(i as _) * self.line_height;
-            let slice = doc.rope.slice(..);
-            let raw_text = ndoc::rope_utils::get_line_info(&slice, i as _, 4);
-            let attrs = Attrs::new().family(Family::Monospace);
-
-            context.gfx.set_text_attributes(attrs);
-
-            if let Some(sl) = doc.get_style_line_info(i as _) {
-                let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
-                let mut spans = Vec::new();
-                for s in sl.iter() {
-                    let t = &raw_text[s.range.start..s.range.end];
-
-                    let col = cushy::kludgine::cosmic_text::Color::rgba(
-                        s.style.foreground.r,
-                        s.style.foreground.g,
-                        s.style.foreground.b,
-                        s.style.foreground.a,
+            if let Some(b) = buffers.get(&i) {
+                if let Some(b) = b {
+                    context.gfx.draw_text_buffer(
+                        Drawable {
+                            source: b,
+                            translation: Point::<Px>::default(),
+                            opacity: None,
+                            rotation: None,
+                            scale: None,
+                        }
+                        .translate_by(Point::new(Px::ZERO, y)),
+                        Color::WHITE,
+                        cushy::kludgine::text::TextOrigin::TopLeft,
                     );
-
-                    spans.push((t, attrs.color(col)));
                 }
-                buffer.set_rich_text(
-                    &mut FONT_SYSTEM.lock().unwrap(),
-                    spans,
-                    attrs,
-                    cushy::kludgine::cosmic_text::Shaping::Advanced,
-                );
-                buffer.set_size(
-                    &mut FONT_SYSTEM.lock().unwrap(),
-                    10000.,
-                    self.font_metrics.line_height,
-                );
-
-                context.gfx.draw_text_buffer(
-                    Drawable {
-                        source: &buffer,
-                        translation: Point::<Px>::default(),
-                        opacity: None,
-                        rotation: None,
-                        scale: None,
-                    }
-                    .translate_by(Point::new(Px::ZERO, y)),
-                    Color::WHITE,
-                    cushy::kludgine::text::TextOrigin::TopLeft,
-                );
             }
         }
 
@@ -426,7 +519,6 @@ impl Gutter {
 }
 
 impl Widget for Gutter {
-
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let first_line = (-self.scroller.get().scroll().y / self.font_metrics.line_height) - 1;
         let last_line = first_line
@@ -476,7 +568,7 @@ impl Widget for Gutter {
         }
         // I don't understand why the +1 is needed. Without it, the gutter is too short by 1pixel vs the text editor
         // But if I add it, the layout/redraw of the gutter/texteditor is called in a loop
-        Size::new(UPx::new(50), available_space.height.max()) 
+        Size::new(UPx::new(50), available_space.height.max())
     }
     fn full_control_redraw(&self) -> bool {
         true
@@ -491,7 +583,7 @@ pub struct CodeEditor {
 
 impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
-         let (scroll_tag, scroll_id) = WidgetTag::new();
+        let (scroll_tag, scroll_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let child = Gutter::new(doc.clone(), scroller.clone())
             // .expand_vertically()
@@ -548,5 +640,98 @@ define_components! {
     CodeEditor {
         TextSize(Lp, "text_size", Lp::points(11))
         LineHeight(Lp, "line_height", Lp::points(13))
+    }
+}
+
+fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
+    let bevel = Px::new(3);
+    let epsilon: f32 = 0.0001;
+
+    let mut left = Vec::with_capacity(rects.len() * 2);
+    let mut right = Vec::with_capacity(rects.len() * 2);
+    for r in rects
+        .iter()
+        .filter(|r| ((r.origin.x + r.size.width) - r.origin.x).into_float() > epsilon)
+    {
+        let x0 = r.origin.x;
+        let y0 = r.origin.y;
+        let x1 = r.origin.x + r.size.width;
+        let y1 = r.origin.y + r.size.height;
+        right.push(Point::new(x1, y0));
+        right.push(Point::new(x1, y1));
+        left.push(Point::new(x0, y0));
+        left.push(Point::new(x0, y1));
+    }
+    left.reverse();
+
+    let points = [right, left].concat();
+
+    #[derive(Clone, Copy, Debug)]
+    enum PathEl {
+        MoveTo(Point<Px>),
+        LineTo(Point<Px>),
+        QuadTo(Point<Px>, Point<Px>),
+        Close,
+    }
+    let mut path = Vec::new();
+
+    for i in 0..points.len() {
+        let p1 = if i == 0 {
+            points[points.len() - 1]
+        } else {
+            points[i - 1]
+        };
+        let p2 = points[i];
+        let p3 = if i == points.len() - 1 {
+            points[0]
+        } else {
+            points[i + 1]
+        };
+
+        let v1 = p2 - p1;
+        let v2 = p2 - p3;
+
+        fn cross(v1: Point<Px>, v2: Point<Px>) -> f32 {
+            (v1.x * v2.y - v1.y * v2.x).into_float()
+        }
+        fn normalize(v: Point<Px>) -> Point<Px> {
+            let squared_len = v.x * v.x + v.y * v.y;
+            let len = f32::sqrt(squared_len.into_float());
+            v / len
+        }
+
+        if cross(v1, v2).abs() > epsilon {
+            // this is not a straight line
+            if path.is_empty() {
+                path.push(PathEl::MoveTo(p2 + (normalize(v1) * -bevel)));
+            } else {
+                // vger_renderer doesn't implement LineTo ...
+                path.push(PathEl::QuadTo(
+                    p2 + (normalize(v1) * -bevel),
+                    p2 + (normalize(v1) * -bevel),
+                ));
+            }
+            path.push(PathEl::QuadTo(p2, p2 + (normalize(v2) * -bevel)));
+        }
+    }
+
+    if let Some(PathEl::MoveTo(p)) = path.get(0).cloned() {
+        // the path is not empty, close and return it
+        path.push(PathEl::QuadTo(p, p));
+        path.push(PathEl::Close);
+
+        let mut p = PathBuilder::new(p);
+        for el in path.iter().skip(1) {
+            match el {
+                PathEl::LineTo(point) => p = p.line_to(*point),
+                PathEl::QuadTo(p1, p2) => p = p.quadratic_curve_to(*p1, *p2),
+                // PathEl::Close => p = p.close(),
+                // PathEl::MoveTo(_) => ()
+                _ => (),
+            }
+        }
+        Some(p.close())
+    } else {
+        None
     }
 }
