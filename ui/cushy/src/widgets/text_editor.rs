@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::os::raw;
 
+use cushy::animation::ZeroToOne;
+use cushy::kludgine::image::buffer;
 use cushy::kludgine::text::Text;
 use cushy::kludgine::wgpu::hal::auxil::db;
 use cushy::styles::components::{CornerRadius, SurfaceColor};
@@ -13,10 +15,10 @@ use cushy::figures::{
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
-use cushy::kludgine::shapes::{Path, PathBuilder, Shape};
+use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{Color, CornerRadii, Dimension};
+use cushy::styles::{Color, ColorExt, CornerRadii, Dimension};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -24,7 +26,7 @@ use cushy::widget::{
 };
 
 use cushy::{define_components, ModifiersExt};
-use ndoc::{rope_utils, Document, Selection};
+use ndoc::{rope_utils, Document, Rope, Selection};
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
@@ -42,6 +44,7 @@ pub struct TextEditor {
     line_height: Px,
     scale: Fraction,
     cmd_reg: Dynamic<CommandsRegistry>,
+    eol_width: Px,
 }
 
 impl TextEditor {
@@ -55,6 +58,7 @@ impl TextEditor {
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
             cmd_reg,
+            eol_width: Px::ZERO,
         }
     }
 
@@ -132,7 +136,7 @@ impl TextEditor {
         }
     }
 
-    fn layout_line(&self, line_idx: usize) -> Option<Buffer> {
+    fn layout_line(&self, line_idx: usize) -> Buffer {
         let raw_text =
             ndoc::rope_utils::get_line_info(&self.doc.get().rope.slice(..), line_idx as _, 4)
                 .to_string();
@@ -166,16 +170,28 @@ impl TextEditor {
                 10000.,
                 self.font_metrics.line_height,
             );
-            Some(buffer)
+            buffer
         } else {
-            None
+            let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
+            buffer.set_text(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                &raw_text,
+                attrs,
+                cushy::kludgine::cosmic_text::Shaping::Advanced,
+            );
+            buffer.set_size(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                10000.,
+                self.font_metrics.line_height,
+            );
+            buffer
         }
     }
 
     fn get_selection_shape(
         &self,
         selection: Selection,
-        layouts: &HashMap<usize, Option<Buffer>>,
+        layouts: &HashMap<usize, Buffer>,
     ) -> Option<Path<Px, false>> {
         let rope = &self.doc.get().rope;
 
@@ -184,23 +200,44 @@ impl TextEditor {
             .iter()
             .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
             .map(|a| {
-                // TODO: Use the buffers instead of recalculating it
-                let start = self.grapheme_to_point(a.line, a.col_start);
-                let end = self.grapheme_to_point(a.line, a.col_end);
+                // TODO, it can be better! and it don't work with tabs
+                let line_text = rope_utils::get_line_info(&self.doc.get().rope.slice(..), a.line, self.doc.get().file_info.indentation.len()).to_string();
+                let col_start =
+                    rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
+                let col_end =
+                    rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
+
+                let c_start = Cursor::new(0, col_start);
+                let c_end = if col_end == col_start {
+                    Cursor::new(0, col_start + 1)
+                } else {
+                    Cursor::new(0, col_end)
+                };
+
+                let (start, end) = layouts[&a.line]
+                    .layout_runs()
+                    .nth(0)
+                    .unwrap()
+                    .highlight(c_start, c_end)
+                    .unwrap_or_default();
+                let start = start.into();
+                let end = if col_end == col_start {
+                    start
+                } else {
+                    start + Px::from_float(end)
+                };
+
                 let y = self.line_height * Px::new(a.line as i32);
 
                 Rect::new(
-                    Point::new(start.ceil(), y.ceil()),
+                    Point::new(start, y),
                     Size::new(
-                        end.ceil()
-                            + if a.include_eol {
-                                //self.char_base_width.ceil()
-                                Px::new(15) // TODO, calculate grapheme width
-                            } else {
-                                Px::ZERO
-                            }
-                            - start.ceil(),
-                        self.line_height.ceil(),
+                        end + if a.include_eol {
+                            self.eol_width
+                        } else {
+                            Px::ZERO
+                        } - start,
+                        self.line_height,
                     ),
                 )
             })
@@ -209,10 +246,7 @@ impl TextEditor {
         make_selection_path(&rects)
     }
 
-    fn get_selections_shapes(
-        &self,
-        layouts: &HashMap<usize, Option<Buffer>>,
-    ) -> Vec<Path<Px, false>> {
+    fn get_selections_shapes(&self, layouts: &HashMap<usize, Buffer>) -> Vec<Path<Px, false>> {
         self.doc
             .get()
             .selections
@@ -241,7 +275,7 @@ impl Widget for TextEditor {
 
         context.gfx.set_font_size(Lp::points(12));
 
-        context.fill(Color::new(0x34, 0x3D, 0x46, 0xFF));
+        context.fill(context.get(&BackgroundColor));
         let doc = self.doc.get();
 
         let buffers = self
@@ -253,7 +287,7 @@ impl Widget for TextEditor {
             .skip(first_line)
             .take(total_line)
             .map(|(i, _)| (i, self.layout_line(i)))
-            .collect::<HashMap<usize, Option<Buffer>>>();
+            .collect::<HashMap<usize, Buffer>>();
 
         let selections = self
             .doc
@@ -265,32 +299,33 @@ impl Widget for TextEditor {
 
         // draw selections
         for path in self.get_selections_shapes(&buffers) {
+            let bg_color = context.get(&SelectionBackgroundColor);
+            let border_color = context.get(&SelectionBorderColor);
             // TODO: use correct color
             context
                 .gfx
-                .draw_shape(path.fill(Color::ALICEBLUE).translate_by(Point::ZERO));
-            context
-                .gfx
-                .draw_shape(path.stroke(Color::BLUE).translate_by(Point::ZERO));
+                .draw_shape(path.fill(bg_color).translate_by(Point::ZERO));
+            context.gfx.draw_shape(
+                path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
+                    .translate_by(Point::ZERO),
+            );
         }
 
         for i in first_line..last_line {
             let y = units::Px::new(i as _) * self.line_height;
             if let Some(b) = buffers.get(&i) {
-                if let Some(b) = b {
-                    context.gfx.draw_text_buffer(
-                        Drawable {
-                            source: b,
-                            translation: Point::<Px>::default(),
-                            opacity: None,
-                            rotation: None,
-                            scale: None,
-                        }
-                        .translate_by(Point::new(Px::ZERO, y)),
-                        Color::WHITE,
-                        cushy::kludgine::text::TextOrigin::TopLeft,
-                    );
-                }
+                context.gfx.draw_text_buffer(
+                    Drawable {
+                        source: b,
+                        translation: Point::<Px>::default(),
+                        opacity: None,
+                        rotation: None,
+                        scale: None,
+                    }
+                    .translate_by(Point::new(Px::ZERO, y)),
+                    Color::WHITE,
+                    cushy::kludgine::text::TextOrigin::TopLeft,
+                );
             }
         }
 
@@ -343,6 +378,7 @@ impl Widget for TextEditor {
             self.font_size = context.get(&TextSize).into_px(context.gfx.scale()).ceil();
             self.font_metrics =
                 Metrics::new(self.font_size.into_float(), self.line_height.into_float());
+            self.eol_width = context.gfx.measure_text("⏎").size.width;
         }
         let height = self.doc.get().rope.len_lines() as f32 * self.font_metrics.line_height;
 
@@ -538,7 +574,7 @@ impl Widget for Gutter {
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
 
-        context.fill(Color::new(0x34, 0x3D, 0x46, 0xFF));
+        context.fill(context.get(&BackgroundColor));
 
         for i in first_line..last_line {
             let y = self.scroller.get().scroll().y
@@ -640,6 +676,9 @@ define_components! {
     CodeEditor {
         TextSize(Lp, "text_size", Lp::points(11))
         LineHeight(Lp, "line_height", Lp::points(13))
+        BackgroundColor(Color, "background_color", Color::new(0x34, 0x3D, 0x46, 0xFF))
+        SelectionBackgroundColor(Color, "selection_background_color", Color::new(0x4F, 0x5B, 0x66, 0xFF))
+        SelectionBorderColor(Color, "selection_border_color", Color::new(0x20, 0x30, 0x40, 0xFF))
     }
 }
 
@@ -653,10 +692,10 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
         .iter()
         .filter(|r| ((r.origin.x + r.size.width) - r.origin.x).into_float() > epsilon)
     {
-        let x0 = r.origin.x;
-        let y0 = r.origin.y;
-        let x1 = r.origin.x + r.size.width;
-        let y1 = r.origin.y + r.size.height;
+        let x0 = r.origin.x.floor();
+        let y0 = r.origin.y.floor();
+        let x1 = (r.origin.x + r.size.width).ceil();
+        let y1 = (r.origin.y + r.size.height).ceil();
         right.push(Point::new(x1, y0));
         right.push(Point::new(x1, y1));
         left.push(Point::new(x0, y0));
@@ -705,11 +744,7 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
             if path.is_empty() {
                 path.push(PathEl::MoveTo(p2 + (normalize(v1) * -bevel)));
             } else {
-                // vger_renderer doesn't implement LineTo ...
-                path.push(PathEl::QuadTo(
-                    p2 + (normalize(v1) * -bevel),
-                    p2 + (normalize(v1) * -bevel),
-                ));
+                path.push(PathEl::LineTo(p2 + (normalize(v1) * -bevel)));
             }
             path.push(PathEl::QuadTo(p2, p2 + (normalize(v2) * -bevel)));
         }
@@ -725,8 +760,6 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
             match el {
                 PathEl::LineTo(point) => p = p.line_to(*point),
                 PathEl::QuadTo(p1, p2) => p = p.quadratic_curve_to(*p1, *p2),
-                // PathEl::Close => p = p.close(),
-                // PathEl::MoveTo(_) => ()
                 _ => (),
             }
         }
