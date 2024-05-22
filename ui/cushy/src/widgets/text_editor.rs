@@ -86,7 +86,8 @@ impl TextEditor {
             .hit(point.x.into_float(), point.y.into_float())
             .unwrap_or_default()
             .index;
-        rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), byte_idx)
+        self.rope.get().byte_to_visible_col(line, byte_idx)
+        //rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), byte_idx)
     }
 
     fn grapheme_to_point(&self, line: usize, index: usize) -> Px {

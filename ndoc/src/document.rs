@@ -22,8 +22,7 @@ use syntect::parsing::SyntaxReference;
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
-        char_to_grapheme, get_line_start_boundary, grapheme_to_char, next_grapheme_boundary,
-        next_word_boundary, prev_grapheme_boundary, prev_word_boundary, word_end, word_start,
+        self, char_to_grapheme, get_line_start_boundary, grapheme_to_char, next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary, word_end, word_start
     },
     syntax::{StateCache, StyledLine, StyledLinesCache, SYNTAXSET},
 };
@@ -945,6 +944,70 @@ impl Document {
             redo = false;
         }
     }
+
+    fn line_has_tab(&self, line_idx: usize) -> bool {
+        for c in self.rope.line(line_idx).chunks() {
+            if c.contains('\t') {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn get_visible_line<'a>(&'a self, line_idx: usize) -> Cow<'a, str> {
+        if self.line_has_tab(line_idx) {
+            let indent_len = self.file_info.indentation.len();
+            let mut s = String::with_capacity(self.rope.line(line_idx).len_chars());
+            let mut offset = 0;
+            for c in self.rope.line(line_idx).chars() {
+                match c {
+                    '\t' => {
+                        let tablen = indent_len - (offset % indent_len);
+                        s.push_str(&" ".repeat(tablen));
+                        offset += tablen;
+                    }
+                    _ => {
+                        s.push(c);
+                        offset += 1;
+                    }
+                }
+            }
+    
+            s.into()
+        } else {
+            match self.rope.line(line_idx).as_str() {
+                Some(s) => s.into(),
+                None => self.rope.line(line_idx).to_string().into(),
+            }
+        }
+    }
+
+    pub fn byte_to_visible_col(&self, line_idx: usize, byte_idx: usize) -> usize {
+        byte_to_visible_col(self.rope.line(line_idx).bytes(), byte_idx, self.file_info.indentation.len())
+    }
+}
+
+fn byte_to_visible_col(input: impl Iterator<Item = u8>, byte_idx: usize, tab_len: usize) -> usize {
+    let mut col = 0;
+    for c in input.take(byte_idx) {
+        if c == b'\t' {
+            col += tab_len - (col % tab_len);
+        } else {
+            col += 1;
+        }
+    }
+    col
+}
+
+#[test]
+fn test_byte_to_visible_col() {
+    let s = "a\tb\tc";
+    assert_eq!(byte_to_visible_col(s.bytes(), 0, 4), 0);
+    assert_eq!(byte_to_visible_col(s.bytes(), 1, 4), 1);
+    assert_eq!(byte_to_visible_col(s.bytes(), 2, 4), 4);
+    assert_eq!(byte_to_visible_col(s.bytes(), 3, 4), 5);
+    assert_eq!(byte_to_visible_col(s.bytes(), 4, 4), 8);
+    assert_eq!(byte_to_visible_col(s.bytes(), 5, 4), 9);
 }
 
 pub enum MoveDirection {
