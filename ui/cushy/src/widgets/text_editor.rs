@@ -37,7 +37,7 @@ use crate::{CommandsRegistry, FONT_SYSTEM};
 use super::scroll::{self, MyScroll};
 
 #[derive(Debug, Default, Clone, Copy)]
-struct ClickInfo {
+pub struct ClickInfo {
     count: usize,
     last_click: Option<Instant>,
     last_button: Option<MouseButton>,
@@ -605,7 +605,6 @@ pub struct Gutter {
     font_size: Px,
     line_height: Px,
     scale: Fraction,
-    click_info: Dynamic<ClickInfo>,
     editor_id: WidgetId,
 }
 
@@ -613,7 +612,6 @@ impl Gutter {
     pub fn new(
         doc: Dynamic<Document>,
         scroller: Dynamic<ScrollController>,
-        click_info: Dynamic<ClickInfo>,
         editor_id: WidgetId,
     ) -> Self {
         Self {
@@ -623,7 +621,6 @@ impl Gutter {
             font_size: Px::ZERO,
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
-            click_info,
             editor_id,
         }
     }
@@ -751,7 +748,7 @@ impl CodeEditor {
         let (editor_tag, etidor_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
-        let child = Gutter::new(doc.clone(), scroller.clone(), click_info.clone(), etidor_id)
+        let child = Gutter::new(doc.clone(), scroller.clone(), etidor_id)
             // .expand_vertically()
             // .width(Px::new(50))
             .and(
