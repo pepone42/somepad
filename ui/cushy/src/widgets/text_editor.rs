@@ -93,7 +93,7 @@ impl TextEditor {
 
     fn grapheme_to_point(&self, line: usize, index: usize) -> Px {
         // TODO: tab support
-        //let raw_text = self.doc.get().rope.line(line).to_string(); 
+        //let raw_text = self.doc.get().rope.line(line).to_string();
         let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
@@ -206,10 +206,10 @@ impl TextEditor {
             .map(|a| {
                 // TODO, it can be better! and it don't work with tabs
                 //let line_text = rope_utils::get_line_info(&self.doc.get().rope.slice(..), a.line, self.doc.get().file_info.indentation.len()).to_string();
-                let col_start =self.doc.get().col_to_byte(a.line, a.col_start);
-                    //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
-                let col_end =self.doc.get().col_to_byte(a.line, a.col_end);
-                    //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
+                let col_start = self.doc.get().col_to_byte(a.line, a.col_start);
+                //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
+                let col_end = self.doc.get().col_to_byte(a.line, a.col_end);
+                //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
 
                 let c_start = Cursor::new(0, col_start);
                 let c_end = if col_end == col_start {
@@ -410,7 +410,7 @@ impl Widget for TextEditor {
         &mut self,
         location: Point<units::Px>,
         _device_id: cushy::window::DeviceId,
-        _button: cushy::kludgine::app::winit::event::MouseButton,
+        button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
         if !context.enabled() {
@@ -418,38 +418,41 @@ impl Widget for TextEditor {
         }
         context.focus();
 
-        let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
-            .floor()
-            .get();
+        if button == MouseButton::Left {
+            let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
+                .floor()
+                .get();
 
-        let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
+            let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
 
-        dbg!(line, col_idx);
-        let c = ndoc::Position::new(line as _, col_idx);
-        self.doc.lock().set_main_selection(c, c);
+            dbg!(line, col_idx);
+            let c = ndoc::Position::new(line as _, col_idx);
+            self.doc.lock().set_main_selection(c, c);
 
-        HANDLED
+            HANDLED
+        } else {
+            IGNORED
+        }
     }
 
     fn mouse_drag(
-            &mut self,
-            location: Point<Px>,
-            device_id: cushy::window::DeviceId,
-            button: cushy::kludgine::app::winit::event::MouseButton,
-            context: &mut cushy::context::EventContext<'_>,
-        ) {
-            
+        &mut self,
+        location: Point<Px>,
+        _device_id: cushy::window::DeviceId,
+        button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut cushy::context::EventContext<'_>,
+    ) {
         if button == MouseButton::Left {
             let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
-            .floor()
-            .get();
+                .floor()
+                .get();
 
-            let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines()-1);
+            let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines() - 1);
 
             let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
             let c = ndoc::Position::new(line as _, col_idx);
             let tail = self.doc.get().selections[0].tail;
-            self.doc.lock().set_main_selection(c,tail);
+            self.doc.lock().set_main_selection(c, tail);
             self.refocus_main_selection();
         }
     }
