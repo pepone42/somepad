@@ -280,7 +280,7 @@ impl TextEditor {
             .collect()
     }
 
-    fn location_to_position(&mut self, location: Point<Px>) -> ndoc::Position {
+    fn location_to_position(&self, location: Point<Px>) -> ndoc::Position {
         let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
             .floor()
             .get();
@@ -606,6 +606,7 @@ pub struct Gutter {
     line_height: Px,
     scale: Fraction,
     click_info: Dynamic<ClickInfo>,
+    editor_id: WidgetId,
 }
 
 impl Gutter {
@@ -613,6 +614,7 @@ impl Gutter {
         doc: Dynamic<Document>,
         scroller: Dynamic<ScrollController>,
         click_info: Dynamic<ClickInfo>,
+        editor_id: WidgetId,
     ) -> Self {
         Self {
             doc,
@@ -622,6 +624,7 @@ impl Gutter {
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
             click_info,
+            editor_id,
         }
     }
 }
@@ -681,6 +684,59 @@ impl Widget for Gutter {
     fn full_control_redraw(&self) -> bool {
         true
     }
+    fn hit_test(
+        &mut self,
+        location: Point<Px>,
+        context: &mut cushy::context::EventContext<'_>,
+    ) -> bool {
+        true
+    }
+    fn mouse_down(
+        &mut self,
+        location: Point<Px>,
+        device_id: cushy::window::DeviceId,
+        button: MouseButton,
+        context: &mut cushy::context::EventContext<'_>,
+    ) -> EventHandling {
+        if button == MouseButton::Left {
+            let c = context.for_other(&self.editor_id).unwrap();
+            let guard = c.widget().lock();
+            let editor = guard.downcast_ref::<TextEditor>().unwrap();
+
+            let line = ((-self.scroller.get().scroll().y + location.y) / editor.line_height)
+                .floor()
+                .get();
+            let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
+
+            editor.doc.lock().select_line(line);
+            HANDLED
+        } else {
+            IGNORED
+        }
+    }
+    fn mouse_drag(
+        &mut self,
+        location: Point<Px>,
+        device_id: cushy::window::DeviceId,
+        button: MouseButton,
+        context: &mut cushy::context::EventContext<'_>,
+    ) {
+        if button == MouseButton::Left {
+            let c = context.for_other(&self.editor_id).unwrap();
+            let guard = c.widget().lock();
+            let editor = guard.downcast_ref::<TextEditor>().unwrap();
+            let line = ((-self.scroller.get().scroll().y + location.y) / editor.line_height)
+                .floor()
+                .get();
+            let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
+
+            editor
+                .doc
+                .lock()
+                .expand_selection_by_line(Position::new(line, 0));
+            editor.refocus_main_selection();
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -692,15 +748,17 @@ pub struct CodeEditor {
 impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let (scroll_tag, scroll_id) = WidgetTag::new();
+        let (editor_tag, etidor_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
-        let child = Gutter::new(doc.clone(), scroller.clone(), click_info.clone())
+        let child = Gutter::new(doc.clone(), scroller.clone(), click_info.clone(), etidor_id)
             // .expand_vertically()
             // .width(Px::new(50))
             .and(
                 MyScroll::new(
                     TextEditor::new(doc.clone(), cmd_reg, click_info)
-                        .with_scroller(scroller.clone()),
+                        .with_scroller(scroller.clone())
+                        .make_with_tag(editor_tag),
                     scroller,
                 )
                 .make_with_tag(scroll_tag) //.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
