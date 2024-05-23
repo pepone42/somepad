@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::ops::Sub;
 use std::os::raw;
+use std::time::{Duration, Instant};
 
 use cushy::animation::ZeroToOne;
 use cushy::kludgine::image::buffer;
@@ -34,6 +36,29 @@ use crate::{CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, MyScroll};
 
+#[derive(Debug, Default, Clone, Copy)]
+struct ClickInfo {
+    count: usize,
+    last_click: Option<Instant>,
+    last_button: Option<MouseButton>,
+}
+
+impl ClickInfo {
+    fn update(&mut self, button: MouseButton) {
+        let now = Instant::now();
+        match (self.last_click, self.last_button) {
+            (Some(last_click), Some(last_button))
+                if dbg!(now - last_click) < Duration::from_millis(300) && button == last_button =>
+            {
+                self.count += 1
+            }
+            _ => self.count = 0,
+        }
+        self.last_click = Some(now);
+        self.last_button = Some(button);
+    }
+}
+
 #[derive(Debug)]
 pub struct TextEditor {
     pub doc: Dynamic<ndoc::Document>,
@@ -45,10 +70,15 @@ pub struct TextEditor {
     scale: Fraction,
     cmd_reg: Dynamic<CommandsRegistry>,
     eol_width: Px,
+    click_info: Dynamic<ClickInfo>,
 }
 
 impl TextEditor {
-    pub fn new(doc: Dynamic<ndoc::Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
+    pub fn new(
+        doc: Dynamic<ndoc::Document>,
+        cmd_reg: Dynamic<CommandsRegistry>,
+        click_info: Dynamic<ClickInfo>,
+    ) -> Self {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
@@ -59,6 +89,7 @@ impl TextEditor {
             scale: Fraction::ZERO,
             cmd_reg,
             eol_width: Px::ZERO,
+            click_info,
         }
     }
 
@@ -67,9 +98,7 @@ impl TextEditor {
         self
     }
 
-    fn point_to_grapheme(&self, line: usize, point: Point<Px>) -> usize {
-        // TODO: tab support
-        //let raw_text = self.doc.get().rope.line(line).to_string();
+    fn px_to_col(&self, line: usize, x: Px) -> usize {
         let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
@@ -84,16 +113,13 @@ impl TextEditor {
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
         let byte_idx = buffer
-            .hit(point.x.into_float(), point.y.into_float())
+            .hit(x.into_float(), self.font_metrics.line_height / 2.)
             .unwrap_or_default()
             .index;
         self.doc.get().byte_to_col(line, byte_idx)
-        //rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), byte_idx)
     }
 
-    fn grapheme_to_point(&self, line: usize, index: usize) -> Px {
-        // TODO: tab support
-        //let raw_text = self.doc.get().rope.line(line).to_string();
+    fn col_to_px(&self, line: usize, index: usize) -> Px {
         let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
@@ -107,7 +133,6 @@ impl TextEditor {
             Attrs::new().family(Family::Monospace),
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
-        //let col = rope_utils::grapheme_to_byte(&self.doc.get().rope.line(line), index);
         let col = self.doc.get().col_to_byte(line, index);
         let c_start = Cursor::new(0, col);
         let c_end = Cursor::new(0, col + 1);
@@ -124,7 +149,7 @@ impl TextEditor {
 
     pub fn refocus_main_selection(&self) {
         if self.doc.get().selections.len() == 1 {
-            let main_selection_head_x = self.grapheme_to_point(
+            let main_selection_head_x = self.col_to_px(
                 self.doc.get().selections[0].head.line,
                 self.doc.get().selections[0].head.column,
             );
@@ -204,12 +229,8 @@ impl TextEditor {
             .iter()
             .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
             .map(|a| {
-                // TODO, it can be better! and it don't work with tabs
-                //let line_text = rope_utils::get_line_info(&self.doc.get().rope.slice(..), a.line, self.doc.get().file_info.indentation.len()).to_string();
                 let col_start = self.doc.get().col_to_byte(a.line, a.col_start);
-                //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
                 let col_end = self.doc.get().col_to_byte(a.line, a.col_end);
-                //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
 
                 let c_start = Cursor::new(0, col_start);
                 let c_end = if col_end == col_start {
@@ -258,13 +279,13 @@ impl TextEditor {
             .filter_map(|s| self.get_selection_shape(*s, layouts))
             .collect()
     }
-    
+
     fn location_to_position(&mut self, location: Point<Px>) -> ndoc::Position {
         let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
             .floor()
             .get();
         let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines() - 1);
-        let col_idx = self.point_to_grapheme(line, Point::new(location.x, 1.into()));
+        let col_idx = self.px_to_col(line, location.x);
         Position::new(line, col_idx)
     }
 }
@@ -314,7 +335,7 @@ impl Widget for TextEditor {
         for path in self.get_selections_shapes(&buffers) {
             let bg_color = context.get(&SelectionBackgroundColor);
             let border_color = context.get(&SelectionBorderColor);
-            // TODO: use correct color
+
             context
                 .gfx
                 .draw_shape(path.fill(bg_color).translate_by(Point::ZERO));
@@ -348,7 +369,7 @@ impl Widget for TextEditor {
             .iter()
             .filter(|s| s.head.line >= first_line && s.head.line <= last_line)
         {
-            let head = self.grapheme_to_point(s.head.line, s.head.column).floor();
+            let head = self.col_to_px(s.head.line, s.head.column).floor();
 
             context.gfx.draw_shape(
                 Shape::filled_rect(
@@ -428,12 +449,19 @@ impl Widget for TextEditor {
         context.focus();
 
         if button == MouseButton::Left {
+            self.click_info.lock().update(button);
+            dbg!(self.click_info.get().count);
             let pos = self.location_to_position(location);
-
-            dbg!(pos.line, pos.column);
-
-            self.doc.lock().set_main_selection(pos, pos);
-
+            match self.click_info.get().count {
+                0 => {
+                    self.doc.lock().set_main_selection(pos, pos);
+                }
+                1 => {
+                    self.doc.lock().select_word(pos);
+                }
+                2 => self.doc.lock().select_line(pos.line),
+                _ => self.doc.lock().select_all(),
+            }
             HANDLED
         } else {
             IGNORED
@@ -448,11 +476,17 @@ impl Widget for TextEditor {
         _context: &mut cushy::context::EventContext<'_>,
     ) {
         if button == MouseButton::Left {
-
             let head = self.location_to_position(location);
+            match self.click_info.get().count {
+                0 => {
+                    let tail = self.doc.get().selections[0].tail;
+                    self.doc.lock().set_main_selection(head, tail);
+                }
+                1 => self.doc.lock().expand_selection_by_word(head),
+                2 => self.doc.lock().expand_selection_by_line(head),
+                _ => (),
+            }
 
-            let tail = self.doc.get().selections[0].tail;
-            self.doc.lock().set_main_selection(head, tail);
             self.refocus_main_selection();
         }
     }
@@ -571,10 +605,15 @@ pub struct Gutter {
     font_size: Px,
     line_height: Px,
     scale: Fraction,
+    click_info: Dynamic<ClickInfo>,
 }
 
 impl Gutter {
-    pub fn new(doc: Dynamic<Document>, scroller: Dynamic<ScrollController>) -> Self {
+    pub fn new(
+        doc: Dynamic<Document>,
+        scroller: Dynamic<ScrollController>,
+        click_info: Dynamic<ClickInfo>,
+    ) -> Self {
         Self {
             doc,
             scroller,
@@ -582,6 +621,7 @@ impl Gutter {
             font_size: Px::ZERO,
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
+            click_info,
         }
     }
 }
@@ -653,12 +693,14 @@ impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let (scroll_tag, scroll_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
-        let child = Gutter::new(doc.clone(), scroller.clone())
+        let click_info = Dynamic::new(ClickInfo::default());
+        let child = Gutter::new(doc.clone(), scroller.clone(), click_info.clone())
             // .expand_vertically()
             // .width(Px::new(50))
             .and(
                 MyScroll::new(
-                    TextEditor::new(doc.clone(), cmd_reg).with_scroller(scroller.clone()),
+                    TextEditor::new(doc.clone(), cmd_reg, click_info)
+                        .with_scroller(scroller.clone()),
                     scroller,
                 )
                 .make_with_tag(scroll_tag) //.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
