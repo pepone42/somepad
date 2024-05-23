@@ -15,6 +15,7 @@ use std::{
 
 use chardetng::EncodingDetector;
 use encoding_rs::Encoding;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use ropey::{Rope, RopeSlice};
 use syntect::parsing::SyntaxReference;
@@ -22,7 +23,8 @@ use syntect::parsing::SyntaxReference;
 use crate::{
     file_info::{detect_indentation, detect_linefeed, FileInfo, Indentation, LineFeed},
     rope_utils::{
-        self, char_to_grapheme, get_line_start_boundary, grapheme_to_char, next_grapheme_boundary, next_word_boundary, prev_grapheme_boundary, prev_word_boundary, word_end, word_start
+        self, char_to_grapheme, get_line_start_boundary, grapheme_to_char, next_grapheme_boundary,
+        next_word_boundary, prev_grapheme_boundary, prev_word_boundary, word_end, word_start,
     },
     syntax::{StateCache, StyledLine, StyledLinesCache, SYNTAXSET},
 };
@@ -76,7 +78,7 @@ impl History {
     }
 
     fn redo(&mut self) -> Option<(Rope, Vec<Selection>)> {
-        if self.edit_stack_top +1 < self.edit_stack.len() {
+        if self.edit_stack_top + 1 < self.edit_stack.len() {
             self.edit_stack_top += 1;
             Some(self.edit_stack[self.edit_stack_top].clone())
         } else {
@@ -120,7 +122,15 @@ fn new_doc_id() {
 pub enum BackgroundWorkerMessage {
     Stop,
     RegisterDocument(usize, Box<dyn Send + Fn()>),
-    UpdateBuffer(usize, SyntaxReference, Rope, usize, StyledLinesCache, Sender<()>),
+    UpdateBuffer(
+        usize,
+        SyntaxReference,
+        Rope,
+        usize,
+        StyledLinesCache,
+        Sender<()>,
+        usize,
+    ),
     // WatchFile(PathBuf),
     // UnwatchFile(PathBuf),
 }
@@ -133,6 +143,7 @@ struct HighlighterState<'a> {
     chunk_len: usize,
     rope: Rope,
     lines_cache: StyledLinesCache,
+    tab_len: usize,
 }
 
 impl<'a> HighlighterState<'a> {
@@ -145,6 +156,7 @@ impl<'a> HighlighterState<'a> {
             chunk_len: 100,
             rope: Rope::new(),
             lines_cache: StyledLinesCache::new(),
+            tab_len: 4,
         }
     }
 
@@ -155,6 +167,7 @@ impl<'a> HighlighterState<'a> {
             &self.rope,
             self.current_index,
             self.current_index + self.chunk_len,
+            self.tab_len,
         );
         self.current_index += self.chunk_len;
         // subsequent chunck are bigger, for better performance
@@ -234,12 +247,21 @@ impl Document {
 
             loop {
                 match rx.try_recv() {
-                    Ok(BackgroundWorkerMessage::UpdateBuffer(id, s, r, start, cache, tx)) => {
+                    Ok(BackgroundWorkerMessage::UpdateBuffer(
+                        id,
+                        s,
+                        r,
+                        start,
+                        cache,
+                        tx,
+                        tab_len,
+                    )) => {
                         let state = highlight_state
                             .entry(id)
                             .or_insert(HighlighterState::new(id));
 
                         state.rope = r;
+                        state.tab_len = tab_len;
                         state.current_index = start;
                         state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
                         state.lines_cache = cache;
@@ -267,7 +289,6 @@ impl Document {
                         }
                     }
                 } else {
-                    
                     thread::sleep(Duration::from_millis(1));
                 }
             }
@@ -310,9 +331,10 @@ impl Document {
                 line_idx,
                 self.line_style_cache.clone(),
                 sender,
+                self.file_info.indentation.len(),
             ));
             // block until first chunk is highlighted
-            let _  = receiver.recv();
+            let _ = receiver.recv();
             // TODO: log error
         }
     }
@@ -524,7 +546,6 @@ impl Document {
             .history
             .undo(self.rope.clone(), self.selections.clone())
         {
-            
             self.rope = rope;
             self.selections = selections;
             // TODO: potential perf issue
@@ -972,7 +993,7 @@ impl Document {
                     }
                 }
             }
-    
+
             s.into()
         } else {
             match self.rope.line(line_idx).as_str() {
@@ -982,8 +1003,101 @@ impl Document {
         }
     }
 
+    pub fn col_to_vcol(&self, line_idx: usize, col_idx: usize) -> usize {
+        let slice = self.rope.line(line_idx);
+        let tabl_len = self.file_info.indentation.len();
+
+        let mut vcol = 0;
+        for (i, j) in rope_utils::NextGraphemeIdxIterator::new(&slice)
+            .take(col_idx+1)
+            .tuple_windows()
+        {
+            match slice.byte_slice(i..j).char(0) {
+                '\t' => vcol += tabl_len - (vcol % tabl_len),
+                _ => vcol += 1,
+            }
+        }
+        vcol
+    }
+
+    pub fn vcol_to_col(&self, line_idx: usize, vcol_idx: usize) -> usize {
+        let slice = self.rope.line(line_idx);
+        let tabl_len = self.file_info.indentation.len();
+        let mut vcol = 0;
+        let mut col = 0;
+        for (i, j) in rope_utils::NextGraphemeIdxIterator::new(&slice).tuple_windows() {
+            match slice.byte_slice(i..j).char(0) {
+                '\t' => vcol += tabl_len - (vcol % tabl_len),
+                _ => vcol += 1,
+            }
+            if vcol > vcol_idx {
+                return col;
+            }
+            col += 1;
+        }
+        col
+    }
+
+    pub fn vcol_to_byte(&self, line_idx: usize, vcol_idx: usize) -> usize {
+        let rope = Rope::from_str(&self.get_visible_line(line_idx));
+        let char_idx = rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
+            .nth(vcol_idx)
+            .unwrap();
+        rope.char_to_byte(char_idx)
+    }
+
+    pub fn byte_to_vcol(&self, line_idx: usize, byte_idx: usize) -> usize {
+        let rope = Rope::from_str(&self.get_visible_line(line_idx));
+        let char_idx = rope.byte_to_char(byte_idx);
+        rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
+            .take_while(|i| *i < char_idx)
+            .count()
+    }
+
+    pub fn col_to_byte(&self, line_idx: usize, col_idx: usize) -> usize {
+        let vcol_idx = self.col_to_vcol(line_idx, col_idx);
+        self.vcol_to_byte(line_idx, vcol_idx)
+    }
+
+    pub fn byte_to_col(&self, line_idx: usize, byte_idx: usize) -> usize {
+        let vcol_idx = self.byte_to_vcol(line_idx, byte_idx);
+        self.vcol_to_col(line_idx, vcol_idx)
+    }
+
+
+
+    /// return the visible column position corresponding of the byte_idx of the line
+    /// this function take into account the tab character and elastic tab stop behavior
     pub fn byte_to_visible_col(&self, line_idx: usize, byte_idx: usize) -> usize {
-        byte_to_visible_col(self.rope.line(line_idx).bytes(), byte_idx, self.file_info.indentation.len())
+        byte_to_visible_col(
+            self.rope.line(line_idx).bytes(),
+            byte_idx,
+            self.file_info.indentation.len(),
+        )
+    }
+
+    /// return the byte index position of the corresponding visible column.
+    /// this function take into account the tab character and elastic tab stop behavior
+    pub fn visible_col_to_byte(&self, line_idx: usize, vcol_idx: usize) -> usize {
+        let slice = self.rope.line(line_idx);
+        let mut byte_idx = 0;
+        let mut vcol = 0;
+        let tabl_len = self.file_info.indentation.len();
+        while vcol < vcol_idx {
+            let i = rope_utils::next_grapheme_boundary_byte(&slice, byte_idx);
+
+            if i == byte_idx {
+                // we have reached eol
+                return i;
+            }
+
+            match slice.byte_slice(byte_idx..i).char(0) {
+                '\t' => vcol += tabl_len - (vcol % tabl_len),
+                _ => vcol += 1,
+            }
+            byte_idx = i;
+        }
+        byte_idx
     }
 }
 
@@ -1008,6 +1122,23 @@ fn test_byte_to_visible_col() {
     assert_eq!(byte_to_visible_col(s.bytes(), 3, 4), 5);
     assert_eq!(byte_to_visible_col(s.bytes(), 4, 4), 8);
     assert_eq!(byte_to_visible_col(s.bytes(), 5, 4), 9);
+}
+
+#[test]
+fn test_visible_col_to_byte() {
+    let mut s = Document::new(Indentation::Tab(4));
+    s.insert("a\tb\tc");
+    // "a   b   c"
+    assert_eq!(s.visible_col_to_byte(0, 0), 0);
+    assert_eq!(s.visible_col_to_byte(0, 1), 1);
+    assert_eq!(s.visible_col_to_byte(0, 2), 2);
+    assert_eq!(s.visible_col_to_byte(0, 3), 2);
+    assert_eq!(s.visible_col_to_byte(0, 4), 2);
+    assert_eq!(s.visible_col_to_byte(0, 5), 3);
+    assert_eq!(s.visible_col_to_byte(0, 6), 4);
+    assert_eq!(s.visible_col_to_byte(0, 7), 4);
+    assert_eq!(s.visible_col_to_byte(0, 8), 4);
+    assert_eq!(s.visible_col_to_byte(0, 9), 5);
 }
 
 pub enum MoveDirection {

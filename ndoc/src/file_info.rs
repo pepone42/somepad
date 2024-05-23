@@ -22,7 +22,7 @@ impl Default for FileInfo {
             encoding: encoding_rs::UTF_8,
             bom: None,
             linefeed: Default::default(),
-            indentation: Indentation::Space(4),
+            indentation: Indentation::Tab(4),
             syntax: SYNTAXSET.find_syntax_plain_text(),
         }
     }

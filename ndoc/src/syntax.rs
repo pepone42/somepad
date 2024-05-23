@@ -9,7 +9,7 @@ use syntect::{
     parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet},
 };
 
-use crate::theme::THEME;
+use crate::{rope_utils, theme::THEME};
 
 pub static SYNTAXSET: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines);
 
@@ -80,6 +80,7 @@ impl StateCache {
         rope: &Rope,
         start: usize,
         end: usize,
+        tab_len: usize,
     ) {
         // states are cached every 16 lines
         let start = (start >> 4).min(self.states.len());
@@ -95,28 +96,41 @@ impl StateCache {
         });
 
         for i in start << 4..(end << 4).min(rope.len_lines()) {
-            let h = if let Some(str) = rope.line(i).as_str() {
-                let ops = states.0.parse_line(&str, &SYNTAXSET);
-                let h: Vec<_> = if let Ok(ops) = ops {
-                    RangedHighlightIterator::new(&mut states.1, &ops, &str, &self.highlighter)
-                        .map(|h| SpanStyle::new(h.0, h.2))
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                StyledLine::new(h)
+            let str = rope_utils::get_line_info(&rope.slice(..), i, tab_len).to_string();
+            let ops = states.0.parse_line(&str, &SYNTAXSET);
+            let h: Vec<_> = if let Ok(ops) = ops {
+                RangedHighlightIterator::new(&mut states.1, &ops, &str, &self.highlighter)
+                    .map(|h| SpanStyle::new(h.0, h.2))
+                    .collect()
             } else {
-                let str = rope.line(i).to_string();
-                let ops = states.0.parse_line(&str, &SYNTAXSET);
-                let h: Vec<_> = if let Ok(ops) = ops {
-                    RangedHighlightIterator::new(&mut states.1, &ops, &str, &self.highlighter)
-                        .map(|h| SpanStyle::new(h.0, h.2))
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                StyledLine::new(h)
+                Vec::new()
             };
+            let h = StyledLine::new(h);
+
+
+
+            // let h = if let Some(str) = rope.line(i).as_str() {
+            //     let ops = states.0.parse_line(&str, &SYNTAXSET);
+            //     let h: Vec<_> = if let Ok(ops) = ops {
+            //         RangedHighlightIterator::new(&mut states.1, &ops, &str, &self.highlighter)
+            //             .map(|h| SpanStyle::new(h.0, h.2))
+            //             .collect()
+            //     } else {
+            //         Vec::new()
+            //     };
+            //     StyledLine::new(h)
+            // } else {
+            //     let str = rope.line(i).to_string();
+            //     let ops = states.0.parse_line(&str, &SYNTAXSET);
+            //     let h: Vec<_> = if let Ok(ops) = ops {
+            //         RangedHighlightIterator::new(&mut states.1, &ops, &str, &self.highlighter)
+            //             .map(|h| SpanStyle::new(h.0, h.2))
+            //             .collect()
+            //     } else {
+            //         Vec::new()
+            //     };
+            //     StyledLine::new(h)
+            // };
             if i & 0xF == 0xF {
                 self.states.push(states.clone());
             }

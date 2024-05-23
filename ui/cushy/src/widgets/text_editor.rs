@@ -12,7 +12,7 @@ use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
     fraction, Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero,
 };
-use cushy::kludgine::app::winit::event::ElementState;
+use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
@@ -69,7 +69,8 @@ impl TextEditor {
 
     fn point_to_grapheme(&self, line: usize, point: Point<Px>) -> usize {
         // TODO: tab support
-        let raw_text = self.doc.get().rope.line(line).to_string();
+        //let raw_text = self.doc.get().rope.line(line).to_string();
+        let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
@@ -86,13 +87,14 @@ impl TextEditor {
             .hit(point.x.into_float(), point.y.into_float())
             .unwrap_or_default()
             .index;
-        self.rope.get().byte_to_visible_col(line, byte_idx)
+        self.doc.get().byte_to_col(line, byte_idx)
         //rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), byte_idx)
     }
 
     fn grapheme_to_point(&self, line: usize, index: usize) -> Px {
         // TODO: tab support
-        let raw_text = self.doc.get().rope.line(line).to_string();
+        //let raw_text = self.doc.get().rope.line(line).to_string(); 
+        let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
@@ -105,7 +107,8 @@ impl TextEditor {
             Attrs::new().family(Family::Monospace),
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
-        let col = rope_utils::grapheme_to_byte(&self.doc.get().rope.line(line), index);
+        //let col = rope_utils::grapheme_to_byte(&self.doc.get().rope.line(line), index);
+        let col = self.doc.get().col_to_byte(line, index);
         let c_start = Cursor::new(0, col);
         let c_end = Cursor::new(0, col + 1);
         buffer.line_layout(&mut FONT_SYSTEM.lock().unwrap(), 0);
@@ -202,11 +205,11 @@ impl TextEditor {
             .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
             .map(|a| {
                 // TODO, it can be better! and it don't work with tabs
-                let line_text = rope_utils::get_line_info(&self.doc.get().rope.slice(..), a.line, self.doc.get().file_info.indentation.len()).to_string();
-                let col_start =
-                    rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
-                let col_end =
-                    rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
+                //let line_text = rope_utils::get_line_info(&self.doc.get().rope.slice(..), a.line, self.doc.get().file_info.indentation.len()).to_string();
+                let col_start =self.doc.get().col_to_byte(a.line, a.col_start);
+                    //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_start);
+                let col_end =self.doc.get().col_to_byte(a.line, a.col_end);
+                    //rope_utils::grapheme_to_byte(&Rope::from_str(&line_text).slice(..), a.col_end);
 
                 let c_start = Cursor::new(0, col_start);
                 let c_end = if col_end == col_start {
@@ -419,11 +422,36 @@ impl Widget for TextEditor {
             .floor()
             .get();
 
-        let char_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
-        let col = rope_utils::byte_to_grapheme(&self.doc.get().rope.line(line as _), char_idx);
-        dbg!(line, char_idx, col);
+        let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
 
-        IGNORED
+        dbg!(line, col_idx);
+        let c = ndoc::Position::new(line as _, col_idx);
+        self.doc.lock().set_main_selection(c, c);
+
+        HANDLED
+    }
+
+    fn mouse_drag(
+            &mut self,
+            location: Point<Px>,
+            device_id: cushy::window::DeviceId,
+            button: cushy::kludgine::app::winit::event::MouseButton,
+            context: &mut cushy::context::EventContext<'_>,
+        ) {
+            
+        if button == MouseButton::Left {
+            let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
+            .floor()
+            .get();
+
+            let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines()-1);
+
+            let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
+            let c = ndoc::Position::new(line as _, col_idx);
+            let tail = self.doc.get().selections[0].tail;
+            self.doc.lock().set_main_selection(c,tail);
+            self.refocus_main_selection();
+        }
     }
 
     fn keyboard_input(
