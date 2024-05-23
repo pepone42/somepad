@@ -26,7 +26,7 @@ use cushy::widget::{
 };
 
 use cushy::{define_components, ModifiersExt};
-use ndoc::{rope_utils, Document, Rope, Selection};
+use ndoc::{rope_utils, Document, Position, Rope, Selection};
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
@@ -258,6 +258,15 @@ impl TextEditor {
             .filter_map(|s| self.get_selection_shape(*s, layouts))
             .collect()
     }
+    
+    fn location_to_position(&mut self, location: Point<Px>) -> ndoc::Position {
+        let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
+            .floor()
+            .get();
+        let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines() - 1);
+        let col_idx = self.point_to_grapheme(line, Point::new(location.x, 1.into()));
+        Position::new(line, col_idx)
+    }
 }
 
 impl Widget for TextEditor {
@@ -419,15 +428,11 @@ impl Widget for TextEditor {
         context.focus();
 
         if button == MouseButton::Left {
-            let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
-                .floor()
-                .get();
+            let pos = self.location_to_position(location);
 
-            let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
+            dbg!(pos.line, pos.column);
 
-            dbg!(line, col_idx);
-            let c = ndoc::Position::new(line as _, col_idx);
-            self.doc.lock().set_main_selection(c, c);
+            self.doc.lock().set_main_selection(pos, pos);
 
             HANDLED
         } else {
@@ -443,16 +448,11 @@ impl Widget for TextEditor {
         _context: &mut cushy::context::EventContext<'_>,
     ) {
         if button == MouseButton::Left {
-            let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
-                .floor()
-                .get();
 
-            let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines() - 1);
+            let head = self.location_to_position(location);
 
-            let col_idx = self.point_to_grapheme(line as _, Point::new(location.x, 1.into()));
-            let c = ndoc::Position::new(line as _, col_idx);
             let tail = self.doc.get().selections[0].tail;
-            self.doc.lock().set_main_selection(c, tail);
+            self.doc.lock().set_main_selection(head, tail);
             self.refocus_main_selection();
         }
     }
