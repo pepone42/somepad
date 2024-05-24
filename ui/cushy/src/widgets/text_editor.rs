@@ -301,7 +301,7 @@ impl Widget for TextEditor {
                 .height
                 .into_px(context.gfx.scale())
                 / self.line_height)
-            + 1;
+            + 2;
 
         let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
@@ -575,6 +575,31 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::Enter) => {
                     let linefeed = self.doc.get().file_info.linefeed.to_string();
                     self.doc.lock().insert(&linefeed);
+                    self.refocus_main_selection();
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::End) => {
+                    self.doc.lock().end(context.modifiers().only_shift());
+                    self.refocus_main_selection();
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::Home) => {
+                    self.doc.lock().home(context.modifiers().only_shift());
+                    self.refocus_main_selection();
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::Tab) if context.modifiers().only_shift() => {
+                    self.doc.lock().deindent();
+                    self.refocus_main_selection();
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::Tab) if self.doc.get().selections[0].is_single_line() => {
+                    self.doc.lock().indent(false);
+                    self.refocus_main_selection();
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::Tab) => {
+                    self.doc.lock().indent(true);
                     self.refocus_main_selection();
                     return HANDLED;
                 }
