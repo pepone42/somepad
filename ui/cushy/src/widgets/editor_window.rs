@@ -1,6 +1,8 @@
 use cushy::context::AsEventContext;
 use cushy::figures::IntoSigned;
 use cushy::kludgine::app::winit::event::ElementState;
+use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use cushy::kludgine::wgpu::rwh::HasWindowHandle;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{EventHandling, MakeWidget, WidgetRef, WrapperWidget, HANDLED, IGNORED};
 
@@ -20,6 +22,7 @@ pub struct EditorWindow {
     child: WidgetRef,
     documents: Dynamic<Vec<Dynamic<Document>>>,
     cmd_reg: Dynamic<CommandsRegistry>,
+    focused: Dynamic<bool>,
 }
 
 impl EditorWindow {
@@ -47,6 +50,7 @@ impl EditorWindow {
             child: w.widget_ref(),
             documents: Dynamic::new(Vec::new()),
             cmd_reg,
+            focused: Dynamic::new(false),
         }
     }
 
@@ -56,6 +60,9 @@ impl EditorWindow {
 }
 
 impl WrapperWidget for EditorWindow {
+    fn mounted(&mut self, context: &mut cushy::context::EventContext<'_>) {
+        self.focused = context.window().focused().clone();
+    }
     fn child_mut(&mut self) -> &mut WidgetRef {
         &mut self.child
     }
@@ -67,6 +74,9 @@ impl WrapperWidget for EditorWindow {
         _is_synthetic: bool,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
+        if !self.focused.get() {
+            return HANDLED;
+        }
         if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
             let v = self.cmd_reg.get().window_shortcut;
             let id = context.widget.widget().id();
