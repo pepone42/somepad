@@ -6,6 +6,7 @@ mod widgets;
 use cushy::context::EventContext;
 use cushy::debug::DebugContext;
 use cushy::figures::Zero;
+use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::widgets::{Custom, Space};
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
@@ -133,6 +134,18 @@ const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
     },
 };
 
+const SAVE_DOC_CMD: ViewCommand = ViewCommand {
+    name: "Save document",
+    id: "editor.save_doc",
+    action: |_id, v, c| {
+        if let Some(ref file_name) = v.doc.get().file_name {
+            v.doc.lock().save_as(file_name).unwrap();
+        } else {
+            v.save_as(c);
+        }
+    },
+};
+
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
@@ -175,6 +188,7 @@ fn main() -> anyhow::Result<()> {
         .view
         .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
     cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
+    cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts

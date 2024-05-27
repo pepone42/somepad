@@ -4,6 +4,8 @@ use std::os::raw;
 use std::time::{Duration, Instant};
 
 use cushy::animation::ZeroToOne;
+use cushy::context::WidgetContext;
+use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::image::buffer;
 use cushy::kludgine::text::Text;
 use cushy::kludgine::wgpu::hal::auxil::db;
@@ -27,8 +29,9 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
-use cushy::{define_components, ModifiersExt};
+use cushy::{context, define_components, ModifiersExt};
 use ndoc::{rope_utils, Document, Position, Rope, Selection};
+use rfd::FileDialog;
 use scroll::ScrollController;
 
 use crate::shortcut::event_match;
@@ -287,6 +290,16 @@ impl TextEditor {
         let line = (line.max(0) as usize).min(self.doc.get().rope.len_lines() - 1);
         let col_idx = self.px_to_col(line, location.x);
         Position::new(line, col_idx)
+    }
+
+    pub fn save_as(&self, context: &mut WidgetContext) {
+        context.window_mut().winit().unwrap().set_enable(false);
+        if let Some(file) = FileDialog::new().save_file() {
+            // TODO: check for errors
+            let _ = self.doc.lock().save_as(&file);
+        }
+        context.window_mut().winit().unwrap().set_enable(true);
+        context.window_mut().winit().unwrap().focus_window();
     }
 }
 
@@ -598,7 +611,7 @@ impl Widget for TextEditor {
                     self.refocus_main_selection();
                     return HANDLED;
                 }
-                Key::Named(NamedKey::Tab) => {
+                Key::Named(NamedKey::Tab) if !context.modifiers().only_alt() => {
                     self.doc.lock().indent(true);
                     self.refocus_main_selection();
                     return HANDLED;
@@ -607,8 +620,8 @@ impl Widget for TextEditor {
             }
         }
 
-        match input.text {
-            Some(t) if !context.modifiers().possible_shortcut() => {
+        match (input.state, input.text) {
+            (ElementState::Pressed, Some(t)) if !context.modifiers().possible_shortcut() => {
                 self.doc.lock().insert(&t);
                 self.refocus_main_selection();
 
