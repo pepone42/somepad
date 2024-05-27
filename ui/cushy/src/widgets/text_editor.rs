@@ -10,7 +10,7 @@ use cushy::kludgine::image::buffer;
 use cushy::kludgine::text::Text;
 use cushy::kludgine::wgpu::hal::auxil::db;
 use cushy::styles::components::{CornerRadius, SurfaceColor};
-use cushy::value::Dynamic;
+use cushy::value::{CallbackHandle, Dynamic};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
@@ -74,6 +74,7 @@ pub struct TextEditor {
     cmd_reg: Dynamic<CommandsRegistry>,
     eol_width: Px,
     click_info: Dynamic<ClickInfo>,
+    focused: Dynamic<bool>,
 }
 
 impl TextEditor {
@@ -93,6 +94,7 @@ impl TextEditor {
             cmd_reg,
             eol_width: Px::ZERO,
             click_info,
+            focused: Dynamic::new(false),
         }
     }
 
@@ -304,6 +306,9 @@ impl TextEditor {
 }
 
 impl Widget for TextEditor {
+    fn mounted(&mut self, context: &mut context::EventContext<'_>) {
+        self.focused = context.widget.window_mut().focused().clone();
+    }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
         let last_line = first_line
@@ -511,6 +516,9 @@ impl Widget for TextEditor {
         _is_synthetic: bool,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
+        if !self.focused.get() {
+            return IGNORED;
+        }
         if !context.enabled() {
             return IGNORED;
         }
@@ -611,7 +619,8 @@ impl Widget for TextEditor {
                     self.refocus_main_selection();
                     return HANDLED;
                 }
-                Key::Named(NamedKey::Tab) if !context.modifiers().only_alt() => {
+                Key::Named(NamedKey::Tab) => {
+                    // when alt tabing into the editor, the tab key is send as an event. But, the text is None
                     self.doc.lock().indent(true);
                     self.refocus_main_selection();
                     return HANDLED;
