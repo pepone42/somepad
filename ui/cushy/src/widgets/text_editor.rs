@@ -17,7 +17,7 @@ use cushy::figures::{
     fraction, Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero,
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
-use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
+use cushy::kludgine::app::winit::keyboard::{Key, ModifiersState, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
@@ -34,7 +34,7 @@ use ndoc::{rope_utils, Document, Position, Rope, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
 
-use crate::shortcut::event_match;
+use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, MyScroll};
@@ -51,7 +51,7 @@ impl ClickInfo {
         let now = Instant::now();
         match (self.last_click, self.last_button) {
             (Some(last_click), Some(last_button))
-                if dbg!(now - last_click) < Duration::from_millis(300) && button == last_button =>
+                if now - last_click < Duration::from_millis(300) && button == last_button =>
             {
                 self.count += 1
             }
@@ -468,7 +468,7 @@ impl Widget for TextEditor {
 
         if button == MouseButton::Left {
             self.click_info.lock().update(button);
-            dbg!(self.click_info.get().count);
+
             let pos = self.location_to_position(location);
             match self.click_info.get().count {
                 0 => {
@@ -614,13 +614,15 @@ impl Widget for TextEditor {
                     self.refocus_main_selection();
                     return HANDLED;
                 }
-                Key::Named(NamedKey::Tab) if self.doc.get().selections[0].is_single_line() => {
+                Key::Named(NamedKey::Tab)
+                    if self.doc.get().selections[0].is_single_line()
+                        && !context.modifiers().ctrl() =>
+                {
                     self.doc.lock().indent(false);
                     self.refocus_main_selection();
                     return HANDLED;
                 }
-                Key::Named(NamedKey::Tab) => {
-                    // when alt tabing into the editor, the tab key is send as an event. But, the text is None
+                Key::Named(NamedKey::Tab) if !context.modifiers().ctrl() => {
                     self.doc.lock().indent(true);
                     self.refocus_main_selection();
                     return HANDLED;
@@ -822,6 +824,9 @@ impl CodeEditor {
 }
 
 impl WrapperWidget for CodeEditor {
+    fn mounted(&mut self, context: &mut context::EventContext<'_>) {
+        context.focus();
+    }
     fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
         &mut self.child
     }

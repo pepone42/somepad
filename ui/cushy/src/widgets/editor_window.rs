@@ -1,38 +1,61 @@
-use cushy::context::AsEventContext;
+use std::vec;
+
+use cushy::context::{AsEventContext, WidgetContext};
+use cushy::figures::units::Lp;
 use cushy::figures::IntoSigned;
 use cushy::kludgine::app::winit::event::ElementState;
+use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::wgpu::rwh::HasWindowHandle;
 use cushy::value::{Dynamic, Source, Switchable};
-use cushy::widget::{EventHandling, MakeWidget, WidgetRef, WrapperWidget, HANDLED, IGNORED};
+use cushy::widget::{
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetList, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+};
 
-use cushy::widgets::Custom;
+use cushy::widgets::{Custom, Switcher};
 use cushy::window::KeyEvent;
 use cushy::ModifiersExt;
 
 use ndoc::Document;
 
 use crate::shortcut::event_match;
-use crate::{CommandsRegistry};
+use crate::CommandsRegistry;
 
+use super::opened_editor::OpenedEditor;
 use super::palette::{Palette, PALETTE_STATE};
+use super::text_editor::CodeEditor;
 
 #[derive(Debug)]
 pub struct EditorWindow {
     child: WidgetRef,
-    documents: Dynamic<Vec<Dynamic<Document>>>,
+    pub documents: Dynamic<Vec<Dynamic<Document>>>,
+    pub current_doc: Dynamic<usize>,
     cmd_reg: Dynamic<CommandsRegistry>,
     focused: Dynamic<bool>,
 }
 
 impl EditorWindow {
     #[must_use]
-    pub fn new(child: impl MakeWidget, cmd_reg: Dynamic<CommandsRegistry>) -> impl MakeWidget {
+    pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> impl MakeWidget {
         let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
-        let child = child.make_widget();
-        let child_id = child.id();
+        //let child = child.make_widget();
+
+        let current_doc = Dynamic::new(0);
+        let documents = Dynamic::new(vec![document]);
+
+        let docs = documents.clone();
+        let cregs = cmd_reg.clone();
+        let (editor_tag,editor_id) = WidgetTag::new();
+
+        let child = OpenedEditor::new(documents.clone(), current_doc.clone()).width(Lp::new(100)).and(current_doc.with_clone(move |current_doc| {
+                current_doc.switcher(move |current, active| {
+                    CodeEditor::new(docs.clone().get()[*current].clone(), cregs.clone())
+                        .make_widget()
+                })
+            }).make_with_tag(editor_tag)).into_columns()
+            .make_widget();
 
         let w = child
             .with_enabled(enabled)
@@ -41,21 +64,23 @@ impl EditorWindow {
                     Palette::new().make_widget()
                 } else {
                     Custom::empty()
-                        .on_mounted(move |c| c.for_other(&child_id).unwrap().focus())
+                        .on_mounted(move |c| c.for_other(&editor_id).unwrap().focus())
                         .make_widget()
                 }
             }))
             .into_layers();
         EditorWindow {
             child: w.widget_ref(),
-            documents: Dynamic::new(Vec::new()),
+            documents: documents.clone(),
+            current_doc: current_doc.clone(),
             cmd_reg,
             focused: Dynamic::new(false),
         }
     }
 
-    pub fn add_new_doc(&self, doc: Dynamic<Document>) {
+    pub fn add_new_doc(&self, doc: Dynamic<Document>, context: &mut WidgetContext) {
         self.documents.lock().push(doc);
+        *self.current_doc.lock() += 1;
     }
 }
 
@@ -77,12 +102,13 @@ impl WrapperWidget for EditorWindow {
         if !self.focused.get() {
             return HANDLED;
         }
-        if input.state == ElementState::Pressed && context.modifiers().possible_shortcut() {
+        if input.state == ElementState::Pressed && context.modifiers().state().intersects(ModifiersState::CONTROL|ModifiersState::ALT|ModifiersState::SUPER) {
+            
             let v = self.cmd_reg.get().window_shortcut;
             let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
-                    (cmd.action)(id, self);
+                    (cmd.action)(id, self,context);
                     return HANDLED;
                 }
             }

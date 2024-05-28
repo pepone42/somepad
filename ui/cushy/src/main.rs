@@ -40,7 +40,7 @@ pub struct ViewCommand {
 pub struct WindowCommand {
     pub name: &'static str,
     pub id: &'static str,
-    pub action: fn(WidgetId, &EditorWindow),
+    pub action: fn(WidgetId, &EditorWindow, &mut EventContext),
 }
 
 pub static FONT_SYSTEM: Lazy<Arc<Mutex<FontSystem>>> =
@@ -49,9 +49,9 @@ pub static FONT_SYSTEM: Lazy<Arc<Mutex<FontSystem>>> =
 const NEW_DOC: WindowCommand = WindowCommand {
     name: "New Document",
     id: "window.newdoc",
-    action: |_id, w| {
+    action: |_id, w, c| {
         dbg!("New doc!");
-        w.add_new_doc(Dynamic::new(Document::default()));
+        w.add_new_doc(Dynamic::new(Document::default()),c);
     },
 };
 
@@ -146,6 +146,20 @@ const SAVE_DOC_CMD: ViewCommand = ViewCommand {
     },
 };
 
+const NEXT_DOC: WindowCommand = WindowCommand {
+    name: "Next Document",
+    id: "window.nextdoc",
+    action: |_id, w, _c| {
+        let current_doc = w.current_doc.get();
+        let docs_len = w.documents.get().len();
+        if current_doc + 1 < docs_len {
+            *w.current_doc.lock() += 1;
+        } else {
+            *w.current_doc.lock() = 0;
+        }
+    },
+};
+
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
@@ -178,6 +192,8 @@ fn main() -> anyhow::Result<()> {
     let mut cmd_reg = CommandsRegistry::new();
 
     cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
+    cmd_reg.window.insert(NEXT_DOC.id, NEXT_DOC);
+    
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
     cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
@@ -189,6 +205,7 @@ fn main() -> anyhow::Result<()> {
         .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
     cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
+    
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
@@ -255,7 +272,8 @@ fn main() -> anyhow::Result<()> {
     let syntax = doc.map_each(|d| d.file_info.syntax.name.clone());
 
     EditorWindow::new(
-        CodeEditor::new(doc.clone(), cmd_reg.clone()),
+        //CodeEditor::new(doc.clone(), cmd_reg.clone()),
+        doc.clone(),
         cmd_reg.clone(),
     )
     .expand()

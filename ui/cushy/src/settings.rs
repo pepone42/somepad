@@ -37,6 +37,8 @@ impl Default for Settings {
         // shortcuts.insert(crate::CLOSE_DOC.id.to_string(),shortcut!(Ctrl + w));
         // shortcuts.insert(crate::SHOW_OPENED_DOC.id.to_string(), shortcut!(Ctrl + p));
 
+        shortcuts.insert(crate::NEXT_DOC.id.to_string(),shortcut!(Ctrl+Tab));
+
         Self { shortcuts, indentation: Default::default() }
     }
 }

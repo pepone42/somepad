@@ -1,6 +1,9 @@
 use std::{path::Display, str::FromStr};
 
-use cushy::kludgine::app::winit::{event::Modifiers, keyboard::{Key, ModifiersState}};
+use cushy::kludgine::app::winit::{
+    event::Modifiers,
+    keyboard::{Key, ModifiersState},
+};
 use serde::{de::Visitor, Deserialize, Serialize};
 use smol_str::SmolStr;
 
@@ -11,8 +14,6 @@ pub enum ParseError {
     InvalidModifiers(String),
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Shortcut {
     pub key: Key,
@@ -22,26 +23,25 @@ pub struct Shortcut {
 impl Serialize for Shortcut {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let mut mods = Vec::new();
 
-            if self.modifiers.contains(ModifiersState::ALT) {
-                mods.push("Alt");
-            }
-            if self.modifiers.contains(ModifiersState::CONTROL) {
-                mods.push("Ctrl");
-            }
-            if self.modifiers.contains(ModifiersState::SHIFT) {
-                mods.push("Shift");
-            }
-            if self.modifiers.contains(ModifiersState::SUPER) {
-                mods.push("Meta");
-            }
+        if self.modifiers.contains(ModifiersState::ALT) {
+            mods.push("Alt");
+        }
+        if self.modifiers.contains(ModifiersState::CONTROL) {
+            mods.push("Ctrl");
+        }
+        if self.modifiers.contains(ModifiersState::SHIFT) {
+            mods.push("Shift");
+        }
+        if self.modifiers.contains(ModifiersState::SUPER) {
+            mods.push("Meta");
+        }
 
-        
         if let Key::Character(c) = &self.key {
-
-            serializer.serialize_str(&format!("{}+{}",mods.join("+"),c))
+            serializer.serialize_str(&format!("{}+{}", mods.join("+"), c))
         } else {
             Err(serde::ser::Error::custom("Unsupported Key format"))
         }
@@ -52,28 +52,48 @@ struct ShortcutVisitor;
 
 impl<'de> Visitor<'de> for ShortcutVisitor {
     type Value = Shortcut;
-    
+
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("A shorcut representation like 'Ctrl+c'")
     }
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: serde::de::Error {
-        Shortcut::from_str(&value).map_err(|e| serde::de::Error::custom(format!("{:?}",e)))
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Shortcut::from_str(&value).map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
     }
 }
 
 impl<'de> Deserialize<'de> for Shortcut {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            deserializer.deserialize_string(ShortcutVisitor)
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_string(ShortcutVisitor)
     }
 }
 
 #[macro_export]
 macro_rules! shortcut {
+    (Ctrl+Tab) => {
+        crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
+                
+        }
+    };
+    (Ctrl+Shift+Tab) => {
+        crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
+            | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
+        }
+    };
     (Ctrl+$c:ident) => {
         crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c))),
+            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
+                stringify!($c),
+            )),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
         }
     };
@@ -88,7 +108,9 @@ macro_rules! shortcut {
     };
     (Ctrl+Alt+$c:ident) => {
         crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(stringify!($c))),
+            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
+                stringify!($c),
+            )),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
                 | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
         }
@@ -98,8 +120,7 @@ macro_rules! shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c),
             )),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::ALT
-                
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
         }
     };
     (Shift+Alt+$c:ident) => {
@@ -113,10 +134,12 @@ macro_rules! shortcut {
     };
 }
 
-pub fn event_match(input: &cushy::window::KeyEvent, modifiers: Modifiers, shortcut: Shortcut) -> bool {
-    
+pub fn event_match(
+    input: &cushy::window::KeyEvent,
+    modifiers: Modifiers,
+    shortcut: Shortcut,
+) -> bool {
     input.logical_key == shortcut.key && modifiers.state() == shortcut.modifiers
-    
 }
 
 fn modifier_state_from_str(s: &str) -> Result<ModifiersState, ParseError> {
@@ -157,6 +180,46 @@ impl FromStr for Shortcut {
             Key::Character(SmolStr::new(c))
         };
         Ok(Shortcut { key, modifiers })
+    }
+}
+
+pub trait ModifiersCustomExt {
+    fn ctrl(&self) -> bool;
+    fn shift(&self) -> bool;
+    fn alt(&self) -> bool;
+    fn meta(&self) -> bool;
+    fn ctrl_alt(&self) -> bool;
+    fn ctrl_shift(&self) -> bool;
+    fn ctrl_shift_alt(&self) -> bool;
+}
+
+impl ModifiersCustomExt for Modifiers {
+    fn ctrl(&self) -> bool {
+        self.state().contains(ModifiersState::CONTROL)
+    }
+
+    fn shift(&self) -> bool {
+        self.state().contains(ModifiersState::SHIFT)
+    }
+
+    fn alt(&self) -> bool {
+        self.state().contains(ModifiersState::ALT)
+    }
+
+    fn meta(&self) -> bool {
+        self.state().contains(ModifiersState::SUPER)
+    }
+
+    fn ctrl_alt(&self) -> bool {
+        self.state().contains(ModifiersState::CONTROL | ModifiersState::ALT)
+    }
+
+    fn ctrl_shift(&self) -> bool {
+        self.state().contains(ModifiersState::CONTROL | ModifiersState::SHIFT)
+    }
+
+    fn ctrl_shift_alt(&self) -> bool {
+        self.state().contains(ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT)
     }
 }
 
