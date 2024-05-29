@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::vec;
 
 use cushy::context::{AsEventContext, WidgetContext};
@@ -9,7 +10,8 @@ use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::wgpu::rwh::HasWindowHandle;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetList, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetInstance, WidgetList, WidgetRef,
+    WidgetTag, WrapperWidget, HANDLED, IGNORED,
 };
 
 use cushy::widgets::{Custom, Switcher};
@@ -21,8 +23,10 @@ use ndoc::Document;
 use crate::shortcut::event_match;
 use crate::CommandsRegistry;
 
+use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::OpenedEditor;
 use super::palette::{Palette, PALETTE_STATE};
+use super::scroll::ScrollController;
 use super::text_editor::CodeEditor;
 
 #[derive(Debug)]
@@ -40,21 +44,41 @@ impl EditorWindow {
         let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
+        let documents = Dynamic::new(vec![document]);
+        let current_doc = Dynamic::new(0);
+
         //let child = child.make_widget();
 
-        let current_doc = Dynamic::new(0);
-        let documents = Dynamic::new(vec![document]);
+        
+        
 
-        let docs = documents.clone();
-        let cregs = cmd_reg.clone();
-        let (editor_tag,editor_id) = WidgetTag::new();
-
-        let child = OpenedEditor::new(documents.clone(), current_doc.clone()).width(Lp::new(100)).and(current_doc.with_clone(move |current_doc| {
-                current_doc.switcher(move |current, active| {
-                    CodeEditor::new(docs.clone().get()[*current].clone(), cregs.clone())
-                        .make_widget()
-                })
-            }).make_with_tag(editor_tag)).into_columns()
+        // let docs = documents.clone();
+        // let cregs = cmd_reg.clone();
+        let (editor_tag, editor_id) = WidgetTag::new();
+        // let editors = Dynamic::new(HashMap::new());
+        // let editors_clone = editors.clone();
+        let child = OpenedEditor::new(documents.clone(), current_doc.clone())
+            //.width(Lp::new(50))
+            .and(
+                // current_doc
+                //     .with_clone(move |current_doc| {
+                        // current_doc.switcher(move |current, active| {
+                        //     let cregs = cregs.clone();
+                        //     let doc = docs.clone().get()[*current].clone();
+                        //     editors_clone
+                        //         .lock()
+                        //         .entry(doc.get().id())
+                        //         .or_insert_with(move || {
+                        //             CodeEditor::new(doc.clone(), cregs.clone()).make_widget()
+                        //         })
+                        //         .clone()
+                        // })
+                        EditorSwitcher::new(documents.clone(),current_doc.clone(), cmd_reg.clone())
+                            
+                    //})
+                    .make_with_tag(editor_tag),
+            )
+            .into_columns()
             .make_widget();
 
         let w = child
@@ -72,6 +96,7 @@ impl EditorWindow {
         EditorWindow {
             child: w.widget_ref(),
             documents: documents.clone(),
+
             current_doc: current_doc.clone(),
             cmd_reg,
             focused: Dynamic::new(false),
@@ -79,8 +104,11 @@ impl EditorWindow {
     }
 
     pub fn add_new_doc(&self, doc: Dynamic<Document>, context: &mut WidgetContext) {
+
+
         self.documents.lock().push(doc);
         *self.current_doc.lock() += 1;
+        dbg!(self.current_doc.get());
     }
 }
 
@@ -102,13 +130,17 @@ impl WrapperWidget for EditorWindow {
         if !self.focused.get() {
             return HANDLED;
         }
-        if input.state == ElementState::Pressed && context.modifiers().state().intersects(ModifiersState::CONTROL|ModifiersState::ALT|ModifiersState::SUPER) {
-            
+        if input.state == ElementState::Pressed
+            && context
+                .modifiers()
+                .state()
+                .intersects(ModifiersState::CONTROL | ModifiersState::ALT | ModifiersState::SUPER)
+        {
             let v = self.cmd_reg.get().window_shortcut;
             let id = context.widget.widget().id();
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
-                    (cmd.action)(id, self,context);
+                    (cmd.action)(id, self, context);
                     return HANDLED;
                 }
             }

@@ -1,4 +1,4 @@
-use cushy::{figures::{units::Px, Point, Zero}, kludgine::{app::winit::platform::windows::Color, text::Text, DrawableExt}, value::{Dynamic, Source}, widget::Widget};
+use cushy::{figures::{units::{Px, UPx}, Point, Size, Zero}, kludgine::{app::winit::platform::windows::Color, text::Text, DrawableExt}, value::{Dynamic, Source}, widget::Widget};
 use ndoc::Document;
 
 #[derive(Debug)]
@@ -33,5 +33,14 @@ impl Widget for OpenedEditor {
             y += 20;
         }
 
+    }
+
+    fn layout(
+            &mut self,
+            available_space: cushy::figures::Size<cushy::ConstraintLimit>,
+            context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+        ) -> cushy::figures::Size<cushy::figures::units::UPx> {
+        let h = UPx::new(self.documents.get().len() as _) * 20;
+        Size::new(UPx::new(100), h)
     }
 }

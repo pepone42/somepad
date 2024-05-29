@@ -789,6 +789,7 @@ impl Widget for Gutter {
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
     scroll_id: WidgetId,
+    pub scroll_controller: Dynamic<ScrollController>,
 }
 
 impl CodeEditor {
@@ -805,7 +806,7 @@ impl CodeEditor {
                     TextEditor::new(doc.clone(), cmd_reg, click_info)
                         .with_scroller(scroller.clone())
                         .make_with_tag(editor_tag),
-                    scroller,
+                    scroller.clone(),
                 )
                 .make_with_tag(scroll_tag) //.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
                 .expand(),
@@ -819,14 +820,15 @@ impl CodeEditor {
         Self {
             child: child.widget_ref(),
             scroll_id,
+            scroll_controller: scroller.clone(),
         }
     }
 }
 
 impl WrapperWidget for CodeEditor {
-    fn mounted(&mut self, context: &mut context::EventContext<'_>) {
-        context.focus();
-    }
+    // fn mounted(&mut self, context: &mut context::EventContext<'_>) {
+    //     context.focus();
+    // }
     fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
         &mut self.child
     }
