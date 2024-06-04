@@ -141,6 +141,7 @@ impl MyScroll {
 
     /// Returns a new scroll widget that allows scrolling `contents`
     /// horizontally.
+    #[allow(dead_code)]
     pub fn horizontal(
         contents: impl MakeWidget,
         scroll_controller: Dynamic<ScrollController>,
@@ -149,6 +150,7 @@ impl MyScroll {
     }
 
     /// Returns a new scroll widget that allows scrolling `contents` vertically.
+    #[allow(dead_code)]
     pub fn vertical(
         contents: impl MakeWidget,
         scroll_controller: Dynamic<ScrollController>,
@@ -259,8 +261,6 @@ impl Widget for MyScroll {
         available_space: Size<ConstraintLimit>,
         context: &mut LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
-        let control_size = self.controller.get().control_size;
-
         self.bar_width = context
             .get(&ScrollBarThickness)
             .into_px(context.gfx.scale());
@@ -427,7 +427,6 @@ impl Widget for MyScroll {
         // If we clicked in the open area, we need to jump to the new location
         // immediately.
         if !self.drag.in_bar {
-            let controller = self.controller.get();
             self.drag.update(
                 location,
                 &self.controller,
@@ -489,7 +488,6 @@ impl Widget for MyScroll {
 #[derive(Default, Debug)]
 struct DragInfo {
     mouse_buttons_down: usize,
-    controller: Dynamic<ScrollController>,
     start: Point<Px>,
     start_scroll: Point<Px>,
     horizontal: bool,
@@ -503,8 +501,6 @@ impl DragInfo {
         controller: &Dynamic<ScrollController>,
         horizontal_bar: &ScrollbarInfo,
         vertical_bar: &ScrollbarInfo,
-        //max_scroll: Point<Px>,
-        //control_size: Size<Px>,
     ) {
         let mut controller = controller.lock();
         if self.horizontal {

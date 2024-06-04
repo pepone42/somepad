@@ -5,7 +5,7 @@ use cushy::figures::units::{Lp, Px};
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
-use cushy::value::{Destination, Dynamic, Source};
+use cushy::value::{Dynamic, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED,
 };

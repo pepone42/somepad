@@ -1,22 +1,15 @@
-use std::collections::HashMap;
-use std::vec;
 
-use cushy::context::{AsEventContext, WidgetContext};
-use cushy::figures::units::Lp;
-use cushy::figures::IntoSigned;
+use cushy::context::WidgetContext;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
-use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use cushy::kludgine::wgpu::rwh::HasWindowHandle;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetInstance, WidgetList, WidgetRef,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef,
     WidgetTag, WrapperWidget, HANDLED, IGNORED,
 };
 
-use cushy::widgets::{Custom, Switcher};
+use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
-use cushy::ModifiersExt;
 
 use ndoc::Document;
 
@@ -26,8 +19,6 @@ use crate::CommandsRegistry;
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::OpenedEditor;
 use super::palette::{Palette, PALETTE_STATE};
-use super::scroll::ScrollController;
-use super::text_editor::CodeEditor;
 
 #[derive(Debug)]
 pub struct EditorWindow {

@@ -4,14 +4,11 @@ mod settings;
 mod widgets;
 
 use cushy::context::EventContext;
-use cushy::debug::DebugContext;
 use cushy::figures::Zero;
-use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use cushy::widgets::{Custom, Space};
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
 use widgets::status_bar::StatusBar;
-use widgets::text_editor::{self, CodeEditor, TextEditor};
+use widgets::text_editor::TextEditor;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -19,16 +16,15 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::{CornerRadius, TextSize};
-use cushy::styles::{Color, ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
+use cushy::styles::components::TextSize;
+use cushy::styles::{ColorScheme, ColorSource, ThemePair};
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetId};
 
-use cushy::{Lazy, Open, PendingApp, Run};
-use ndoc::{Document, Indentation};
+use cushy::{Lazy, Run};
+use ndoc::Document;
 use settings::Settings;
 use shortcut::Shortcut;
-use widgets::scroll::{MyScroll, ScrollController};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ViewCommand {
@@ -240,7 +236,6 @@ fn main() -> anyhow::Result<()> {
     });
 
     let editor = EditorWindow::new(
-        //CodeEditor::new(doc.clone(), cmd_reg.clone()),
         doc.clone(),
         cmd_reg.clone(),
     );

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use cushy::context::{self, LayoutContext};
+use cushy::context::LayoutContext;
 use cushy::figures::Size;
-use cushy::value::{Destination, Dynamic, Source};
-use cushy::widget::{MakeWidget, WidgetInstance, WidgetRef, WrapperWidget};
+use cushy::value::{Dynamic, Source};
+use cushy::widget::{MakeWidget, WidgetRef, WrapperWidget};
 use cushy::ConstraintLimit;
 use ndoc::Document;
 
@@ -37,8 +37,6 @@ impl EditorSwitcher {
                 (d.get().id(), editor)
             })
             .collect();
-
-        let focused_document = documents.get()[current_doc.get()].clone();
 
         EditorSwitcher {
             documents,

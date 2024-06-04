@@ -1,5 +1,5 @@
 use cushy::{
-    context::Trackable, figures::{units::Px, Point, ScreenScale, Size, Zero}, kludgine::{text::{Text, TextOrigin}, DrawableExt, Origin}, styles::{components::{FontFamily, LineHeight}, Dimension}, value::{Dynamic, IntoReader, Source}, widget::{MakeWidget, Widget, WidgetRef, WrapperWidget}, widgets::Space
+    figures::{units::Px, Point, ScreenScale, Size, Zero}, kludgine::{text::Text, DrawableExt}, styles::{components::{FontFamily, LineHeight}, Dimension}, value::{Dynamic, Source}, widget::Widget
 };
 use ndoc::{Document, Indentation};
 
@@ -80,7 +80,7 @@ impl Widget for StatusBar {
             // if I don't substract 1 from the width, the layout/redraw is called infinitely, switching between max()+1 and max() 
         Size::new(available_space.width.max()-1 , heigh)
     }
-    fn hit_test(&mut self, location: Point<Px>, context: &mut cushy::context::EventContext<'_>) -> bool {
+    fn hit_test(&mut self, _location: Point<Px>, _context: &mut cushy::context::EventContext<'_>) -> bool {
         true
     }
 }

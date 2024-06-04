@@ -1,28 +1,23 @@
 use std::collections::HashMap;
-use std::ops::Sub;
-use std::os::raw;
 use std::time::{Duration, Instant};
 
-use cushy::animation::ZeroToOne;
 use cushy::context::WidgetContext;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use cushy::kludgine::image::buffer;
 use cushy::kludgine::text::Text;
-use cushy::kludgine::wgpu::hal::auxil::db;
-use cushy::styles::components::{CornerRadius, SurfaceColor};
-use cushy::value::{CallbackHandle, Dynamic};
+use cushy::styles::components::CornerRadius;
+use cushy::value::Dynamic;
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
-    fraction, Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero,
+    Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero,
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
-use cushy::kludgine::app::winit::keyboard::{Key, ModifiersState, NamedKey};
-use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
+use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
+use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{Color, ColorExt, CornerRadii, Dimension};
+use cushy::styles::{Color, CornerRadii, Dimension};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -30,7 +25,7 @@ use cushy::widget::{
 };
 
 use cushy::{context, define_components, ModifiersExt};
-use ndoc::{rope_utils, Document, Position, Rope, Selection};
+use ndoc::{rope_utils, Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
 
@@ -342,14 +337,6 @@ impl Widget for TextEditor {
             .take(total_line)
             .map(|(i, _)| (i, self.layout_line(i)))
             .collect::<HashMap<usize, Buffer>>();
-
-        let selections = self
-            .doc
-            .get()
-            .selections
-            .iter()
-            .map(|s| (s.head.line, s.head.column))
-            .collect::<HashMap<usize, usize>>();
 
         // draw selections
         for path in self.get_selections_shapes(&buffers) {
@@ -735,15 +722,15 @@ impl Widget for Gutter {
     }
     fn hit_test(
         &mut self,
-        location: Point<Px>,
-        context: &mut cushy::context::EventContext<'_>,
+        _location: Point<Px>,
+        _context: &mut cushy::context::EventContext<'_>,
     ) -> bool {
         true
     }
     fn mouse_down(
         &mut self,
         location: Point<Px>,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
@@ -766,7 +753,7 @@ impl Widget for Gutter {
     fn mouse_drag(
         &mut self,
         location: Point<Px>,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {

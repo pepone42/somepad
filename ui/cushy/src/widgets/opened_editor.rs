@@ -1,11 +1,10 @@
 use cushy::{
     figures::{
         units::{Px, UPx},
-        Point, Rect, ScreenScale, Size, Zero,
+        Point, ScreenScale, Size, Zero,
     },
     kludgine::{
-        app::winit::{event::MouseButton, platform::{scancode, windows::Color}},
-        shapes::Shape,
+        app::winit::event::MouseButton,
         text::Text,
         DrawableExt,
     },
