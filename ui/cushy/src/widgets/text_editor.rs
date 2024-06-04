@@ -310,6 +310,8 @@ impl Widget for TextEditor {
         self.focused = context.widget.window_mut().focused().clone();
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.redraw_when_changed(&self.doc);
+
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
         let last_line = first_line
             + (context
@@ -480,6 +482,7 @@ impl Widget for TextEditor {
                 2 => self.doc.lock().select_line(pos.line),
                 _ => self.doc.lock().select_all(),
             }
+            
             HANDLED
         } else {
             IGNORED

@@ -16,6 +16,12 @@ pub struct FileInfo {
     pub syntax: &'static SyntaxReference
 }
 
+impl PartialEq for FileInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.encoding == other.encoding && self.bom == other.bom && self.linefeed == other.linefeed && self.indentation == other.indentation && self.syntax.name == other.syntax.name
+    }
+}
+
 impl Default for FileInfo {
     fn default() -> Self {
         Self {

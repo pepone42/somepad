@@ -40,7 +40,7 @@ pub struct EditorWindow {
 
 impl EditorWindow {
     #[must_use]
-    pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> impl MakeWidget {
+    pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
         let enabled = palette.map_each(|p| !*p);
 
@@ -109,6 +109,10 @@ impl EditorWindow {
         self.documents.lock().push(doc);
         *self.current_doc.lock() += 1;
         dbg!(self.current_doc.get());
+    }
+
+    pub fn current_doc(&self) -> Dynamic<Document> {
+        self.documents.get()[self.current_doc.get()].clone()
     }
 }
 

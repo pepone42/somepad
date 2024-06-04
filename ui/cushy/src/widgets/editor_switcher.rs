@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cushy::context::{self, LayoutContext};
 use cushy::figures::Size;
-use cushy::value::{Dynamic, Source};
+use cushy::value::{Destination, Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetInstance, WidgetRef, WrapperWidget};
 use cushy::ConstraintLimit;
 use ndoc::Document;
@@ -15,6 +15,7 @@ use super::text_editor::CodeEditor;
 pub struct EditorSwitcher {
     pub(super) documents: Dynamic<Vec<Dynamic<Document>>>,
     pub(super) current_doc: Dynamic<usize>,
+
     last_doc: usize,
     editors: HashMap<usize, WidgetRef>,
     cmd_reg: Dynamic<CommandsRegistry>,
@@ -36,6 +37,8 @@ impl EditorSwitcher {
                 (d.get().id(), editor)
             })
             .collect();
+
+        let focused_document = documents.get()[current_doc.get()].clone();
 
         EditorSwitcher {
             documents,

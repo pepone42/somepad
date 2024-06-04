@@ -10,6 +10,7 @@ use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::widgets::{Custom, Space};
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
+use widgets::status_bar::StatusBar;
 use widgets::text_editor::{self, CodeEditor, TextEditor};
 
 use std::collections::HashMap;
@@ -193,7 +194,7 @@ fn main() -> anyhow::Result<()> {
 
     cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
     cmd_reg.window.insert(NEXT_DOC.id, NEXT_DOC);
-    
+
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
     cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
@@ -237,56 +238,20 @@ fn main() -> anyhow::Result<()> {
     } else {
         ndoc::Document::default()
     });
-    let file_name = doc.map_each(move |d| {
-        format!(
-            "{}{}",
-            if let Some(file_name) = &d.file_name {
-                file_name.file_name().unwrap().to_string_lossy().to_string()
-            } else {
-                "Untilted".to_string()
-            },
-            if d.is_dirty() { "*" } else { "" }
-        )
-    });
-    let selection = doc.map_each(|d| {
-        if d.selections.len() > 1 {
-            format!("{} selections", d.selections.len())
-        } else {
-            format!(
-                "Ln {}, Col {}",
-                d.selections[0].head.line + 1,
-                d.selections[0].head.column + 1
-            )
-        }
-    });
-    let indentation = doc.map_each(|d| match d.file_info.indentation {
-        Indentation::Space(spaces) => format!("Space({})", spaces),
-        Indentation::Tab(spaces) => format!("Tab({})", spaces),
-    });
-    let encoding = doc.map_each(|d| d.file_info.encoding.name());
-    let eol = doc.map_each(|d| match d.file_info.linefeed {
-        ndoc::LineFeed::CR => "CR",
-        ndoc::LineFeed::LF => "LF",
-        ndoc::LineFeed::CRLF => "CRLF",
-    });
-    let syntax = doc.map_each(|d| d.file_info.syntax.name.clone());
 
-    EditorWindow::new(
+    let editor = EditorWindow::new(
         //CodeEditor::new(doc.clone(), cmd_reg.clone()),
         doc.clone(),
         cmd_reg.clone(),
-    )
+    );
+
+    let docs = editor.documents.clone();
+    let cur_doc = editor.current_doc.clone();
+
+    editor
     .expand()
     .and(
-        file_name
-            .align_left()
-            .and(Space::clear().expand_horizontally())
-            .and(selection)
-            .and(indentation)
-            .and(encoding)
-            .and(eol)
-            .and(syntax)
-            .into_columns()
+        StatusBar::new(docs, cur_doc)
             .centered()
             .pad_by(Px::new(2)),
     )

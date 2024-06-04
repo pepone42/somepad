@@ -43,6 +43,7 @@ impl OpenedEditor {
 
 impl Widget for OpenedEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.apply_current_font_settings();
         let mut y = Px::ZERO;
         for (i, doc) in self.documents.get().iter().enumerate() {
             let mut text = if let Some(file_name) = doc.get().file_name {
