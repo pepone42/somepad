@@ -82,8 +82,8 @@ impl Widget for OpenedEditor {
 
     fn layout(
         &mut self,
-        available_space: cushy::figures::Size<cushy::ConstraintLimit>,
-        context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+        _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
+        _context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         let h = UPx::new(self.documents.get().len() as _) * 20;
         Size::new(self.width.get(), h)
@@ -116,7 +116,7 @@ impl Widget for OpenedEditor {
     fn mouse_down(
         &mut self,
         location: Point<Px>,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
@@ -130,7 +130,7 @@ impl Widget for OpenedEditor {
     fn mouse_drag(
         &mut self,
         location: Point<Px>,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {

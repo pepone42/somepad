@@ -25,7 +25,7 @@ use cushy::widget::{
 };
 
 use cushy::{context, define_components, ModifiersExt};
-use ndoc::{rope_utils, Document, Position, Selection};
+use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
 

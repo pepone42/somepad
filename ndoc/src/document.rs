@@ -5,8 +5,8 @@ use std::{
     io::{Read, Result, Write},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc::{self, Receiver, Sender},
+        atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Sender},
         Arc, Mutex,
     },
     thread,

@@ -183,6 +183,7 @@ impl FromStr for Shortcut {
     }
 }
 
+#[allow(dead_code)]
 pub trait ModifiersCustomExt {
     fn ctrl(&self) -> bool;
     fn shift(&self) -> bool;

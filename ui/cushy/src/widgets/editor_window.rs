@@ -94,7 +94,7 @@ impl EditorWindow {
         }
     }
 
-    pub fn add_new_doc(&self, doc: Dynamic<Document>, context: &mut WidgetContext) {
+    pub fn add_new_doc(&self, doc: Dynamic<Document>, _context: &mut WidgetContext) {
 
 
         self.documents.lock().push(doc);
