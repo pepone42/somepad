@@ -5,6 +5,8 @@ mod widgets;
 
 use cushy::context::EventContext;
 use cushy::figures::Zero;
+use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
 use widgets::palette::ask;
 use widgets::status_bar::StatusBar;
@@ -143,6 +145,22 @@ const SAVE_DOC_CMD: ViewCommand = ViewCommand {
     },
 };
 
+const OPEN_DOC: WindowCommand = WindowCommand {
+    name: "Open Document",
+    id: "window.opendoc",
+    action: |_id, w, context| {
+        context.window_mut().winit().unwrap().set_enable(false);
+        if let Some(file) = FileDialog::new().pick_file() {
+            // TODO: check for errors
+            let doc = Document::from_file(file).unwrap();
+            w.add_new_doc(Dynamic::new(doc), context)    
+        }
+        context.window_mut().winit().unwrap().set_enable(true);
+        context.window_mut().winit().unwrap().focus_window();
+        
+    },
+};
+
 const NEXT_DOC: WindowCommand = WindowCommand {
     name: "Next Document",
     id: "window.nextdoc",
@@ -202,6 +220,7 @@ fn main() -> anyhow::Result<()> {
         .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
     cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
+    cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
     
 
     for (command_id, shortcut) in get_settings()
