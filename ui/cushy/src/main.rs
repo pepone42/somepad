@@ -8,7 +8,7 @@ use cushy::figures::Zero;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::ask;
+use widgets::palette::{ask, choose};
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::TextEditor;
 
@@ -189,6 +189,28 @@ const NEXT_DOC: WindowCommand = WindowCommand {
     },
 };
 
+const SELECT_DOC: WindowCommand = WindowCommand {
+    name: "Select Document",
+    id: "window.select_doc",
+    action: |_id, w, _c| {
+        let items = w
+            .documents
+            .get()
+            .iter()
+            .map(|d| {
+                if let Some(file_name) = d.get().file_name {
+                    file_name.file_name().unwrap().to_string_lossy().to_string()
+                } else {
+                    "Untitled".to_string()
+                }
+            })
+            .collect();
+        choose(_id, "Select a document", items, |_,i,val| {
+            dbg!("Selected!",i,val);
+        })
+    }
+};
+
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
@@ -236,6 +258,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
     cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
     cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);
+    cmd_reg.window.insert(SELECT_DOC.id, SELECT_DOC);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts

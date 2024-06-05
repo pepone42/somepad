@@ -139,4 +139,14 @@ impl Widget for OpenedEditor {
             *self.width.lock() = location.x.into_upx(context.kludgine.scale());
         }
     }
+    fn keyboard_input(
+            &mut self,
+            device_id: cushy::window::DeviceId,
+            input: cushy::window::KeyEvent,
+            is_synthetic: bool,
+            context: &mut cushy::context::EventContext<'_>,
+        ) -> cushy::widget::EventHandling {
+        dbg!(input);
+        IGNORED
+    }
 }

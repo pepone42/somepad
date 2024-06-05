@@ -14,21 +14,32 @@ use cushy::widgets::{Custom, Input};
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 
+use super::filtered_list::{self, FilteredList};
+
 #[derive(PartialEq, Eq, Clone)]
 pub struct Palette {
     description: Dynamic<String>,
     child: WidgetRef,
     action: Dynamic<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>,
     input: Dynamic<String>,
+    items: Option<Vec<String>>,
+    selected_item: Dynamic<Option<usize>>,
 }
 
 impl Palette {
     pub fn new() -> Self {
         let input = Dynamic::new(String::default());
+        let filtered_list =if let Some(items) = PALETTE_STATE.get().items {
+            FilteredList::new(items.clone(), input.clone())
+        } else {
+            FilteredList::new(Vec::new(), input.clone())
+        };
+        let selected_item= filtered_list.selected_item.clone();
         let pal = Custom::new(
             PALETTE_STATE.get().description
                 .clone()
                 .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
+                .and(filtered_list)
                 .into_rows()
                 .width(Lp::new(250))
                 .height(Lp::ZERO..Lp::new(250)),
@@ -49,6 +60,8 @@ impl Palette {
             child: pal.make_widget().widget_ref(),
             action: Dynamic::new(PALETTE_STATE.get().action.clone()),
             input,
+            items: PALETTE_STATE.get().items,
+            selected_item
         }
     }
 }
@@ -76,11 +89,22 @@ impl WrapperWidget for Palette {
     ) -> EventHandling {
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
-                self.action.get()(
-                    &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
-                    0,
-                    self.input.get().clone(),
-                );
+                if let Some(items) = &self.items {
+                    let idx = self.selected_item.get();
+                    if let Some(idx) = idx {
+                        self.action.get()(
+                            &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                            idx,
+                            items[idx].clone(),
+                        );
+                    }
+                } else {
+                    self.action.get()(
+                        &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                        0,
+                        self.input.get().clone(),
+                    );
+                }
                 PALETTE_STATE.lock().active = false;
 
                 HANDLED
@@ -119,6 +143,7 @@ pub(super) struct PaletteState {
     action: Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>,
     owner: WidgetId,
     active: bool,
+    items: Option<Vec<String>>,
 }
 
 impl std::fmt::Debug for PaletteState {
@@ -134,6 +159,7 @@ impl PaletteState {
             action: Arc::new(|_, _, _| ()),
             owner: WidgetTag::unique().id(),
             active: false,
+            items: None,
         }
     }
     pub fn active(&self) -> bool {
@@ -154,4 +180,14 @@ pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
     p.action = Arc::new(action);
     p.owner = owner;
     p.active = true;
+    p.items = None;
+}
+
+pub fn choose(owner: WidgetId, description: &str, items: Vec<String>, action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync) {
+    let mut p = PALETTE_STATE.lock();
+    p.description = description.to_string();
+    p.action = Arc::new(action);
+    p.owner = owner;
+    p.active = true;
+    p.items = Some(items);
 }

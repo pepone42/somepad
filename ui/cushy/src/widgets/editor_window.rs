@@ -111,6 +111,7 @@ impl WrapperWidget for EditorWindow {
     fn mounted(&mut self, context: &mut cushy::context::EventContext<'_>) {
         self.focused = context.window().focused().clone();
     }
+
     fn child_mut(&mut self) -> &mut WidgetRef {
         &mut self.child
     }
@@ -142,5 +143,20 @@ impl WrapperWidget for EditorWindow {
             return IGNORED;
         }
         IGNORED
+    }
+
+    // If I don't handle mouse down event here, the focus is stollen from the editor when I click in the opened editor widget
+    fn hit_test(&mut self, _location: cushy::figures::Point<cushy::figures::units::Px>, _context: &mut cushy::context::EventContext<'_>) -> bool {
+        true
+    }
+    fn mouse_down(
+            &mut self,
+            _location: cushy::figures::Point<cushy::figures::units::Px>,
+            _device_id: cushy::window::DeviceId,
+            _button: cushy::kludgine::app::winit::event::MouseButton,
+            _context: &mut cushy::context::EventContext<'_>,
+        ) -> EventHandling {
+            dbg!("scroll mouse down");
+            IGNORED
     }
 }
