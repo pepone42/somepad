@@ -50,7 +50,7 @@ const NEW_DOC: WindowCommand = WindowCommand {
     id: "window.newdoc",
     action: |_id, w, c| {
         dbg!("New doc!");
-        w.add_new_doc(Dynamic::new(Document::default()),c);
+        w.add_new_doc(Dynamic::new(Document::default()), c);
     },
 };
 
@@ -153,11 +153,25 @@ const OPEN_DOC: WindowCommand = WindowCommand {
         if let Some(file) = FileDialog::new().pick_file() {
             // TODO: check for errors
             let doc = Document::from_file(file).unwrap();
-            w.add_new_doc(Dynamic::new(doc), context)    
+            w.add_new_doc(Dynamic::new(doc), context)
         }
         context.window_mut().winit().unwrap().set_enable(true);
         context.window_mut().winit().unwrap().focus_window();
-        
+    },
+};
+
+const CLOSE_DOC: WindowCommand = WindowCommand {
+    name: "Close Document",
+    id: "window.closedoc",
+    action: |_id, w, _c| {
+        let current_doc = w.current_doc.get();
+        let docs_len = w.documents.get().len();
+        if docs_len > 1 {
+            w.documents.lock().remove(current_doc);
+            *w.current_doc.lock() -= 1;
+        }
+        // TODO: close the window if there is only one doc
+        // TODO: warn if the doc is dirty
     },
 };
 
@@ -221,7 +235,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
     cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
-    
+    cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts
@@ -254,26 +268,19 @@ fn main() -> anyhow::Result<()> {
         ndoc::Document::default()
     });
 
-    let editor = EditorWindow::new(
-        doc.clone(),
-        cmd_reg.clone(),
-    );
+    let editor = EditorWindow::new(doc.clone(), cmd_reg.clone());
 
     let docs = editor.documents.clone();
     let cur_doc = editor.current_doc.clone();
 
     editor
-    .expand()
-    .and(
-        StatusBar::new(docs, cur_doc)
-            .centered()
-            .pad_by(Px::new(2)),
-    )
-    .into_rows()
-    .gutter(Px::ZERO)
-    .themed(theme)
-    .with(&TextSize, Lp::points(10))
-    .run()?;
+        .expand()
+        .and(StatusBar::new(docs, cur_doc).centered().pad_by(Px::new(2)))
+        .into_rows()
+        .gutter(Px::ZERO)
+        .themed(theme)
+        .with(&TextSize, Lp::points(10))
+        .run()?;
 
     Ok(())
 }

@@ -34,8 +34,7 @@ impl Default for Settings {
         shortcuts.insert(crate::REDO_CMD.id.to_string(),shortcut!(Ctrl + y));
 
         shortcuts.insert(crate::NEW_DOC.id.to_string(),shortcut!(Ctrl + n));
-        // shortcuts.insert(crate::OPEN_DOC.id.to_string(),shortcut!(Ctrl + o));
-        // shortcuts.insert(crate::CLOSE_DOC.id.to_string(),shortcut!(Ctrl + w));
+        shortcuts.insert(crate::CLOSE_DOC.id.to_string(),shortcut!(Ctrl + w));
         // shortcuts.insert(crate::SHOW_OPENED_DOC.id.to_string(), shortcut!(Ctrl + p));
 
         shortcuts.insert(crate::NEXT_DOC.id.to_string(),shortcut!(Ctrl+Tab));
