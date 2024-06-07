@@ -53,7 +53,11 @@ impl Palette {
                 .clone()
                 .and(
                     Custom::new(
-                        MyScroll::horizontal(TextEditor::as_input(input.clone()).with_scroller(scroller.clone()), scroller.clone()).with(name, component),
+                        MyScroll::horizontal(
+                            TextEditor::as_input(input.clone()).with_scroller(scroller.clone()),
+                            scroller.clone(),
+                        )
+                        ,
                         // Input::new(
                         // input.clone()).on_key(move |input| {
                         // if input.state == ElementState::Released {
@@ -72,7 +76,7 @@ impl Palette {
                         //     }
                         //     _ => IGNORED,
                         // }
-                    // })
+                        // })
                     )
                     .on_mounted(move |c| c.focus()),
                 )
