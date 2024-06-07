@@ -4321,6 +4321,7 @@ dependencies = [
  "smol_str",
  "toml",
  "toml_edit 0.22.12",
+ "tracing",
 ]
 
 [[package]]

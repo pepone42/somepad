@@ -1,7 +1,7 @@
 use std::{path::Display, str::FromStr};
 
 use cushy::kludgine::app::winit::{
-    event::Modifiers,
+    event::{ElementState, Modifiers},
     keyboard::{Key, ModifiersState},
 };
 use serde::{de::Visitor, Deserialize, Serialize};
@@ -139,7 +139,7 @@ pub fn event_match(
     modifiers: Modifiers,
     shortcut: Shortcut,
 ) -> bool {
-    input.logical_key == shortcut.key && modifiers.state() == shortcut.modifiers
+    input.logical_key == shortcut.key && modifiers.state() == shortcut.modifiers && input.state == ElementState::Pressed
 }
 
 fn modifier_state_from_str(s: &str) -> Result<ModifiersState, ParseError> {

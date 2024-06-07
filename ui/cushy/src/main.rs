@@ -96,42 +96,42 @@ const REDO_CMD: ViewCommand = ViewCommand {
     },
 };
 
-const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
-    name: "Copy Selection",
-    id: "editor.copyselection",
-    action: |_id, v, c| {
-        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
-            let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
-        }
-    },
-};
+// const COPY_SELECTION_CMD: ViewCommand = ViewCommand {
+//     name: "Copy Selection",
+//     id: "editor.copyselection",
+//     action: |_id, v, c| {
+//         if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+//             let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
+//         }
+//     },
+// };
 
-const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
-    name: "Cut Selection",
-    id: "editor.cutselection",
-    action: |_id, v, c| {
-        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
-            if v.doc.get().get_selection_content().len() > 0 {
-                let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
-                v.doc.lock().insert("");
-                v.refocus_main_selection();
-            }
-        }
-    },
-};
+// const CUT_SELECTION_CMD: ViewCommand = ViewCommand {
+//     name: "Cut Selection",
+//     id: "editor.cutselection",
+//     action: |_id, v, c| {
+//         if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+//             if v.doc.get().get_selection_content().len() > 0 {
+//                 let _ = clipboard.set_text(dbg!(v.doc.get().get_selection_content()));
+//                 v.doc.lock().insert("");
+//                 v.refocus_main_selection();
+//             }
+//         }
+//     },
+// };
 
-const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
-    name: "Paste Selection",
-    id: "editor.pasteselection",
-    action: |_id, v, c| {
-        if let Some(mut clipboard) = c.cushy().clipboard_guard() {
-            if let Ok(s) = clipboard.get_text() {
-                v.doc.lock().insert_many(&s);
-                v.refocus_main_selection();
-            }
-        }
-    },
-};
+// const PASTE_SELECTION_CMD: ViewCommand = ViewCommand {
+//     name: "Paste Selection",
+//     id: "editor.pasteselection",
+//     action: |_id, v, c| {
+//         if let Some(mut clipboard) = c.cushy().clipboard_guard() {
+//             if let Ok(s) = clipboard.get_text() {
+//                 v.doc.lock().insert_many(&s);
+//                 v.refocus_main_selection();
+//             }
+//         }
+//     },
+// };
 
 const SAVE_DOC_CMD: ViewCommand = ViewCommand {
     name: "Save document",
@@ -248,13 +248,13 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
     cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
-    cmd_reg
-        .view
-        .insert(COPY_SELECTION_CMD.id, COPY_SELECTION_CMD);
-    cmd_reg
-        .view
-        .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
-    cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
+    // cmd_reg
+    //     .view
+    //     .insert(COPY_SELECTION_CMD.id, COPY_SELECTION_CMD);
+    // cmd_reg
+    //     .view
+    //     .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
+    // cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
     cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
     cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);

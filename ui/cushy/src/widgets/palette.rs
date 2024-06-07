@@ -3,48 +3,87 @@ use std::sync::Arc;
 use cushy::context::EventContext;
 use cushy::figures::units::{Lp, Px};
 use cushy::figures::Zero;
+use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
+use cushy::styles::components::FontFamily;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget,
+    HANDLED, IGNORED,
 };
 
 use cushy::widgets::{Custom, Input};
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
+use ndoc::Document;
 
 use super::filtered_list::{self, FilteredList};
+use super::scroll::{MyScroll, ScrollController};
+use super::text_editor::TextEditor;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct Palette {
     description: Dynamic<String>,
     child: WidgetRef,
     action: Dynamic<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>,
-    input: Dynamic<String>,
+    input: Dynamic<Document>,
     items: Option<Vec<String>>,
     selected_item: Dynamic<Option<usize>>,
 }
 
 impl Palette {
     pub fn new() -> Self {
-        let input = Dynamic::new(String::default());
-        let filtered_list =if let Some(items) = PALETTE_STATE.get().items {
-            FilteredList::new(items.clone(), input.clone())
+        let input = Dynamic::new(Document::default());
+        let str_input = input.map_each(|d| dbg!(d.rope.to_string()));
+        let (list_tag, list_id) = WidgetTag::new();
+        let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
+            FilteredList::new(items.clone(), str_input.clone())
         } else {
-            FilteredList::new(Vec::new(), input.clone())
+            FilteredList::new(Vec::new(), str_input.clone())
         };
-        let selected_item= filtered_list.selected_item.clone();
+        let filtered_list_items = filtered_list.filtered_items.clone();
+        let selected_item = filtered_list.selected_item_idx.clone();
+        let selected_item_bis = filtered_list.selected_item_idx.clone();
+        let scroller = Dynamic::new(ScrollController::default());
         let pal = Custom::new(
-            PALETTE_STATE.get().description
+            PALETTE_STATE
+                .get()
+                .description
                 .clone()
-                .and(Custom::new(Input::new(input.clone())).on_mounted(move |c| c.focus()))
-                .and(filtered_list)
+                .and(
+                    Custom::new(
+                        MyScroll::horizontal(TextEditor::as_input(input.clone()).with_scroller(scroller.clone()), scroller.clone()).with(name, component),
+                        // Input::new(
+                        // input.clone()).on_key(move |input| {
+                        // if input.state == ElementState::Released {
+                        //     return IGNORED;
+                        // }
+                        // match input.logical_key {
+                        //     Key::Named(NamedKey::ArrowDown) => {
+                        //         if let Some(idx) = selected_item_bis.get() {
+                        //             if idx < filtered_list_items.get().len() - 1 {
+                        //                 *selected_item_bis.lock() = Some(idx + 1);
+                        //             } else {
+                        //                 *selected_item_bis.lock() = Some(0);
+                        //             }
+                        //         }
+                        //         HANDLED
+                        //     }
+                        //     _ => IGNORED,
+                        // }
+                    // })
+                    )
+                    .on_mounted(move |c| c.focus()),
+                )
+                .and(filtered_list.make_with_tag(list_tag))
                 .into_rows()
                 .width(Lp::new(250))
                 .height(Lp::ZERO..Lp::new(250)),
         )
         .on_redraw(|c| {
+            c.apply_current_font_settings();
+
             c.gfx.set_font_family(cushy::styles::FamilyOwned::SansSerif);
             c.gfx.set_font_size(Px::new(12));
             let bg_color = c.get(&cushy::styles::components::SurfaceColor);
@@ -61,7 +100,7 @@ impl Palette {
             action: Dynamic::new(PALETTE_STATE.get().action.clone()),
             input,
             items: PALETTE_STATE.get().items,
-            selected_item
+            selected_item,
         }
     }
 }
@@ -80,6 +119,15 @@ impl WrapperWidget for Palette {
         &mut self.child
     }
 
+    fn adjust_child_constraints(
+        &mut self,
+        available_space: cushy::figures::Size<cushy::ConstraintLimit>,
+        context: &mut context::LayoutContext<'_, '_, '_, '_>,
+    ) -> cushy::figures::Size<cushy::ConstraintLimit> {
+        context.invalidate_when_changed(&self.selected_item);
+        available_space
+    }
+
     fn keyboard_input(
         &mut self,
         _device_id: cushy::window::DeviceId,
@@ -87,6 +135,10 @@ impl WrapperWidget for Palette {
         _is_synthetic: bool,
         context: &mut context::EventContext<'_>,
     ) -> EventHandling {
+        if input.state == ElementState::Released {
+            return IGNORED;
+        }
+        context.redraw_when_changed(&self.selected_item);
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
                 if let Some(items) = &self.items {
@@ -102,7 +154,7 @@ impl WrapperWidget for Palette {
                     self.action.get()(
                         &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                         0,
-                        self.input.get().clone(),
+                        dbg!(self.input.get().rope.to_string()),
                     );
                 }
                 PALETTE_STATE.lock().active = false;
@@ -111,6 +163,18 @@ impl WrapperWidget for Palette {
             }
             Key::Named(NamedKey::Escape) => {
                 PALETTE_STATE.lock().active = false;
+                HANDLED
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                if let Some(idx) = self.selected_item.get() {
+                    if let Some(items) = &self.items {
+                        if idx < items.len() - 1 {
+                            *self.selected_item.lock() = Some(idx + 1);
+                        } else {
+                            *self.selected_item.lock() = Some(0);
+                        }
+                    }
+                }
                 HANDLED
             }
             _ => IGNORED,
@@ -148,7 +212,12 @@ pub(super) struct PaletteState {
 
 impl std::fmt::Debug for PaletteState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PaletteState").field("description", &self.description).field("action", &"Skipped").field("owner", &self.owner).field("active", &self.active).finish()
+        f.debug_struct("PaletteState")
+            .field("description", &self.description)
+            .field("action", &"Skipped")
+            .field("owner", &self.owner)
+            .field("active", &self.active)
+            .finish()
     }
 }
 
@@ -183,7 +252,12 @@ pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
     p.items = None;
 }
 
-pub fn choose(owner: WidgetId, description: &str, items: Vec<String>, action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync) {
+pub fn choose(
+    owner: WidgetId,
+    description: &str,
+    items: Vec<String>,
+    action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+) {
     let mut p = PALETTE_STATE.lock();
     p.description = description.to_string();
     p.action = Arc::new(action);

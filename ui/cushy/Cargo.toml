@@ -19,3 +19,4 @@ toml = { version = "0.8.12", features = ["preserve_order"] }
 toml_edit = { version = "0.22.9", features = ["serde"] }
 directories = "5.0.1"
 rfd = "0.14.1"
+tracing = "0.1.40"

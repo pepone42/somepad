@@ -76,8 +76,6 @@ impl WrapperWidget for EditorSwitcher {
         context.invalidate_when_changed(&self.current_doc);
         // TODO: when a doc is close, we should remove the editor from the hashmap
         if self.last_doc != self.current_doc.get() {
-            dbg!("switch!");
-
             self.child_mut().mount_if_needed(context);
             let current_widget_id = self.child_mut().widget().id();
 

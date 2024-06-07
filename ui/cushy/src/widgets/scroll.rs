@@ -30,17 +30,13 @@ pub struct ScrollController {
 impl ScrollController {
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
         let viewport = Rect::new(-self.scroll, self.control_size);
-        if viewport.contains(region.origin)
-            && viewport.contains(region.origin + region.size)
-        {
+        if viewport.contains(region.origin) && viewport.contains(region.origin + region.size) {
             return;
         }
 
         let x = if region.origin.x <= viewport.origin.x {
             -region.origin.x
-        } else if region.origin.x + region.size.width
-            >= viewport.origin.x + viewport.size.width
-        {
+        } else if region.origin.x + region.size.width >= viewport.origin.x + viewport.size.width {
             viewport.size.width - (region.origin.x + region.size.width)
         } else {
             self.scroll.x
@@ -48,9 +44,7 @@ impl ScrollController {
 
         let y = if region.origin.y <= viewport.origin.y {
             -region.origin.y
-        } else if region.origin.y + region.size.height
-            >= viewport.origin.y + viewport.size.height
-        {
+        } else if region.origin.y + region.size.height >= viewport.origin.y + viewport.size.height {
             viewport.size.height - (region.origin.y + region.size.height)
         } else {
             self.scroll.y
@@ -97,6 +91,7 @@ pub struct MyScroll {
     bar_width: Px,
     line_height: Px,
     drag: DragInfo,
+    show_scrollbars: bool,
 }
 
 #[derive(Debug)]
@@ -113,7 +108,6 @@ impl MyScroll {
         enabled: Point<bool>,
         scroll_controller: Dynamic<ScrollController>,
     ) -> Self {
-
         Self {
             contents: WidgetRef::new(contents),
             enabled,
@@ -130,6 +124,7 @@ impl MyScroll {
             bar_width: Px::default(),
             line_height: Px::default(),
             drag: DragInfo::default(),
+            show_scrollbars: false,
         }
     }
 
@@ -210,7 +205,7 @@ impl Widget for MyScroll {
     }
 
     fn hit_test(&mut self, _location: Point<Px>, _context: &mut EventContext<'_>) -> bool {
-        true
+        self.show_scrollbars
     }
 
     fn hover(
@@ -218,13 +213,16 @@ impl Widget for MyScroll {
         _location: Point<Px>,
         context: &mut EventContext<'_>,
     ) -> Option<CursorIcon> {
-        self.show_scrollbars(context);
-
+        if self.show_scrollbars {
+            self.show_scrollbars(context);
+        }
         None
     }
 
     fn unhover(&mut self, context: &mut EventContext<'_>) {
-        self.hide_scrollbars(context);
+        if self.show_scrollbars {
+            self.hide_scrollbars(context);
+        }
     }
 
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
@@ -235,24 +233,26 @@ impl Widget for MyScroll {
 
         let size = context.gfx.region().size;
 
-        if self.horizontal_bar.amount_hidden > 0 {
-            context.gfx.draw_shape(&Shape::filled_rect(
-                Rect::new(
-                    Point::new(self.horizontal_bar.offset, size.height - self.bar_width),
-                    Size::new(self.horizontal_bar.size, self.bar_width),
-                ),
-                Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
-            ));
-        }
+        if self.show_scrollbars {
+            if self.horizontal_bar.amount_hidden > 0 {
+                context.gfx.draw_shape(&Shape::filled_rect(
+                    Rect::new(
+                        Point::new(self.horizontal_bar.offset, size.height - self.bar_width),
+                        Size::new(self.horizontal_bar.size, self.bar_width),
+                    ),
+                    Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
+                ));
+            }
 
-        if self.vertical_bar.amount_hidden > 0 {
-            context.gfx.draw_shape(&Shape::filled_rect(
-                Rect::new(
-                    Point::new(size.width - self.bar_width, self.vertical_bar.offset),
-                    Size::new(self.bar_width, self.vertical_bar.size),
-                ),
-                Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
-            ));
+            if self.vertical_bar.amount_hidden > 0 {
+                context.gfx.draw_shape(&Shape::filled_rect(
+                    Rect::new(
+                        Point::new(size.width - self.bar_width, self.vertical_bar.offset),
+                        Size::new(self.bar_width, self.vertical_bar.size),
+                    ),
+                    Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
+                ));
+            }
         }
     }
 
@@ -400,6 +400,9 @@ impl Widget for MyScroll {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
+        if !self.show_scrollbars {
+            return IGNORED;
+        }
         let relative_x = (self.controller.get().control_size.width - location.x).max(Px::ZERO);
         let in_vertical_area = self.enabled.y && relative_x <= self.bar_width;
 
