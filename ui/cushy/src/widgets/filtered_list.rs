@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    iter,
+};
 
 use cushy::{
     figures::{
@@ -7,64 +10,135 @@ use cushy::{
     },
     kludgine::{text::Text, wgpu::core::id, DrawableExt},
     styles::components::LineHeight,
-    value::{Dynamic, Source},
+    value::{CallbackHandle, Dynamic, Source},
     widget::{Widget, IGNORED},
 };
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FilterItem {
+    pub index: usize,
+    score: usize,
+    pub text: String,
+    excluded: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Filter {
+    items: Dynamic<Vec<FilterItem>>,
+    filter: Dynamic<String>,
+    pub selected_idx: Dynamic<Option<usize>>,
+    pub selected_item: Dynamic<Option<FilterItem>>,
+    pub filtered_items: Dynamic<Vec<FilterItem>>,
+}
+
+impl Filter {
+    pub fn new(items: Vec<String>, filter: Dynamic<String>) -> Self {
+        let items: Dynamic<Vec<FilterItem>> = Dynamic::new(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, text)| FilterItem {
+                    index,
+                    score: 0,
+                    text,
+                    excluded: false,
+                })
+                .collect(),
+        );
+        let selected_idx = Dynamic::new(Some(0));
+        let filtered_items = selected_idx.with_clone(|selected_idx| items.with_clone(|items| {
+            filter.map_each(move|filter| {
+                for item in items.lock().iter_mut() {
+                    if !item.text.contains(filter) {
+                        item.excluded = true;
+                    } else {
+                        item.excluded = false;
+                    }
+                }
+                if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
+                    *selected_idx.lock() =  Some(i.index);
+                } else {
+                    *selected_idx.lock() =  None;
+                }
+                items
+                    .get()
+                    .iter()
+                    .filter(|i| !i.excluded)
+                    .map(|i| i.clone())
+                    .collect::<Vec<FilterItem>>()
+            })
+        }));
+        
+        let selected_item = items.with_clone(|items| {
+            selected_idx.map_each(move |selected_idx| selected_idx.and_then(|s| Some(items.get()[s].clone())))
+        });
+
+        Filter {
+            items,
+            selected_idx,
+            selected_item,
+            filter,
+            filtered_items,
+        }
+    }
+
+    pub fn next(&mut self) {
+        let items = self.items.get();
+        let mut idx = self.selected_idx.get();
+        if idx.is_none() {
+            return;
+        }
+        loop {
+            let i = idx.unwrap();
+            idx = Some((i + 1) % items.len());
+            if !items[idx.unwrap()].excluded {
+                break;
+            }
+        }
+        *self.selected_idx.lock() = dbg!(idx);
+    }
+    pub fn prev(&mut self) {
+        let items = self.items.get();
+        let idx = self.selected_idx.clone();
+        if idx.get().is_none() {
+            return;
+        }
+        loop {
+            let i = idx.get().unwrap();
+            *idx.lock() = Some((i + items.len() - 1) % items.len());
+            if !items[idx.get().unwrap()].excluded {
+                break;
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct FilteredList {
-    pub items: Vec<String>,
-    filter: Dynamic<String>,
-    pub filtered_items: Dynamic<BTreeMap<usize, String>>,
-    pub filtered_item_idx: Dynamic<Option<usize>>,
-    pub selected_item: Dynamic<Option<(usize, String)>>,
+    pub filter: Dynamic<Filter>,
 }
 
 impl FilteredList {
     pub fn new(items: Vec<String>, filter: Dynamic<String>) -> Self {
-        // TODO: maybe use im
-        let i = items.clone();
-        let filtered_items: Dynamic<BTreeMap<usize, String>> = filter.map_each(move |filter| {
-            i.iter()
-                .enumerate()
-                .filter(|(_, item)| item.contains(filter))
-                .map(|(i, item)| (i, item.clone()))
-                .collect()
-        });
-        let filtered_item_idx = filtered_items
-            .with_clone(|fi| fi.map_each(|items| if items.len() > 0 { Some(0) } else { None }));
-        let selected_item = filtered_items.with_clone(|fi| {
-            filtered_item_idx.map_each(move |idx| {
-                if let Some(idx) = idx {
-                    let items = fi.get();
-                    Some((*idx, items.get(&idx).unwrap().clone()))
-                } else {
-                    None
-                }
-            })
-        });
-
-        FilteredList {
-            items,
-            filter,
-            filtered_items,
-            filtered_item_idx,
-            selected_item,
-        }
+        let filter = Dynamic::new(Filter::new(items, filter));
+        FilteredList { filter }
     }
 }
 
 impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.apply_current_font_settings();
+        context.redraw_when_changed(&self.filter);
         let mut y = Px::ZERO;
-        for item in self.filtered_items.get().iter().enumerate() {
+        let selected_idx = dbg!(self.filter.get().selected_idx.get());
+        for item in self.filter.get().items.get().iter().filter(|i| !i.excluded) {
             let text = format!(
                 "{}{}",
-                item.1 .1,
-                match self.filtered_item_idx.get() {
-                    Some(x) if x == item.0 => "*",
-                    _ => "",
+                item.text,
+                if selected_idx == Some(item.index) {
+                    "*"
+                } else {
+                    ""
                 }
             );
             let text = Text::<Px>::new(&text, cushy::kludgine::Color::WHITE);
@@ -82,8 +156,8 @@ impl Widget for FilteredList {
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
         let mut y = UPx::ZERO;
-        for item in self.filtered_items.get().iter() {
-            let text = Text::<UPx>::new(item.1, cushy::kludgine::Color::WHITE);
+        for item in self.filter.get().items.get().iter().filter(|i| !i.excluded) {
+            let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
             let h = context.gfx.measure_text(text).line_height;
             y += h;
         }

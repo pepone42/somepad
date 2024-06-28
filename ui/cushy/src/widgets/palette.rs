@@ -17,7 +17,7 @@ use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
 
-use super::filtered_list::{self, FilteredList};
+use super::filtered_list::{self, Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
 use super::text_editor::TextEditor;
 
@@ -28,8 +28,8 @@ pub struct Palette {
     action: Dynamic<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>,
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
-    filtered_item_idx: Dynamic<Option<usize>>,
-    selected_item: Dynamic<Option<(usize, String)>>,
+    // filtered_item_idx: Dynamic<Option<usize>>,
+    filter: Dynamic<Filter>,
     filter_id: WidgetId,
 }
 
@@ -43,9 +43,7 @@ impl Palette {
         } else {
             FilteredList::new(Vec::new(), str_input.clone())
         };
-        let filtered_item = filtered_list.filtered_item_idx.clone();
-        let selected_item = filtered_list.selected_item.clone();
-
+        let filter = filtered_list.filter.clone();
         let scroller = Dynamic::new(ScrollController::default());
         let pal = Custom::new(
             PALETTE_STATE
@@ -86,8 +84,7 @@ impl Palette {
             action: Dynamic::new(PALETTE_STATE.get().action.clone()),
             input,
             items: PALETTE_STATE.get().items,
-            filtered_item_idx: filtered_item,
-            selected_item,
+            filter,
             filter_id,
         }
     }
@@ -112,7 +109,7 @@ impl WrapperWidget for Palette {
         available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::ConstraintLimit> {
-        context.invalidate_when_changed(&self.filtered_item_idx);
+        context.invalidate_when_changed(&self.input);
         available_space
     }
 
@@ -126,17 +123,16 @@ impl WrapperWidget for Palette {
         if input.state == ElementState::Released {
             return IGNORED;
         }
-        context.redraw_when_changed(&self.filtered_item_idx);
+        //context.redraw_when_changed(&self.filtered_item_idx);
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
                 if let Some(items) = &self.items {
-                    let item = self.selected_item.get();
-                    if let Some((idx,value)) = item {
-                        
+                    let item = self.filter.get().selected_item.get();
+                    if let Some(idx) = item {
                         self.action.get()(
                             &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
-                            idx,
-                            value,
+                            dbg!(idx.index),
+                            idx.text,
                         );
                     }
                 } else {
@@ -152,6 +148,14 @@ impl WrapperWidget for Palette {
             }
             Key::Named(NamedKey::Escape) => {
                 PALETTE_STATE.lock().active = false;
+                HANDLED
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                self.filter.lock().next();
+                HANDLED
+            }
+            Key::Named(NamedKey::ArrowUp) => {
+                self.filter.lock().prev();
                 HANDLED
             }
             _ => IGNORED,
