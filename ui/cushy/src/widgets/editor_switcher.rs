@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cushy::context::LayoutContext;
 use cushy::figures::Size;
 use cushy::value::{Dynamic, Source};
-use cushy::widget::{MakeWidget, WidgetRef, WrapperWidget, IGNORED};
+use cushy::widget::{MakeWidget, WidgetRef, WrapperWidget};
 use cushy::ConstraintLimit;
 use ndoc::Document;
 

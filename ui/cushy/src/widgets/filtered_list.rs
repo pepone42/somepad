@@ -1,17 +1,12 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    iter,
-};
 
 use cushy::{
     figures::{
         units::{Px, UPx},
         Point, Size, Zero,
     },
-    kludgine::{text::Text, wgpu::core::id, DrawableExt},
-    styles::components::LineHeight,
-    value::{CallbackHandle, Dynamic, Source},
-    widget::{Widget, IGNORED},
+    kludgine::{text::Text, DrawableExt},
+    value::{Dynamic, DynamicReader, Source},
+    widget::Widget,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,10 +20,9 @@ pub struct FilterItem {
 #[derive(Debug, Clone)]
 pub struct Filter {
     items: Dynamic<Vec<FilterItem>>,
-    filter: Dynamic<String>,
-    pub selected_idx: Dynamic<Option<usize>>,
-    pub selected_item: Dynamic<Option<FilterItem>>,
-    pub filtered_items: Dynamic<Vec<FilterItem>>,
+    selected_idx: Dynamic<Option<usize>>,
+    pub selected_item: DynamicReader<Option<FilterItem>>,
+    pub filtered_items: DynamicReader<Vec<FilterItem>>,
 }
 
 impl Filter {
@@ -67,17 +61,16 @@ impl Filter {
                     .map(|i| i.clone())
                     .collect::<Vec<FilterItem>>()
             })
-        }));
+        })).into_reader();
         
         let selected_item = items.with_clone(|items| {
             selected_idx.map_each(move |selected_idx| selected_idx.and_then(|s| Some(items.get()[s].clone())))
-        });
+        }).into_reader();
 
         Filter {
             items,
             selected_idx,
             selected_item,
-            filter,
             filtered_items,
         }
     }
@@ -131,7 +124,7 @@ impl Widget for FilteredList {
         context.redraw_when_changed(&self.filter);
         let mut y = Px::ZERO;
         let selected_idx = dbg!(self.filter.get().selected_idx.get());
-        for item in self.filter.get().items.get().iter().filter(|i| !i.excluded) {
+        for item in self.filter.get().filtered_items.get().iter() {
             let text = format!(
                 "{}{}",
                 item.text,
@@ -156,7 +149,7 @@ impl Widget for FilteredList {
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
         let mut y = UPx::ZERO;
-        for item in self.filter.get().items.get().iter().filter(|i| !i.excluded) {
+        for item in self.filter.get().filtered_items.get().iter() {
             let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
             let h = context.gfx.measure_text(text).line_height;
             y += h;

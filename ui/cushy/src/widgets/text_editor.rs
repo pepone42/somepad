@@ -862,7 +862,6 @@ impl Widget for Gutter {
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
     scroll_id: WidgetId,
-    pub scroll_controller: Dynamic<ScrollController>,
 }
 
 impl CodeEditor {
@@ -893,7 +892,6 @@ impl CodeEditor {
         Self {
             child: child.widget_ref(),
             scroll_id,
-            scroll_controller: scroller.clone(),
         }
     }
 }

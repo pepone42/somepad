@@ -1,23 +1,22 @@
 use std::sync::Arc;
 
-use cushy::context::{AsEventContext, EventContext};
+use cushy::context::EventContext;
 use cushy::figures::units::{Lp, Px};
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
-use cushy::styles::components::FontFamily;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
 };
 
-use cushy::widgets::{Custom, Input};
+use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
 
-use super::filtered_list::{self, Filter, FilteredList};
+use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
 use super::text_editor::TextEditor;
 
@@ -115,18 +114,17 @@ impl WrapperWidget for Palette {
 
     fn keyboard_input(
         &mut self,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         input: KeyEvent,
-        is_synthetic: bool,
+        _is_synthetic: bool,
         context: &mut context::EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Released {
             return IGNORED;
         }
-        //context.redraw_when_changed(&self.filtered_item_idx);
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
-                if let Some(items) = &self.items {
+                if self.items.is_some() {
                     let item = self.filter.get().selected_item.get();
                     if let Some(idx) = item {
                         self.action.get()(

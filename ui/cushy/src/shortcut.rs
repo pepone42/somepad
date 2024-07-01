@@ -1,4 +1,4 @@
-use std::{path::Display, str::FromStr};
+use std::str::FromStr;
 
 use cushy::kludgine::app::winit::{
     event::{ElementState, Modifiers},
@@ -161,7 +161,7 @@ impl FromStr for Shortcut {
             return Err(ParseError::InvalidShortcut(s.to_string()));
         }
         let keys = s.split('+').collect::<Vec<&str>>();
-        let (mut modifiers, c) = match keys.as_slice() {
+        let (modifiers, c) = match keys.as_slice() {
             [modifierstr @ .., c] => {
                 let mut modifiers = ModifiersState::empty();
                 for m in modifierstr {
@@ -224,8 +224,9 @@ impl ModifiersCustomExt for Modifiers {
     }
 }
 
+#[cfg(test)]
 mod test {
-    use std::{fmt::Error, str::FromStr};
+    use std::str::FromStr;
 
     use cushy::kludgine::app::winit::keyboard::{Key, ModifiersState};
     use smol_str::SmolStr;
