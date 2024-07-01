@@ -8,7 +8,7 @@ use cushy::figures::Zero;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::{ask, choose};
+use widgets::palette::Palette;
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::TextEditor;
 
@@ -60,7 +60,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     action: |id, v, _c| {
         let doc = v.doc.clone();
 
-        ask(id, "Got to line", move |c, _, s| {
+        Palette::ask(id, "Got to line", move |c, _, s| {
             if let Ok(line) = s.parse::<usize>() {
                 if line == 0 || line > doc.get().rope.len_lines() {
                     return;
@@ -205,7 +205,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
                 }
             })
             .collect();
-        choose(_id, "Select a document", items, |_,i,val| {
+        Palette::choose(_id, "Select a document", items, |_,i,val| {
             dbg!("Selected!",i,val);
         })
     }

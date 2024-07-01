@@ -87,6 +87,33 @@ impl Palette {
             filter_id,
         }
     }
+
+    pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+        owner: WidgetId,
+        description: &str,
+        action: F,
+    ) {
+        let mut p = PALETTE_STATE.lock();
+        p.description = description.to_string();
+        p.action = Arc::new(action);
+        p.owner = owner;
+        p.active = true;
+        p.items = None;
+    }
+    
+    pub fn choose(
+        owner: WidgetId,
+        description: &str,
+        items: Vec<String>,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    ) {
+        let mut p = PALETTE_STATE.lock();
+        p.description = description.to_string();
+        p.action = Arc::new(action);
+        p.owner = owner;
+        p.active = true;
+        p.items = Some(items);
+    }
 }
 
 impl std::fmt::Debug for Palette {
@@ -140,12 +167,12 @@ impl WrapperWidget for Palette {
                         dbg!(self.input.get().rope.to_string()),
                     );
                 }
-                PALETTE_STATE.lock().active = false;
+                close_palette();
 
                 HANDLED
             }
             Key::Named(NamedKey::Escape) => {
-                PALETTE_STATE.lock().active = false;
+                close_palette();
                 HANDLED
             }
             Key::Named(NamedKey::ArrowDown) => {
@@ -156,7 +183,7 @@ impl WrapperWidget for Palette {
                 self.filter.lock().prev();
                 HANDLED
             }
-            _ => IGNORED,
+            _ => HANDLED,
         }
     }
 
@@ -218,29 +245,8 @@ impl PaletteState {
 pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
     Lazy::new(|| Dynamic::new(PaletteState::new()));
 
-pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
-    owner: WidgetId,
-    description: &str,
-    action: F,
-) {
-    let mut p = PALETTE_STATE.lock();
-    p.description = description.to_string();
-    p.action = Arc::new(action);
-    p.owner = owner;
-    p.active = true;
-    p.items = None;
+fn close_palette() {
+    PALETTE_STATE.lock().active = false;
 }
 
-pub fn choose(
-    owner: WidgetId,
-    description: &str,
-    items: Vec<String>,
-    action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-) {
-    let mut p = PALETTE_STATE.lock();
-    p.description = description.to_string();
-    p.action = Arc::new(action);
-    p.owner = owner;
-    p.active = true;
-    p.items = Some(items);
-}
+

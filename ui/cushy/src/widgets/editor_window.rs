@@ -33,7 +33,6 @@ impl EditorWindow {
     #[must_use]
     pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
-        let enabled = palette.map_each(|p| !*p);
 
         let documents = Dynamic::new(vec![document]);
         let current_doc = Dynamic::new(0);
@@ -73,7 +72,7 @@ impl EditorWindow {
             .make_widget();
 
         let w = child
-            .with_enabled(enabled)
+            //.with_enabled(enabled)
             .and(palette.clone().switcher(move |current, _active| {
                 if *current {
                     Palette::new().make_widget()
