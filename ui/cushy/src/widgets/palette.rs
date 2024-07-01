@@ -102,7 +102,7 @@ impl Palette {
         })
     }
 
-    pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
         owner: WidgetId,
         description: &str,
         action: F,
@@ -115,7 +115,7 @@ impl Palette {
         p.items = None;
     }
 
-    pub fn choose(
+    fn choose(
         owner: WidgetId,
         description: &str,
         items: Vec<String>,
@@ -266,4 +266,38 @@ static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(Pa
 
 fn close_palette() {
     PALETTE_STATE.lock().active = false;
+}
+
+
+pub trait PaletteExt {
+    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+        &mut self,
+        description: &str,
+        action: F,
+    );
+    fn choose(
+        &mut self,
+        description: &str,
+        items: Vec<String>,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    );
+}
+
+impl<'a> PaletteExt for EventContext<'a> {
+    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+        &mut self,
+        description: &str,
+        action: F,
+    ) {
+        Palette::ask(self.widget().id(), description, action);
+    }
+
+    fn choose(
+        &mut self,
+        description: &str,
+        items: Vec<String>,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    ) {
+        Palette::choose(self.widget().id(), description, items, action);
+    }
 }

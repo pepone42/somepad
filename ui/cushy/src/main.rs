@@ -8,7 +8,7 @@ use cushy::figures::Zero;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::Palette;
+use widgets::palette::{Palette, PaletteExt};
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::TextEditor;
 
@@ -57,10 +57,10 @@ const NEW_DOC: WindowCommand = WindowCommand {
 const GOTO_LINE: ViewCommand = ViewCommand {
     name: "Go to Line",
     id: "editor.goto_line",
-    action: |id, v, _c| {
+    action: |_id, v, c| {
         let doc = v.doc.clone();
 
-        Palette::ask(id, "Got to line", move |c, _, s| {
+        c.ask("Got to line", move |c, _, s| {
             if let Ok(line) = s.parse::<usize>() {
                 if line == 0 || line > doc.get().rope.len_lines() {
                     return;
@@ -192,7 +192,7 @@ const NEXT_DOC: WindowCommand = WindowCommand {
 const SELECT_DOC: WindowCommand = WindowCommand {
     name: "Select Document",
     id: "window.select_doc",
-    action: |_id, w, _c| {
+    action: |_id, w, c| {
         let items = w
             .documents
             .get()
@@ -205,7 +205,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
                 }
             })
             .collect();
-        Palette::choose(_id, "Select a document", items, |_,i,val| {
+        c.choose( "Select a document", items, |_,i,val| {
             dbg!("Selected!",i,val);
         })
     }
