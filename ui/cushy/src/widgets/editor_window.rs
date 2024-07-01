@@ -1,11 +1,10 @@
-
 use cushy::context::WidgetContext;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef,
-    WidgetTag, WrapperWidget, HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetRef, WidgetTag, WrapperWidget,
+    HANDLED, IGNORED,
 };
 
 use cushy::widgets::Custom;
@@ -18,7 +17,7 @@ use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::OpenedEditor;
-use super::palette::{Palette, PALETTE_STATE};
+use super::palette::Palette;
 
 #[derive(Debug)]
 pub struct EditorWindow {
@@ -32,56 +31,20 @@ pub struct EditorWindow {
 impl EditorWindow {
     #[must_use]
     pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
-        let palette = PALETTE_STATE.map_each(|p| p.active()); // super::palette::PALETTE.clone();
-
         let documents = Dynamic::new(vec![document]);
         let current_doc = Dynamic::new(0);
 
-        //let child = child.make_widget();
-
-        
-        
-
-        // let docs = documents.clone();
-        // let cregs = cmd_reg.clone();
         let (editor_tag, editor_id) = WidgetTag::new();
-        // let editors = Dynamic::new(HashMap::new());
-        // let editors_clone = editors.clone();
         let child = OpenedEditor::new(documents.clone(), current_doc.clone())
-            //.width(Lp::new(50))
             .and(
-                // current_doc
-                //     .with_clone(move |current_doc| {
-                        // current_doc.switcher(move |current, active| {
-                        //     let cregs = cregs.clone();
-                        //     let doc = docs.clone().get()[*current].clone();
-                        //     editors_clone
-                        //         .lock()
-                        //         .entry(doc.get().id())
-                        //         .or_insert_with(move || {
-                        //             CodeEditor::new(doc.clone(), cregs.clone()).make_widget()
-                        //         })
-                        //         .clone()
-                        // })
-                        EditorSwitcher::new(documents.clone(),current_doc.clone(), cmd_reg.clone())
-                            
-                    //})
+                EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
                     .make_with_tag(editor_tag),
             )
             .into_columns()
             .make_widget();
 
         let w = child
-            //.with_enabled(enabled)
-            .and(palette.clone().switcher(move |current, _active| {
-                if *current {
-                    Palette::new().make_widget()
-                } else {
-                    Custom::empty()
-                        .on_mounted(move |c| c.for_other(&editor_id).unwrap().focus())
-                        .make_widget()
-                }
-            }))
+            .and(Palette::new().with_next_focus(editor_id))
             .into_layers();
         EditorWindow {
             child: w.widget_ref(),
@@ -94,8 +57,6 @@ impl EditorWindow {
     }
 
     pub fn add_new_doc(&self, doc: Dynamic<Document>, _context: &mut WidgetContext) {
-
-
         self.documents.lock().push(doc);
         *self.current_doc.lock() += 1;
         dbg!(self.current_doc.get());
@@ -145,17 +106,21 @@ impl WrapperWidget for EditorWindow {
     }
 
     // If I don't handle mouse down event here, the focus is stollen from the editor when I click in the opened editor widget
-    fn hit_test(&mut self, _location: cushy::figures::Point<cushy::figures::units::Px>, _context: &mut cushy::context::EventContext<'_>) -> bool {
+    fn hit_test(
+        &mut self,
+        _location: cushy::figures::Point<cushy::figures::units::Px>,
+        _context: &mut cushy::context::EventContext<'_>,
+    ) -> bool {
         true
     }
     fn mouse_down(
-            &mut self,
-            _location: cushy::figures::Point<cushy::figures::units::Px>,
-            _device_id: cushy::window::DeviceId,
-            _button: cushy::kludgine::app::winit::event::MouseButton,
-            _context: &mut cushy::context::EventContext<'_>,
-        ) -> EventHandling {
-            dbg!("scroll mouse down");
-            IGNORED
+        &mut self,
+        _location: cushy::figures::Point<cushy::figures::units::Px>,
+        _device_id: cushy::window::DeviceId,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut cushy::context::EventContext<'_>,
+    ) -> EventHandling {
+        dbg!("scroll mouse down");
+        IGNORED
     }
 }

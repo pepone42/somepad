@@ -6,15 +6,18 @@ use cushy::figures::Zero;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
-use cushy::value::{Dynamic, Source};
+use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetRef, WidgetTag,
+    WrapperWidget, HANDLED, IGNORED,
 };
 
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
+
+use crate::widgets::palette;
 
 use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
@@ -33,7 +36,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    pub fn new() -> Self {
+    fn create() -> Self {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| dbg!(d.rope.to_string()));
         let (filter_tag, filter_id) = WidgetTag::new();
@@ -54,8 +57,8 @@ impl Palette {
                         MyScroll::horizontal(
                             TextEditor::as_input(input.clone()).with_scroller(scroller.clone()),
                             scroller.clone(),
-                        ).pad()
-                        ,
+                        )
+                        .pad(),
                     )
                     .on_mounted(move |c| c.focus()),
                 )
@@ -88,6 +91,17 @@ impl Palette {
         }
     }
 
+    pub fn new() -> impl Widget {
+        let palette = PALETTE_STATE.map_each(|p| p.active());
+        palette.switcher(move |current, _active| {
+            if *current {
+                Palette::create().make_widget()
+            } else {
+                Custom::empty().make_widget()
+            }
+        })
+    }
+
     pub fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
         owner: WidgetId,
         description: &str,
@@ -100,7 +114,7 @@ impl Palette {
         p.active = true;
         p.items = None;
     }
-    
+
     pub fn choose(
         owner: WidgetId,
         description: &str,
@@ -128,6 +142,12 @@ impl std::fmt::Debug for Palette {
 impl WrapperWidget for Palette {
     fn child_mut(&mut self) -> &mut WidgetRef {
         &mut self.child
+    }
+
+    fn unmounted(&mut self, context: &mut EventContext<'_>) {
+        if let Some(id) = context.widget().parent().and_then(|p| p.next_focus()) {
+            context.for_other(&id).focus();
+        }
     }
 
     fn adjust_child_constraints(
@@ -242,11 +262,8 @@ impl PaletteState {
     }
 }
 
-pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
-    Lazy::new(|| Dynamic::new(PaletteState::new()));
+static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(PaletteState::new()));
 
 fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
-
-
