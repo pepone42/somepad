@@ -1381,6 +1381,23 @@ fn test_position_from_char_idx() {
     }
 }
 
+pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
+    let line = rope.char_to_line(char_idx.min(rope.len_chars()));
+    //let column = print_positions::print_positions(&rope.line(line).chars().take(char_idx).collect::<String>()).count();
+    let column = char_to_grapheme(&rope.line(line), char_idx - rope.line_to_char(line));
+    Position::new(line, column)
+}
+
+pub fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
+    //line_len_char(rope, line_idx)
+    char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
+}
+
+pub fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
+    //line_len_char(rope, line_idx)
+    char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
+}
+
 // #[test]
 // fn test_position_from_char_idx_point() {
 //     let rope = Rope::from("  Misc Sm Circles:  ｡ ⋄ ° ﾟ ˚ ﹾ");
@@ -1399,22 +1416,5 @@ mod test {
         let rope = Rope::from("  Diamonds:         ⋄ ᛜ ⌔ ◇ ⟐ ◈ ◆   ◊");
         let column = char_to_grapheme(&rope.slice(..), 27);
         assert_eq!(column, 27);
-    }
-
-    pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
-        let line = rope.char_to_line(char_idx.min(rope.len_chars()));
-        //let column = print_positions::print_positions(&rope.line(line).chars().take(char_idx).collect::<String>()).count();
-        let column = char_to_grapheme(&rope.line(line), char_idx - rope.line_to_char(line));
-        Position::new(line, column)
-    }
-
-    pub fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
-        //line_len_char(rope, line_idx)
-        char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
-    }
-
-    pub fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
-        //line_len_char(rope, line_idx)
-        char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
     }
 }
