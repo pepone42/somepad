@@ -1,13 +1,12 @@
 use cushy::context::WidgetContext;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
-use cushy::value::{Dynamic, Source, Switchable};
+use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetRef, WidgetTag, WrapperWidget,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef, WidgetTag, WrapperWidget,
     HANDLED, IGNORED,
 };
 
-use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 
 use ndoc::Document;

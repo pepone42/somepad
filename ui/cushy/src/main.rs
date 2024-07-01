@@ -8,7 +8,7 @@ use cushy::figures::Zero;
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::{Palette, PaletteExt};
+use widgets::palette::PaletteExt;
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::TextEditor;
 

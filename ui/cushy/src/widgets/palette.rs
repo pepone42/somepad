@@ -17,8 +17,6 @@ use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
 
-use crate::widgets::palette;
-
 use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
 use super::text_editor::TextEditor;
