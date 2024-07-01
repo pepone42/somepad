@@ -1009,7 +1009,7 @@ impl Document {
 
         let mut vcol = 0;
         for (i, j) in rope_utils::NextGraphemeIdxIterator::new(&slice)
-            .take(col_idx+1)
+            .take(col_idx + 1)
             .tuple_windows()
         {
             match slice.byte_slice(i..j).char(0) {
@@ -1063,8 +1063,6 @@ impl Document {
         let vcol_idx = self.byte_to_vcol(line_idx, byte_idx);
         self.vcol_to_col(line_idx, vcol_idx)
     }
-
-
 
     /// return the visible column position corresponding of the byte_idx of the line
     /// this function take into account the tab character and elastic tab stop behavior
@@ -1388,27 +1386,35 @@ fn test_position_from_char_idx() {
 //     let rope = Rope::from("  Misc Sm Circles:  ｡ ⋄ ° ﾟ ˚ ﹾ");
 //     assert_eq!(char_to_position(&rope.slice(..), 27), Position::new(0, 27));
 // }
+#[cfg(test)]
+mod test {
+    use ropey::{Rope, RopeSlice};
 
-#[test]
-fn test_char_to_grapheme() {
-    let rope = Rope::from("  Diamonds:         ⋄ ᛜ ⌔ ◇ ⟐ ◈ ◆   ◊");
-    let column = char_to_grapheme(&rope.slice(..), 27);
-    assert_eq!(column, 27);
-}
+    use crate::{rope_utils::char_to_grapheme, Position};
 
-pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
-    let line = rope.char_to_line(char_idx.min(rope.len_chars()));
-    //let column = print_positions::print_positions(&rope.line(line).chars().take(char_idx).collect::<String>()).count();
-    let column = char_to_grapheme(&rope.line(line), char_idx - rope.line_to_char(line));
-    Position::new(line, column)
-}
+    use super::{line_len_char, line_len_char_full};
 
-pub fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
-    //line_len_char(rope, line_idx)
-    char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
-}
+    #[test]
+    fn test_char_to_grapheme() {
+        let rope = Rope::from("  Diamonds:         ⋄ ᛜ ⌔ ◇ ⟐ ◈ ◆   ◊");
+        let column = char_to_grapheme(&rope.slice(..), 27);
+        assert_eq!(column, 27);
+    }
 
-pub fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
-    //line_len_char(rope, line_idx)
-    char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
+    pub fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
+        let line = rope.char_to_line(char_idx.min(rope.len_chars()));
+        //let column = print_positions::print_positions(&rope.line(line).chars().take(char_idx).collect::<String>()).count();
+        let column = char_to_grapheme(&rope.line(line), char_idx - rope.line_to_char(line));
+        Position::new(line, column)
+    }
+
+    pub fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
+        //line_len_char(rope, line_idx)
+        char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
+    }
+
+    pub fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
+        //line_len_char(rope, line_idx)
+        char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
+    }
 }
