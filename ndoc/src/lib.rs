@@ -1,6 +1,6 @@
 mod document;
 mod file_info;
-pub mod rope_utils;
+mod rope_utils;
 pub mod syntax;
 pub mod theme;
 
