@@ -9,9 +9,9 @@ use smol_str::SmolStr;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
-    InvalidShortcut(String),
-    InvalidKey(String),
-    InvalidModifiers(String),
+    Shortcut(String),
+    Key(String),
+    Modifiers(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -56,11 +56,11 @@ impl<'de> Visitor<'de> for ShortcutVisitor {
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("A shorcut representation like 'Ctrl+c'")
     }
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        Shortcut::from_str(&value).map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+        Shortcut::from_str(value).map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
     }
 }
 
@@ -76,21 +76,21 @@ impl<'de> Deserialize<'de> for Shortcut {
 #[macro_export]
 macro_rules! shortcut {
     (Ctrl+Tab) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
                 
         }
     };
     (Ctrl+Shift+Tab) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
             | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
         }
     };
     (Ctrl+$c:ident) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c),
             )),
@@ -98,7 +98,7 @@ macro_rules! shortcut {
         }
     };
     (Ctrl+Shift+$c:ident) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c).to_uppercase(),
             )),
@@ -107,7 +107,7 @@ macro_rules! shortcut {
         }
     };
     (Ctrl+Alt+$c:ident) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c),
             )),
@@ -116,7 +116,7 @@ macro_rules! shortcut {
         }
     };
     (Alt+$c:ident) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c),
             )),
@@ -124,7 +124,7 @@ macro_rules! shortcut {
         }
     };
     (Shift+Alt+$c:ident) => {
-        crate::shortcut::Shortcut {
+        $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
                 stringify!($c).to_uppercase(),
             )),
@@ -148,7 +148,7 @@ fn modifier_state_from_str(s: &str) -> Result<ModifiersState, ParseError> {
         "Shift" => Ok(ModifiersState::SHIFT),
         "Alt" => Ok(ModifiersState::ALT),
         "Super" => Ok(ModifiersState::SUPER),
-        _ => Err(ParseError::InvalidModifiers(s.to_string())),
+        _ => Err(ParseError::Modifiers(s.to_string())),
     }
 }
 
@@ -158,7 +158,7 @@ impl FromStr for Shortcut {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.contains('+') {
-            return Err(ParseError::InvalidShortcut(s.to_string()));
+            return Err(ParseError::Shortcut(s.to_string()));
         }
         let keys = s.split('+').collect::<Vec<&str>>();
         let (modifiers, c) = match keys.as_slice() {
@@ -168,11 +168,11 @@ impl FromStr for Shortcut {
                     modifiers = modifiers.union(modifier_state_from_str(m)?);
                 }
                 if c.is_empty() {
-                    return Err(ParseError::InvalidKey(c.to_string()));
+                    return Err(ParseError::Key(c.to_string()));
                 }
                 (modifiers, c)
             }
-            _ => return Err(ParseError::InvalidShortcut(s.to_string())),
+            _ => return Err(ParseError::Shortcut(s.to_string())),
         };
         let key = if modifiers.shift_key() {
             Key::Character(SmolStr::new(c.to_uppercase()))
@@ -259,7 +259,7 @@ mod test {
     fn bad_modifier() {
         assert_eq!(
             Shortcut::from_str("Crtl+s"),
-            Err(ParseError::InvalidModifiers("Crtl".to_string()))
+            Err(ParseError::Modifiers("Crtl".to_string()))
         )
     }
 

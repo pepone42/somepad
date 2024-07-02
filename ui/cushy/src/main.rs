@@ -28,6 +28,7 @@ use ndoc::Document;
 use settings::Settings;
 use shortcut::Shortcut;
 
+
 #[derive(Debug, Clone, Copy)]
 pub struct ViewCommand {
     pub name: &'static str,
@@ -234,6 +235,12 @@ impl CommandsRegistry {
             view_shortcut: HashMap::new(),
             window_shortcut: HashMap::new(),
         }
+    }
+}
+
+impl Default for CommandsRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

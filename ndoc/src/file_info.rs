@@ -53,6 +53,7 @@ impl Default for LineFeed {
 impl Display for LineFeed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[allow(clippy::write_with_newline)]
             LineFeed::LF => write!(f, "\n"),
             LineFeed::CRLF => write!(f, "\r\n"),
             LineFeed::CR => write!(f, "\r"),
@@ -73,7 +74,7 @@ impl Default for Indentation {
 }
 
 impl Indentation {
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
             Self::Tab(i) => *i,
             Self::Space(i) => *i,
@@ -81,11 +82,11 @@ impl Indentation {
     }
 }
 
-impl ToString for Indentation {
-    fn to_string(&self) -> String {
-        match *self {
-            Indentation::Tab(len) => format!("Tab ({len})"),
-            Indentation::Space(len) => format!("Space ({len})"),
+impl Display for Indentation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Indentation::Tab(len) => write!(f, "Tab ({})", len),
+            Indentation::Space(len) => write!(f, "Space ({})", len),
         }
     }
 }

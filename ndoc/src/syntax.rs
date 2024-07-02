@@ -56,21 +56,35 @@ pub struct StyledLinesCache {
 
 impl StyledLinesCache {
     pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn get(&self, line_idx: usize) -> Option<StyledLine> {
+        self.lines.lock().unwrap().get(line_idx).cloned()
+    }
+}
+
+impl Default for StyledLinesCache {
+    fn default() -> Self {
         Self {
             lines: Arc::new(Mutex::new(Vec::new())),
         }
     }
-    pub fn get(&self, line_idx: usize) -> Option<StyledLine> {
-        self.lines.lock().unwrap().get(line_idx).map(|s| s.clone())
-    }
 }
 
-impl StateCache {
-    pub fn new() -> Self {
+
+impl Default for StateCache {
+    fn default() -> Self {
         StateCache {
             states: Vec::new(),
             highlighter: Highlighter::new(&THEME.style),
         }
+    }
+}
+
+
+impl StateCache {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn update_range(

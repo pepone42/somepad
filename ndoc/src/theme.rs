@@ -14,7 +14,7 @@ pub struct Theme {
 }
 
 fn color_from_str(col: &str) -> Option<syntect::highlighting::Color> {
-    if let Some('#') = col.chars().nth(0) {
+    if let Some('#') = col.chars().next() {
         if col.len() == 7 {
             let r = u8::from_str_radix(&col[1..=2], 16).ok()?;
             let g = u8::from_str_radix(&col[3..=4], 16).ok()?;

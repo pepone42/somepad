@@ -207,7 +207,7 @@ impl TextEditor {
             }
         }
 
-        layout.set_tab_width(self.doc.get().file_info.indentation.len());
+        layout.set_tab_width(self.doc.get().file_info.indentation.size());
         layout.set_text(&self.doc.get().rope.line(line).to_string(), attr_list);
         layout
     }

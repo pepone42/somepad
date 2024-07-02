@@ -197,8 +197,8 @@ impl TextEditor {
     }
 
     fn layout_line(&self, line_idx: usize) -> Buffer {
-        let raw_text =
-            ndoc::rope_utils::get_line_info(&self.doc.get().rope.slice(..), line_idx as _, 4)
+        let raw_text = self.doc.get().get_visible_line(line_idx)
+            //ndoc::rope_utils::get_line_info(&self.doc.get().rope.slice(..), line_idx as _, 4)
                 .to_string();
 
         let attrs = if self.kind == TextEditorKind::Code {
@@ -573,7 +573,7 @@ impl Widget for TextEditor {
         }
         if event_match(&input, context.modifiers(), shortcut!(Ctrl + x)) {
             if let Some(mut clipboard) = context.cushy().clipboard_guard() {
-                if self.doc.get().get_selection_content().len() > 0 {
+                if !self.doc.get().get_selection_content().is_empty() {
                     let _ = clipboard.set_text(self.doc.get().get_selection_content());
                     self.doc.lock().insert("");
                     self.refocus_main_selection();
@@ -1004,7 +1004,7 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
         }
     }
 
-    if let Some(PathEl::MoveTo(p)) = path.get(0).cloned() {
+    if let Some(PathEl::MoveTo(p)) = path.first().cloned() {
         // the path is not empty, close and return it
         path.push(PathEl::QuadTo(p, p));
         path.push(PathEl::Close);

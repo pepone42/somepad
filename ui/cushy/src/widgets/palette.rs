@@ -25,7 +25,7 @@ use super::text_editor::TextEditor;
 pub struct Palette {
     description: Dynamic<String>,
     child: WidgetRef,
-    action: Dynamic<Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>>,
+    action: Dynamic<PaletteAction>,
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
     // filtered_item_idx: Dynamic<Option<usize>>,
@@ -88,7 +88,7 @@ impl Palette {
             filter_id,
         }
     }
-
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> impl Widget {
         let palette = PALETTE_STATE.map_each(|p| p.active());
         palette.switcher(move |current, _active| {
@@ -225,10 +225,12 @@ impl WrapperWidget for Palette {
     }
 }
 
+type PaletteAction = Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
+
 #[derive(Clone)]
 pub(super) struct PaletteState {
     description: String,
-    action: Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>,
+    action: PaletteAction,
     owner: WidgetId,
     active: bool,
     items: Option<Vec<String>>,

@@ -43,11 +43,7 @@ impl Filter {
         let filtered_items = selected_idx.with_clone(|selected_idx| items.with_clone(|items| {
             filter.map_each(move|filter| {
                 for item in items.lock().iter_mut() {
-                    if !item.text.contains(filter) {
-                        item.excluded = true;
-                    } else {
-                        item.excluded = false;
-                    }
+                    item.excluded = !item.text.contains(filter);
                 }
                 if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
                     *selected_idx.lock() =  Some(i.index);
@@ -58,7 +54,7 @@ impl Filter {
                     .get()
                     .iter()
                     .filter(|i| !i.excluded)
-                    .map(|i| i.clone())
+                    .cloned()
                     .collect::<Vec<FilterItem>>()
             })
         })).into_reader();

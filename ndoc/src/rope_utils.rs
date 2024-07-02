@@ -244,7 +244,7 @@ pub fn word_end(slice: &RopeSlice, char_idx: usize) -> usize {
     if char_idx >= slice.len_chars() {
         return slice.len_chars()
     }
-    let mut i: usize = char_idx.into();
+    let mut i: usize = char_idx;
     let current_char = slice.char(i);
     i += slice.chars_at(i).take_while(|c| !is_boundary(*c, current_char)).count();
     i
@@ -284,7 +284,7 @@ fn line_has_tab(rope: &RopeSlice, line_idx: usize) -> bool {
     false
 }
 
-pub fn get_line_info<'a>(rope: &'a RopeSlice, line_idx: usize, indent_len: usize) -> Cow<'a, str> {
+pub (crate) fn get_line_info<'a>(rope: &'a RopeSlice, line_idx: usize, indent_len: usize) -> Cow<'a, str> {
     if line_has_tab(rope, line_idx) {
         let mut s = String::with_capacity(rope.line(line_idx).len_chars());
         let mut offset = 0;
@@ -345,7 +345,7 @@ pub fn grapheme_to_char(slice: &RopeSlice, grapheme_idx: usize) -> usize {
 }
 
 pub fn byte_to_grapheme(slice: &RopeSlice, byte_idx: usize) -> usize {
-    return char_to_grapheme(slice,slice.byte_to_char(byte_idx))
+    char_to_grapheme(slice,slice.byte_to_char(byte_idx))
 }
 
 pub fn char_to_grapheme(slice: &RopeSlice, char_idx: usize) -> usize {
@@ -375,7 +375,7 @@ impl<'slice> Iterator for NextGraphemeIdxIterator<'slice> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(old_idx) = self.index {
-            let idx = next_grapheme_boundary(&self.slice, old_idx);
+            let idx = next_grapheme_boundary(self.slice, old_idx);
             if idx == old_idx {
                 None
             } else {
@@ -388,10 +388,8 @@ impl<'slice> Iterator for NextGraphemeIdxIterator<'slice> {
         }
     }
 }
-
+#[cfg(test)]
 mod test {
-    use std::borrow::Borrow;
-
     use ropey::Rope;
 
     use crate::rope_utils::get_line_info;
