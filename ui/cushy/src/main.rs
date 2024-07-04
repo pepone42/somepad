@@ -148,12 +148,14 @@ const OPEN_DOC: WindowCommand = WindowCommand {
     name: "Open Document",
     id: "window.opendoc",
     action: |_id, w, context| {
+        #[cfg(target_os = "windows")]
         context.window_mut().winit().unwrap().set_enable(false);
         if let Some(file) = FileDialog::new().pick_file() {
             // TODO: check for errors
             let doc = Document::from_file(file).unwrap();
             w.add_new_doc(Dynamic::new(doc), context)
         }
+        #[cfg(target_os = "windows")]
         context.window_mut().winit().unwrap().set_enable(true);
         context.window_mut().winit().unwrap().focus_window();
     },

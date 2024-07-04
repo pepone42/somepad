@@ -326,11 +326,13 @@ impl TextEditor {
     }
 
     pub fn save_as(&self, context: &mut WidgetContext) {
+        #[cfg(target_os = "windows")]
         context.window_mut().winit().unwrap().set_enable(false);
         if let Some(file) = FileDialog::new().save_file() {
             // TODO: check for errors
             let _ = self.doc.lock().save_as(&file);
         }
+        #[cfg(target_os = "windows")]
         context.window_mut().winit().unwrap().set_enable(true);
         context.window_mut().winit().unwrap().focus_window();
     }
