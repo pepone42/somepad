@@ -59,8 +59,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     id: "editor.goto_line",
     action: |_id, v, c| {
         let doc = v.doc.clone();
-
-        c.ask("Got to line", move |c, _, s| {
+        c.palette("Got to line").accept(move |c, _, s| {
             if let Ok(line) = s.parse::<usize>() {
                 if line == 0 || line > doc.get().rope.len_lines() {
                     return;
@@ -75,7 +74,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
                     .unwrap()
                     .refocus_main_selection();
             }
-        });
+        }).show();
     },
 };
 
@@ -175,7 +174,7 @@ const CLOSE_DOC: WindowCommand = WindowCommand {
     },
 };
 
-const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id, w, c| {
+const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id, w, c| {
     let items = w
         .documents
         .get()
@@ -188,13 +187,16 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id,
             }
         })
         .collect::<Vec<_>>();
-    
-    let mut v= w.mru_documents.get().iter().map(|(k,v)| {
-        (*k,*v)
-    }).collect::<Vec<_>>();
-    v.sort_by(|a,b| b.1.cmp(&a.1));
+
+    let mut v = w
+        .mru_documents
+        .get()
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .collect::<Vec<_>>();
+    v.sort_by(|a, b| b.1.cmp(&a.1));
     dbg!(&v);
-    let items = v.iter().map(|(k,_)| items[*k].clone()).collect::<Vec<_>>();
+    let items = v.iter().map(|(k, _)| items[*k].clone()).collect::<Vec<_>>();
     let next_key = get_settings()
         .shortcuts
         .get("window.nextdoc")
@@ -206,18 +208,16 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id,
         .unwrap()
         .clone();
     let current_doc = w.current_doc.clone();
-    c.quick_choose(
-        "Select a document",
-        items,
-        next_key,
-        prev_key,
-        1,
-        move |_, i, val| {
-
+    c.palette("select a document")
+        .items(items)
+        .next_key(next_key)
+        .prev_key(prev_key)
+        .selected_idx(1)
+        .accept(move |_, i, val| {
             dbg!("Selected!", i, val);
             *current_doc.lock() = v[i].0;
-        },
-    )
+        })
+        .show();
 };
 
 const NEXT_DOC: WindowCommand = WindowCommand {
@@ -246,9 +246,9 @@ const SELECT_DOC: WindowCommand = WindowCommand {
                 }
             })
             .collect();
-        c.choose("Select a document", items, |_, i, val| {
+        c.palette("Select a document").items(items).accept(|_, i, val| {
             dbg!("Selected!", i, val);
-        })
+        }).show();
     },
 };
 

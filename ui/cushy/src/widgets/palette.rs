@@ -3,22 +3,21 @@ use std::sync::Arc;
 use cushy::context::EventContext;
 use cushy::figures::units::{Lp, Px};
 use cushy::figures::Zero;
-use cushy::kludgine::app::winit::event::{ElementState, Modifiers};
+use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
-use cushy::kludgine::wgpu::naga::proc::NameKey;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetRef, WidgetTag,
     WrapperWidget, HANDLED, IGNORED,
 };
 
-use cushy::widgets::{select, Custom};
+use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
 
-use crate::shortcut::{event_match, ModifiersCustomExt, Shortcut};
+use crate::shortcut::{event_match, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
@@ -31,7 +30,6 @@ pub struct Palette {
     action: Dynamic<PaletteAction>,
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
-    // filtered_item_idx: Dynamic<Option<usize>>,
     filter: Dynamic<Filter>,
     filter_id: WidgetId,
 }
@@ -43,9 +41,9 @@ impl Palette {
         let (filter_tag, filter_id) = WidgetTag::new();
         let selected_idx = PALETTE_STATE.get().selected_idx;
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
-            FilteredList::new(items.clone(), str_input.clone(),selected_idx)
+            FilteredList::new(items.clone(), str_input.clone(), selected_idx)
         } else {
-            FilteredList::new(Vec::new(), str_input.clone(),selected_idx)
+            FilteredList::new(Vec::new(), str_input.clone(), selected_idx)
         };
 
         let filter = filtered_list.filter.clone();
@@ -104,60 +102,6 @@ impl Palette {
             }
         })
     }
-
-    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
-        owner: WidgetId,
-        description: &str,
-        action: F,
-    ) {
-        let mut p = PALETTE_STATE.lock();
-        p.description = description.to_string();
-        p.action = Arc::new(action);
-        p.owner = owner;
-        p.active = true;
-        p.modifiers = None;
-        p.next_key = None;
-        p.prev_key = None;
-        p.items = None;
-    }
-
-    fn choose(
-        owner: WidgetId,
-        description: &str,
-        items: Vec<String>,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    ) {
-        let mut p = PALETTE_STATE.lock();
-        p.description = description.to_string();
-        p.action = Arc::new(action);
-        p.owner = owner;
-        p.active = true;
-        p.modifiers = None;
-        p.next_key = None;
-        p.prev_key = None;
-        p.items = Some(items);
-    }
-    fn quick_choose(
-        owner: WidgetId,
-        description: &str,
-        items: Vec<String>,
-        modifiers: Modifiers,
-        next_key: Shortcut,
-        prev_key: Shortcut,
-        selected_idx: usize,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    ) {
-        let mut p = PALETTE_STATE.lock();
-        p.description = description.to_string();
-        p.action = Arc::new(action);
-        p.owner = owner;
-        p.active = true;
-        p.modifiers = Some(modifiers);
-        p.next_key = Some(next_key);
-        p.prev_key = Some(prev_key);
-        p.selected_idx = selected_idx;
-        p.items = Some(items);
-    }
 }
 
 impl std::fmt::Debug for Palette {
@@ -197,9 +141,10 @@ impl WrapperWidget for Palette {
         context: &mut context::EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Released {
-            if let Some(m) = PALETTE_STATE.get().modifiers {
-                //dbg!(input.logical_key);
-                if matches!(input.logical_key, Key::Named(NamedKey::Control)) && m.ctrl() {
+            if let Some(s) = PALETTE_STATE.get().next_key {
+                if matches!(input.logical_key, Key::Named(NamedKey::Control))
+                    && s.modifiers.control_key()
+                {
                     if self.items.is_some() {
                         let item = self.filter.get().selected_item.get();
                         if let Some(idx) = item {
@@ -288,12 +233,11 @@ impl WrapperWidget for Palette {
 type PaletteAction = Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
 
 #[derive(Clone)]
-pub(super) struct PaletteState {
+pub struct PaletteState {
     description: String,
     action: PaletteAction,
     owner: WidgetId,
     active: bool,
-    modifiers: Option<Modifiers>,
     next_key: Option<Shortcut>,
     prev_key: Option<Shortcut>,
     selected_idx: usize,
@@ -318,7 +262,6 @@ impl PaletteState {
             action: Arc::new(|_, _, _| ()),
             owner: WidgetTag::unique().id(),
             active: false,
-            modifiers: None,
             prev_key: None,
             next_key: None,
             selected_idx: 0,
@@ -328,6 +271,43 @@ impl PaletteState {
     pub fn active(&self) -> bool {
         self.active
     }
+
+    pub fn accept<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
+        mut self,
+        action: F,
+    ) -> Self {
+        self.action = Arc::new(action);
+        self
+    }
+
+    pub fn next_key(mut self, next_key: Shortcut) -> Self {
+        self.next_key = Some(next_key);
+        self
+    }
+
+    pub fn prev_key(mut self, prev_key: Shortcut) -> Self {
+        self.prev_key = Some(prev_key);
+        self
+    }
+
+    pub fn items(mut self, items: Vec<String>) -> Self {
+        self.items = Some(items);
+        self
+    }
+
+    pub fn selected_idx(mut self, selected_idx: usize) -> Self {
+        self.selected_idx = selected_idx;
+        self
+    }
+
+    pub fn show(mut self) {
+        self.active = true;
+        *PALETTE_STATE.lock() = self;
+    }
+    fn owner(mut self, owner: WidgetId) -> Self {
+        self.owner = owner;
+        self
+    }
 }
 
 static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(PaletteState::new()));
@@ -336,63 +316,19 @@ fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
 
+fn palette(description: &str) -> PaletteState {
+    PaletteState {
+        description: description.to_string(),
+        ..PaletteState::new()
+    }
+}
+
 pub trait PaletteExt {
-    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
-        &mut self,
-        description: &str,
-        action: F,
-    );
-    fn choose(
-        &mut self,
-        description: &str,
-        items: Vec<String>,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    );
-    fn quick_choose(
-        &mut self,
-        description: &str,
-        items: Vec<String>,
-        next_key: Shortcut,
-        prev_key: Shortcut,
-        selected_idx: usize,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    );
+    fn palette(&self, description: &str) -> PaletteState;
 }
 
 impl<'a> PaletteExt for EventContext<'a> {
-    fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
-        &mut self,
-        description: &str,
-        action: F,
-    ) {
-        Palette::ask(self.widget().id(), description, action);
-    }
-
-    fn choose(
-        &mut self,
-        description: &str,
-        items: Vec<String>,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    ) {
-        Palette::choose(self.widget().id(), description, items, action);
-    }
-    fn quick_choose(
-        &mut self,
-        description: &str,
-        items: Vec<String>,
-        next_key: Shortcut,
-        prev_key: Shortcut,
-        selected_idx: usize,
-        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
-    ) {
-        Palette::quick_choose(
-            self.widget().id(),
-            description,
-            items,
-            self.modifiers(),
-            next_key,prev_key,
-            selected_idx,
-            action,
-        );
+    fn palette(&self, description: &str) -> PaletteState {
+        palette(description).owner(self.widget().id())
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::time::SystemTime;
 
 use cushy::context::WidgetContext;
@@ -27,7 +27,7 @@ pub struct EditorWindow {
     pub documents: Dynamic<Vec<Dynamic<Document>>>,
     pub current_doc: Dynamic<usize>,
     pub cmd_reg: Dynamic<CommandsRegistry>,
-    pub mru_documents: Dynamic<BTreeMap<usize,SystemTime>>,
+    pub mru_documents: Dynamic<HashMap<usize,SystemTime>>,
     focused: Dynamic<bool>,
 }
 
@@ -36,7 +36,7 @@ impl EditorWindow {
     pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let documents = Dynamic::new(vec![document]);
         let current_doc = Dynamic::new(0);
-        let lru = Dynamic::new(BTreeMap::new());
+        let lru = Dynamic::new(HashMap::new());
         lru.lock().insert(0, SystemTime::now());
         let h = lru.with_clone(|lru| current_doc.for_each(move |current_doc|{
             *lru.lock().entry(*current_doc).or_insert(SystemTime::now()) = SystemTime::now();
