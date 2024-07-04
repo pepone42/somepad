@@ -187,7 +187,14 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id,
                 format!("Untitled {}", d.get().id())
             }
         })
-        .collect();
+        .collect::<Vec<_>>();
+    
+    let mut v= w.mru_documents.get().iter().map(|(k,v)| {
+        (*k,*v)
+    }).collect::<Vec<_>>();
+    v.sort_by(|a,b| b.1.cmp(&a.1));
+    dbg!(&v);
+    let items = v.iter().map(|(k,_)| items[*k].clone()).collect::<Vec<_>>();
     let next_key = get_settings()
         .shortcuts
         .get("window.nextdoc")
@@ -208,7 +215,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id,
         move |_, i, val| {
 
             dbg!("Selected!", i, val);
-            *current_doc.lock() = i;
+            *current_doc.lock() = v[i].0;
         },
     )
 };
