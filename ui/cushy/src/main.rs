@@ -28,7 +28,6 @@ use ndoc::Document;
 use settings::Settings;
 use shortcut::Shortcut;
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct ViewCommand {
     pub name: &'static str,
@@ -176,20 +175,54 @@ const CLOSE_DOC: WindowCommand = WindowCommand {
     },
 };
 
+const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |id, w, c| {
+    let items = w
+        .documents
+        .get()
+        .iter()
+        .map(|d| {
+            if let Some(file_name) = d.get().file_name {
+                file_name.file_name().unwrap().to_string_lossy().to_string()
+            } else {
+                format!("Untitled {}", d.get().id())
+            }
+        })
+        .collect();
+    let next_key = get_settings()
+        .shortcuts
+        .get("window.nextdoc")
+        .unwrap()
+        .clone();
+    let prev_key = get_settings()
+        .shortcuts
+        .get("window.prevdoc")
+        .unwrap()
+        .clone();
+    let current_doc = w.current_doc.clone();
+    c.quick_choose(
+        "Select a document",
+        items,
+        next_key,
+        prev_key,
+        1,
+        move |_, i, val| {
+
+            dbg!("Selected!", i, val);
+            *current_doc.lock() = i;
+        },
+    )
+};
+
 const NEXT_DOC: WindowCommand = WindowCommand {
     name: "Next Document",
     id: "window.nextdoc",
-    action: |_id, w, _c| {
-        let current_doc = w.current_doc.get();
-        let docs_len = w.documents.get().len();
-        if current_doc + 1 < docs_len {
-            *w.current_doc.lock() += 1;
-        } else {
-            *w.current_doc.lock() = 0;
-        }
-    },
+    action: PREVNEXT_DOC_ACTION,
 };
-
+const PREV_DOC: WindowCommand = WindowCommand {
+    name: "Next Document",
+    id: "window.prevdoc",
+    action: PREVNEXT_DOC_ACTION,
+};
 const SELECT_DOC: WindowCommand = WindowCommand {
     name: "Select Document",
     id: "window.select_doc",
@@ -206,10 +239,10 @@ const SELECT_DOC: WindowCommand = WindowCommand {
                 }
             })
             .collect();
-        c.choose( "Select a document", items, |_,i,val| {
-            dbg!("Selected!",i,val);
+        c.choose("Select a document", items, |_, i, val| {
+            dbg!("Selected!", i, val);
         })
-    }
+    },
 };
 
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
@@ -251,6 +284,7 @@ fn main() -> anyhow::Result<()> {
 
     cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
     cmd_reg.window.insert(NEXT_DOC.id, NEXT_DOC);
+    cmd_reg.window.insert(PREV_DOC.id, PREV_DOC);
 
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);

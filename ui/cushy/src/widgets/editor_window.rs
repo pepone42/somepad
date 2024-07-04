@@ -23,7 +23,7 @@ pub struct EditorWindow {
     child: WidgetRef,
     pub documents: Dynamic<Vec<Dynamic<Document>>>,
     pub current_doc: Dynamic<usize>,
-    cmd_reg: Dynamic<CommandsRegistry>,
+    pub cmd_reg: Dynamic<CommandsRegistry>,
     focused: Dynamic<bool>,
 }
 

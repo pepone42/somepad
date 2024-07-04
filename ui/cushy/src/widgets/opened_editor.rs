@@ -48,7 +48,7 @@ impl Widget for OpenedEditor {
             let mut text = if let Some(file_name) = doc.get().file_name {
                 file_name.file_name().unwrap().to_string_lossy().to_string()
             } else {
-                format!("Untitled {}", i)
+                format!("Untitled {}", doc.get().id())
             };
             if i == self.current_doc.get() {
                 text.push_str(" (current)");

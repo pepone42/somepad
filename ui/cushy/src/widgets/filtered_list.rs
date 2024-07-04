@@ -1,4 +1,3 @@
-
 use cushy::{
     figures::{
         units::{Px, UPx},
@@ -26,7 +25,8 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn new(items: Vec<String>, filter: Dynamic<String>) -> Self {
+    pub fn new(items: Vec<String>, filter: Dynamic<String>, selected_idx: usize) -> Self {
+        let mut init = true;
         let items: Dynamic<Vec<FilterItem>> = Dynamic::new(
             items
                 .into_iter()
@@ -39,29 +39,46 @@ impl Filter {
                 })
                 .collect(),
         );
-        let selected_idx = Dynamic::new(Some(0));
-        let filtered_items = selected_idx.with_clone(|selected_idx| items.with_clone(|items| {
-            filter.map_each(move|filter| {
-                for item in items.lock().iter_mut() {
-                    item.excluded = !item.text.contains(filter);
-                }
-                if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
-                    *selected_idx.lock() =  Some(i.index);
-                } else {
-                    *selected_idx.lock() =  None;
-                }
-                items
-                    .get()
-                    .iter()
-                    .filter(|i| !i.excluded)
-                    .cloned()
-                    .collect::<Vec<FilterItem>>()
+        dbg!(selected_idx);
+        let selected_idx = if items.get().is_empty() {
+            Dynamic::new(None)
+        } else {
+            Dynamic::new(Some(selected_idx.min(items.get().len() - 1)))
+        };
+        dbg!(selected_idx.get());
+        let filtered_items = selected_idx
+            .with_clone(|selected_idx| {
+                items.with_clone(|items| {
+                    filter.map_each(move |filter| {
+                        if !init {
+                            for item in items.lock().iter_mut() {
+                                item.excluded = !item.text.contains(filter);
+                            }
+                            if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
+                                *selected_idx.lock() = Some(i.index);
+                            } else {
+                                *selected_idx.lock() = None;
+                            }
+                        }
+                        init = false;
+                        items
+                            .get()
+                            .iter()
+                            .filter(|i| !i.excluded)
+                            .cloned()
+                            .collect::<Vec<FilterItem>>()
+                    })
+                })
             })
-        })).into_reader();
-        
-        let selected_item = items.with_clone(|items| {
-            selected_idx.map_each(move |selected_idx| selected_idx.and_then(|s| Some(items.get()[s].clone())))
-        }).into_reader();
+            .into_reader();
+
+        let selected_item = items
+            .with_clone(|items| {
+                selected_idx.map_each(move |selected_idx| {
+                    selected_idx.and_then(|s| Some(items.get()[s].clone()))
+                })
+            })
+            .into_reader();
 
         Filter {
             items,
@@ -108,8 +125,8 @@ pub struct FilteredList {
 }
 
 impl FilteredList {
-    pub fn new(items: Vec<String>, filter: Dynamic<String>) -> Self {
-        let filter = Dynamic::new(Filter::new(items, filter));
+    pub fn new(items: Vec<String>, filter: Dynamic<String>, selected_idx: usize) -> Self {
+        let filter = Dynamic::new(Filter::new(items, filter, selected_idx));
         FilteredList { filter }
     }
 }

@@ -3,19 +3,22 @@ use std::sync::Arc;
 use cushy::context::EventContext;
 use cushy::figures::units::{Lp, Px};
 use cushy::figures::Zero;
-use cushy::kludgine::app::winit::event::ElementState;
+use cushy::kludgine::app::winit::event::{ElementState, Modifiers};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
+use cushy::kludgine::wgpu::naga::proc::NameKey;
 use cushy::value::{Dynamic, Source, Switchable};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetRef, WidgetTag,
     WrapperWidget, HANDLED, IGNORED,
 };
 
-use cushy::widgets::Custom;
+use cushy::widgets::{select, Custom};
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
 use ndoc::Document;
+
+use crate::shortcut::{event_match, ModifiersCustomExt, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{MyScroll, ScrollController};
@@ -38,11 +41,13 @@ impl Palette {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| dbg!(d.rope.to_string()));
         let (filter_tag, filter_id) = WidgetTag::new();
+        let selected_idx = PALETTE_STATE.get().selected_idx;
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
-            FilteredList::new(items.clone(), str_input.clone())
+            FilteredList::new(items.clone(), str_input.clone(),selected_idx)
         } else {
-            FilteredList::new(Vec::new(), str_input.clone())
+            FilteredList::new(Vec::new(), str_input.clone(),selected_idx)
         };
+
         let filter = filtered_list.filter.clone();
         let scroller = Dynamic::new(ScrollController::default());
         let pal = Custom::new(
@@ -110,6 +115,9 @@ impl Palette {
         p.action = Arc::new(action);
         p.owner = owner;
         p.active = true;
+        p.modifiers = None;
+        p.next_key = None;
+        p.prev_key = None;
         p.items = None;
     }
 
@@ -124,6 +132,30 @@ impl Palette {
         p.action = Arc::new(action);
         p.owner = owner;
         p.active = true;
+        p.modifiers = None;
+        p.next_key = None;
+        p.prev_key = None;
+        p.items = Some(items);
+    }
+    fn quick_choose(
+        owner: WidgetId,
+        description: &str,
+        items: Vec<String>,
+        modifiers: Modifiers,
+        next_key: Shortcut,
+        prev_key: Shortcut,
+        selected_idx: usize,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    ) {
+        let mut p = PALETTE_STATE.lock();
+        p.description = description.to_string();
+        p.action = Arc::new(action);
+        p.owner = owner;
+        p.active = true;
+        p.modifiers = Some(modifiers);
+        p.next_key = Some(next_key);
+        p.prev_key = Some(prev_key);
+        p.selected_idx = selected_idx;
         p.items = Some(items);
     }
 }
@@ -165,7 +197,35 @@ impl WrapperWidget for Palette {
         context: &mut context::EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Released {
+            if let Some(m) = PALETTE_STATE.get().modifiers {
+                //dbg!(input.logical_key);
+                if matches!(input.logical_key, Key::Named(NamedKey::Control)) && m.ctrl() {
+                    if self.items.is_some() {
+                        let item = self.filter.get().selected_item.get();
+                        if let Some(idx) = item {
+                            self.action.get()(
+                                &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                                dbg!(idx.index),
+                                idx.text,
+                            );
+                        }
+                    }
+                    close_palette();
+                }
+            }
             return IGNORED;
+        }
+        if let Some(s) = PALETTE_STATE.get().next_key {
+            if event_match(&input, context.modifiers(), s) {
+                self.filter.lock().next();
+                return HANDLED;
+            }
+        }
+        if let Some(s) = PALETTE_STATE.get().prev_key {
+            if event_match(&input, context.modifiers(), s) {
+                self.filter.lock().prev();
+                return HANDLED;
+            }
         }
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
@@ -233,6 +293,10 @@ pub(super) struct PaletteState {
     action: PaletteAction,
     owner: WidgetId,
     active: bool,
+    modifiers: Option<Modifiers>,
+    next_key: Option<Shortcut>,
+    prev_key: Option<Shortcut>,
+    selected_idx: usize,
     items: Option<Vec<String>>,
 }
 
@@ -254,6 +318,10 @@ impl PaletteState {
             action: Arc::new(|_, _, _| ()),
             owner: WidgetTag::unique().id(),
             active: false,
+            modifiers: None,
+            prev_key: None,
+            next_key: None,
+            selected_idx: 0,
             items: None,
         }
     }
@@ -268,7 +336,6 @@ fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
 
-
 pub trait PaletteExt {
     fn ask<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
         &mut self,
@@ -279,6 +346,15 @@ pub trait PaletteExt {
         &mut self,
         description: &str,
         items: Vec<String>,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    );
+    fn quick_choose(
+        &mut self,
+        description: &str,
+        items: Vec<String>,
+        next_key: Shortcut,
+        prev_key: Shortcut,
+        selected_idx: usize,
         action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
     );
 }
@@ -299,5 +375,24 @@ impl<'a> PaletteExt for EventContext<'a> {
         action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
     ) {
         Palette::choose(self.widget().id(), description, items, action);
+    }
+    fn quick_choose(
+        &mut self,
+        description: &str,
+        items: Vec<String>,
+        next_key: Shortcut,
+        prev_key: Shortcut,
+        selected_idx: usize,
+        action: impl Fn(&mut EventContext, usize, String) + 'static + Send + Sync,
+    ) {
+        Palette::quick_choose(
+            self.widget().id(),
+            description,
+            items,
+            self.modifiers(),
+            next_key,prev_key,
+            selected_idx,
+            action,
+        );
     }
 }
