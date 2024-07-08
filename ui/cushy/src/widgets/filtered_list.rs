@@ -160,24 +160,24 @@ impl Widget for FilteredList {
             y += h;
         }
 
-        let line_height = context.gfx.line_height().into_px(context.gfx.scale());
-        if let Some(idx) = self.filter.get().selected_idx.get() {
-            let y = line_height * Px::new(idx as i32);
-            context.gfx.draw_shape(
-                Shape::stroked_rect(
-                    Rect::new(
-                        Point::new(Px::ZERO, y - (line_height)),
-                        Size::new(Px::ZERO, line_height * 4),
-                    ),
-                    StrokeOptions::default().colored(Color::WHITE),
-                )
-                .translate_by(Point::ZERO),
-            )
-        }
+        // let line_height = context.gfx.line_height().into_px(context.gfx.scale());
+        // if let Some(idx) = self.filter.get().selected_idx.get() {
+        //     let y = line_height * Px::new(idx as i32);
+        //     context.gfx.draw_shape(
+        //         Shape::stroked_rect(
+        //             Rect::new(
+        //                 Point::new(Px::ZERO, y - (line_height)),
+        //                 Size::new(Px::ZERO, line_height * 4),
+        //             ),
+        //             StrokeOptions::default().colored(Color::WHITE),
+        //         )
+        //         .translate_by(Point::ZERO),
+        //     )
+        // }
     }
     fn layout(
         &mut self,
-        available_space: cushy::figures::Size<cushy::ConstraintLimit>,
+        _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
