@@ -39,11 +39,12 @@ impl Palette {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| d.rope.to_string());
         let selected_idx = PALETTE_STATE.get().selected_idx;
+        let action = Dynamic::new(PALETTE_STATE.get().action.clone());
         let (filter_tag, filter_id) = WidgetTag::new();
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
-            FilteredList::new(items.clone(), str_input.clone(), selected_idx)
+            FilteredList::new(items.clone(), str_input.clone(), selected_idx, action.clone())
         } else {
-            FilteredList::new(Vec::new(), str_input.clone(), selected_idx)
+            FilteredList::new(Vec::new(), str_input.clone(), selected_idx, action.clone())
         };
 
         let filter = filtered_list.filter.clone();
@@ -58,7 +59,7 @@ impl Palette {
                 )
                 .and(MyScroll::vertical(filtered_list.make_with_tag(filter_tag)).expand())
                 .into_rows()
-                .width(Lp::new(250))
+                .width(Lp::new(550))
                 .height(Lp::ZERO..Lp::new(250)),
         )
         .on_redraw(|c| {
@@ -77,7 +78,7 @@ impl Palette {
         Palette {
             description: PALETTE_STATE.get().description.into(),
             child: pal.make_widget().widget_ref(),
-            action: Dynamic::new(PALETTE_STATE.get().action.clone()),
+            action,
             input,
             items: PALETTE_STATE.get().items,
             filter,
@@ -245,13 +246,13 @@ impl WrapperWidget for Palette {
     }
 }
 
-type PaletteAction = Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
+pub(super) type PaletteAction = Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
 
 #[derive(Clone)]
 pub struct PaletteState {
     description: String,
     action: PaletteAction,
-    owner: WidgetId,
+    pub owner: WidgetId,
     active: bool,
     next_key: Option<Shortcut>,
     prev_key: Option<Shortcut>,
@@ -325,9 +326,9 @@ impl PaletteState {
     }
 }
 
-static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(PaletteState::new()));
+pub (super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(PaletteState::new()));
 
-fn close_palette() {
+pub (super) fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
 

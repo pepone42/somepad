@@ -1,17 +1,24 @@
+use std::fmt::Debug;
+
 use cushy::{
     figures::{
         units::{Px, UPx},
-        Point, Rect, ScreenScale, Size, Zero,
+        Point, Rect, Round, ScreenScale, Size, Zero,
     },
     kludgine::{
         shapes::{Shape, StrokeOptions},
         text::Text,
         DrawableExt,
     },
-    styles::Color,
+    styles::{components, Color},
     value::{Dynamic, DynamicReader, Source},
-    widget::Widget,
+    widget::{Widget, HANDLED},
+    ConstraintLimit,
 };
+
+use crate::widgets::palette::PaletteAction;
+
+use super::palette::{close_palette, PALETTE_STATE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterItem {
@@ -124,15 +131,35 @@ impl Filter {
     }
 }
 
-#[derive(Debug)]
 pub struct FilteredList {
     pub filter: Dynamic<Filter>,
+    pub hovered_idx: Dynamic<Option<usize>>,
+    action: Dynamic<PaletteAction>,
+}
+
+impl Debug for FilteredList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FilteredList")
+            .field("filter", &self.filter)
+            .field("hovered_idx", &self.hovered_idx)
+            .field("action", &"self.action")
+            .finish()
+    }
 }
 
 impl FilteredList {
-    pub fn new(items: Vec<String>, filter: Dynamic<String>, selected_idx: usize) -> Self {
+    pub fn new(
+        items: Vec<String>,
+        filter: Dynamic<String>,
+        selected_idx: usize,
+        action: Dynamic<PaletteAction>,
+    ) -> Self {
         let filter = Dynamic::new(Filter::new(items, filter, selected_idx));
-        FilteredList { filter }
+        FilteredList {
+            filter,
+            hovered_idx: Dynamic::new(None),
+            action,
+        }
     }
 }
 
@@ -140,23 +167,50 @@ impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
-        let mut y = Px::ZERO;
+        let scale = context.gfx.scale();
+        let size = context.gfx.size();
+        let mut y = UPx::ZERO;
         let selected_idx = self.filter.get().selected_idx.get();
+        let line_height = context.gfx.line_height().into_upx(scale);
+        let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
+        let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
+        let fg_selected_color = context.get(&components::DefaultActiveForegroundColor);
+        let fg_hovered_color = context.get(&components::DefaultHoveredForegroundColor);
+        let fg_color = context.get(&components::TextColor);
+
+        if let Some(idx) = self.hovered_idx.get() {
+            context.gfx.draw_shape(
+                Shape::filled_rect(
+                    Rect::new(Point::ZERO, Size::new(size.width, line_height)),
+                    bg_hovered_color,
+                )
+                .translate_by(Point::new(UPx::ZERO, line_height * UPx::new(idx as u32))),
+            )
+        }
+
         for item in self.filter.get().filtered_items.get().iter() {
-            let text = format!(
-                "{}{}",
-                item.text,
-                if selected_idx == Some(item.index) {
-                    "*"
-                } else {
-                    ""
-                }
-            );
-            let text = Text::<Px>::new(&text, cushy::kludgine::Color::WHITE);
-            let h = context.gfx.measure_text(text).line_height;
+            if selected_idx == Some(item.index) {
+                context.gfx.draw_shape(
+                    Shape::filled_rect(
+                        Rect::new(Point::ZERO, Size::new(size.width, line_height)),
+                        bg_selected_color,
+                    )
+                    .translate_by(Point::new(UPx::ZERO, y)),
+                )
+            }
+            let color = if selected_idx == Some(item.index) {
+                fg_selected_color
+            } else if self.hovered_idx.get() == Some(item.index) {
+                fg_hovered_color
+            } else {
+                fg_color
+            };
+            let text = Text::new(&item.text, color);
+            let h = line_height;
             context
                 .gfx
-                .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
+                .draw_text(text.translate_by(Point::new(UPx::ZERO, y)));
+
             y += h;
         }
 
@@ -181,24 +235,74 @@ impl Widget for FilteredList {
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
+        dbg!(_available_space);
         let mut y = UPx::ZERO;
         let mut w = UPx::ZERO;
         for item in self.filter.get().filtered_items.get().iter() {
-            let text = format!("{}*", item.text);
-            let text = Text::<UPx>::new(&text, cushy::kludgine::Color::WHITE);
+            //let text = format!("{}*", item.text);
+            let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
             let h = context.gfx.measure_text(text).line_height;
             y += h;
             if context.gfx.measure_text(text).size.width > w {
                 w = context.gfx.measure_text(text).size.width;
             }
         }
+        let w = if let ConstraintLimit::Fill(w) = _available_space.width {
+            w
+        } else {
+            w
+        };
         Size::new(w, y)
     }
     fn hit_test(
         &mut self,
-        location: Point<Px>,
-        context: &mut cushy::context::EventContext<'_>,
+        _location: Point<Px>,
+        _context: &mut cushy::context::EventContext<'_>,
     ) -> bool {
         true
+    }
+
+    fn mouse_down(
+        &mut self,
+        location: Point<Px>,
+        _device_id: cushy::window::DeviceId,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        context: &mut cushy::context::EventContext<'_>,
+    ) -> cushy::widget::EventHandling {
+        let scale = context.kludgine.scale();
+        let line_height = context.kludgine.line_height().into_px(scale);
+        let idx = (location.y / line_height).floor().get();
+        *self.filter.get().selected_idx.lock() = Some(idx as usize);
+        if let Some(item) = self.filter.get().selected_item.get() {
+            self.action.get()(
+                &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                idx as usize,
+                item.text.clone(),
+            );
+            close_palette();
+        }
+
+        HANDLED
+    }
+
+    fn hover(
+        &mut self,
+        location: Point<Px>,
+        context: &mut cushy::context::EventContext<'_>,
+    ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
+        context.redraw_when_changed(&self.hovered_idx);
+        let scale = context.kludgine.scale();
+        let line_height = context.kludgine.line_height().into_px(scale);
+
+        let idx = (location.y / line_height).floor().get();
+
+        *self.hovered_idx.lock() = Some(idx as usize);
+
+        None
+    }
+
+    fn unhover(&mut self, context: &mut cushy::context::EventContext<'_>) {
+        context.redraw_when_changed(&self.hovered_idx);
+        *self.hovered_idx.lock() = None;
     }
 }
