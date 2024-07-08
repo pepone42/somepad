@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use cushy::context::WidgetContext;
+use cushy::context::{EventContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
 use cushy::styles::components::CornerRadius;
@@ -30,7 +30,7 @@ use scroll::ScrollController;
 use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{CommandsRegistry, FONT_SYSTEM};
 
-use super::scroll::{self, MyScroll};
+use super::scroll::{self, ContextScroller, MyScroll};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ClickInfo {
@@ -65,7 +65,6 @@ pub enum TextEditorKind {
 pub struct TextEditor {
     pub doc: Dynamic<ndoc::Document>,
     viewport: Dynamic<Rect<Px>>,
-    scroll_controller: Dynamic<ScrollController>,
     font_metrics: Metrics,
     font_size: Px,
     line_height: Px,
@@ -86,7 +85,6 @@ impl TextEditor {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
-            scroll_controller: Dynamic::new(ScrollController::default()),
             font_metrics: Default::default(),
             font_size: Px::ZERO,
             line_height: Px::ZERO,
@@ -103,7 +101,6 @@ impl TextEditor {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
-            scroll_controller: Dynamic::new(ScrollController::default()),
             font_metrics: Default::default(),
             font_size: Px::ZERO,
             line_height: Px::ZERO,
@@ -114,11 +111,6 @@ impl TextEditor {
             focused: Dynamic::new(false),
             kind: TextEditorKind::Input,
         }
-    }
-
-    pub fn with_scroller(mut self, scroller: Dynamic<ScrollController>) -> Self {
-        self.scroll_controller = scroller;
-        self
     }
 
     fn px_to_col(&self, line: usize, x: Px) -> usize {
@@ -178,13 +170,13 @@ impl TextEditor {
             .into()
     }
 
-    pub fn refocus_main_selection(&self) {
+    pub fn refocus_main_selection(&self, context: &EventContext<'_>) {
         if self.doc.get().selections.len() == 1 {
             let main_selection_head_x = self.col_to_px(
                 self.doc.get().selections[0].head.line,
                 self.doc.get().selections[0].head.column,
             );
-            self.scroll_controller.lock().make_region_visible(Rect::new(
+            context.make_region_visible(Rect::new(
                 Point::new(
                     Px::ZERO + main_selection_head_x - 10,
                     Px::ZERO
@@ -198,7 +190,6 @@ impl TextEditor {
 
     fn layout_line(&self, line_idx: usize) -> Buffer {
         let raw_text = self.doc.get().get_visible_line(line_idx)
-            //ndoc::rope_utils::get_line_info(&self.doc.get().rope.slice(..), line_idx as _, 4)
                 .to_string();
 
         let attrs = if self.kind == TextEditorKind::Code {
@@ -206,8 +197,6 @@ impl TextEditor {
         } else {
             Attrs::new()
         };
-
-        //context.gfx.set_text_attributes(attrs);
 
         if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
@@ -521,7 +510,7 @@ impl Widget for TextEditor {
         location: Point<Px>,
         _device_id: cushy::window::DeviceId,
         button: cushy::kludgine::app::winit::event::MouseButton,
-        _context: &mut cushy::context::EventContext<'_>,
+        context: &mut cushy::context::EventContext<'_>,
     ) {
         if button == MouseButton::Left {
             let head = self.location_to_position(location);
@@ -535,7 +524,7 @@ impl Widget for TextEditor {
                 _ => (),
             }
 
-            self.refocus_main_selection();
+            self.refocus_main_selection(context);
         }
     }
 
@@ -578,7 +567,7 @@ impl Widget for TextEditor {
                 if !self.doc.get().get_selection_content().is_empty() {
                     let _ = clipboard.set_text(self.doc.get().get_selection_content());
                     self.doc.lock().insert("");
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                 }
             }
         }
@@ -586,7 +575,7 @@ impl Widget for TextEditor {
             if let Some(mut clipboard) = context.cushy().clipboard_guard() {
                 if let Ok(s) = clipboard.get_text() {
                     self.doc.lock().insert_many(&s);
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                 }
             }
         }
@@ -604,12 +593,12 @@ impl Widget for TextEditor {
                 }
                 Key::Named(NamedKey::Backspace) => {
                     self.doc.lock().backspace();
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Delete) => {
                     self.doc.lock().delete();
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowLeft) if context.modifiers().word_select() => {
@@ -617,7 +606,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Left,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowRight) if context.modifiers().word_select() => {
@@ -625,7 +614,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Right,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowLeft) => {
@@ -633,7 +622,7 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Left,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowRight) => {
@@ -641,14 +630,14 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Right,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowUp) if self.kind == TextEditorKind::Code => {
                     self.doc
                         .lock()
                         .move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowDown) if self.kind == TextEditorKind::Code => {
@@ -656,14 +645,14 @@ impl Widget for TextEditor {
                         ndoc::MoveDirection::Down,
                         context.modifiers().only_shift(),
                     );
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Enter) => {
                     if self.kind == TextEditorKind::Code {
                         let linefeed = self.doc.get().file_info.linefeed.to_string();
                         self.doc.lock().insert(&linefeed);
-                        self.refocus_main_selection();
+                        self.refocus_main_selection(context);
                         return HANDLED;
                     } else {
                         return IGNORED;
@@ -671,19 +660,19 @@ impl Widget for TextEditor {
                 }
                 Key::Named(NamedKey::End) => {
                     self.doc.lock().end(context.modifiers().only_shift());
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Home) => {
                     self.doc.lock().home(context.modifiers().only_shift());
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Tab)
                     if context.modifiers().only_shift() && self.kind == TextEditorKind::Code =>
                 {
                     self.doc.lock().deindent();
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Tab)
@@ -692,14 +681,14 @@ impl Widget for TextEditor {
                         && self.kind == TextEditorKind::Code =>
                 {
                     self.doc.lock().indent(false);
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Tab)
                     if !context.modifiers().ctrl() && self.kind == TextEditorKind::Code =>
                 {
                     self.doc.lock().indent(true);
-                    self.refocus_main_selection();
+                    self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 _ => {}
@@ -709,7 +698,7 @@ impl Widget for TextEditor {
         match (input.state, input.text) {
             (ElementState::Pressed, Some(t)) if !context.modifiers().possible_shortcut() => {
                 self.doc.lock().insert(&t);
-                self.refocus_main_selection();
+                self.refocus_main_selection(context);
 
                 HANDLED
             }
@@ -855,7 +844,7 @@ impl Widget for Gutter {
                 .doc
                 .lock()
                 .expand_selection_by_line(Position::new(line, 0));
-            editor.refocus_main_selection();
+            editor.refocus_main_selection(&c);
         }
     }
 }
@@ -873,16 +862,12 @@ impl CodeEditor {
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
         let child = Gutter::new(doc.clone(), scroller.clone(), etidor_id)
-            // .expand_vertically()
-            // .width(Px::new(50))
             .and(
                 MyScroll::new(
                     TextEditor::new(doc.clone(), cmd_reg, click_info)
-                        .with_scroller(scroller.clone())
                         .make_with_tag(editor_tag),
-                    scroller.clone(),
-                )
-                .make_with_tag(scroll_tag) //.contain().background_color(Color::new(0x34, 0x3D, 0x46, 0xFF))
+                ).with_controller(scroller.clone())
+                .make_with_tag(scroll_tag) 
                 .expand(),
             )
             .into_columns()
@@ -899,9 +884,6 @@ impl CodeEditor {
 }
 
 impl WrapperWidget for CodeEditor {
-    // fn mounted(&mut self, context: &mut context::EventContext<'_>) {
-    //     context.focus();
-    // }
     fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
         &mut self.child
     }

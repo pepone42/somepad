@@ -72,7 +72,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
                     .lock()
                     .downcast_ref::<TextEditor>()
                     .unwrap()
-                    .refocus_main_selection();
+                    .refocus_main_selection(c);
             }
         }).show();
     },
@@ -81,17 +81,17 @@ const GOTO_LINE: ViewCommand = ViewCommand {
 const UNDO_CMD: ViewCommand = ViewCommand {
     name: "Undo",
     id: "editor.undo",
-    action: |_id, v, _c| {
+    action: |_id, v, c| {
         v.doc.lock().undo();
-        v.refocus_main_selection();
+        v.refocus_main_selection(c);
     },
 };
 const REDO_CMD: ViewCommand = ViewCommand {
     name: "redo",
     id: "editor.redo",
-    action: |_id, v, _c| {
+    action: |_id, v, c| {
         v.doc.lock().redo();
-        v.refocus_main_selection();
+        v.refocus_main_selection(c);
     },
 };
 

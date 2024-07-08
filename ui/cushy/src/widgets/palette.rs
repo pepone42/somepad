@@ -20,7 +20,7 @@ use ndoc::Document;
 use crate::shortcut::{event_match, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
-use super::scroll::{MyScroll, ScrollController};
+use super::scroll::{ContextScroller, MyScroll, ScrollController};
 use super::text_editor::TextEditor;
 
 #[derive(PartialEq, Eq, Clone)]
@@ -31,7 +31,7 @@ pub struct Palette {
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
     filter: Dynamic<Filter>,
-    list_scroller: Dynamic<ScrollController>,
+    filter_id: WidgetId,
 }
 
 impl Palette {
@@ -39,6 +39,7 @@ impl Palette {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| d.rope.to_string());
         let selected_idx = PALETTE_STATE.get().selected_idx;
+        let (filter_tag, filter_id) = WidgetTag::new();
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
             FilteredList::new(items.clone(), str_input.clone(), selected_idx)
         } else {
@@ -46,24 +47,16 @@ impl Palette {
         };
 
         let filter = filtered_list.filter.clone();
-        let editor_scroller = Dynamic::new(ScrollController::default());
-        let list_scroller = Dynamic::new(ScrollController::default());
         let pal: cushy::widgets::Align = Custom::new(
             PALETTE_STATE
                 .get()
                 .description
                 .clone()
                 .and(
-                    Custom::new(
-                        MyScroll::horizontal(
-                            TextEditor::as_input(input.clone())
-                                .with_scroller(editor_scroller.clone()),
-                            editor_scroller.clone(),
-                        )
-                    )
-                    .on_mounted(move |c| c.focus()),
+                    Custom::new(MyScroll::horizontal(TextEditor::as_input(input.clone())))
+                        .on_mounted(move |c| c.focus()),
                 )
-                .and(MyScroll::vertical(filtered_list, list_scroller.clone()).expand())
+                .and(MyScroll::vertical(filtered_list.make_with_tag(filter_tag)).expand())
                 .into_rows()
                 .width(Lp::new(250))
                 .height(Lp::ZERO..Lp::new(250)),
@@ -88,7 +81,7 @@ impl Palette {
             input,
             items: PALETTE_STATE.get().items,
             filter,
-            list_scroller,
+            filter_id,
         }
     }
     #[allow(clippy::new_ret_no_self)]
@@ -104,18 +97,19 @@ impl Palette {
     }
 
     fn scroll_to(&mut self, context: &mut EventContext) {
-        context.redraw_when_changed(&self.list_scroller);
         if let Some(idx) = self.filter.get().selected_idx.get() {
             let line_height = context
                 .kludgine
                 .line_height()
                 .into_px(context.kludgine.scale());
             let y = line_height * Px::new(idx as i32);
-            self.list_scroller.lock().make_region_visible(Rect::new(
-                Point::new(Px::ZERO, y - (line_height)),
-                Size::new(Px::ZERO, line_height * 4),
-            ));
-            
+            context
+                .for_other(&self.filter_id)
+                .unwrap()
+                .make_region_visible(Rect::new(
+                    Point::new(Px::ZERO, y - (line_height)),
+                    Size::new(Px::ZERO, line_height * 4),
+                ));
         }
     }
 }
@@ -218,13 +212,11 @@ impl WrapperWidget for Palette {
                 HANDLED
             }
             Key::Named(NamedKey::ArrowDown) => {
-                
                 self.filter.lock().next();
                 self.scroll_to(context);
                 HANDLED
             }
             Key::Named(NamedKey::ArrowUp) => {
-                
                 self.filter.lock().prev();
                 self.scroll_to(context);
                 HANDLED

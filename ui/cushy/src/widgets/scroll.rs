@@ -107,13 +107,12 @@ impl MyScroll {
     fn construct(
         contents: impl MakeWidget,
         enabled: Point<bool>,
-        scroll_controller: Dynamic<ScrollController>,
     ) -> Self {
         Self {
             contents: WidgetRef::new(contents),
             enabled,
             content_size: Size::default(),
-            controller: scroll_controller,
+            controller: Dynamic::new(ScrollController::default()),
             scrollbar_opacity: Dynamic::default(),
             scrollbar_opacity_animation: OpacityAnimationState {
                 handle: AnimationHandle::new(),
@@ -131,27 +130,30 @@ impl MyScroll {
 
     /// Returns a new scroll widget containing `contents` that allows scrolling
     /// vertically or horizontally.
-    pub fn new(contents: impl MakeWidget, scroll_controller: Dynamic<ScrollController>) -> Self {
-        Self::construct(contents, Point::new(true, true), scroll_controller)
+    pub fn new(contents: impl MakeWidget) -> Self {
+        Self::construct(contents, Point::new(true, true))
     }
 
     /// Returns a new scroll widget that allows scrolling `contents`
     /// horizontally.
     #[allow(dead_code)]
     pub fn horizontal(
-        contents: impl MakeWidget,
-        scroll_controller: Dynamic<ScrollController>,
+        contents: impl MakeWidget
     ) -> Self {
-        Self::construct(contents, Point::new(true, false), scroll_controller)
+        Self::construct(contents, Point::new(true, false))
     }
 
     /// Returns a new scroll widget that allows scrolling `contents` vertically.
     #[allow(dead_code)]
     pub fn vertical(
-        contents: impl MakeWidget,
-        scroll_controller: Dynamic<ScrollController>,
+        contents: impl MakeWidget
     ) -> Self {
-        Self::construct(contents, Point::new(false, true), scroll_controller)
+        Self::construct(contents, Point::new(false, true))
+    }
+
+    pub fn with_controller(mut self, controller: Dynamic<ScrollController>) -> Self {
+        self.controller = controller;
+        self
     }
 
     fn show_scrollbars(&mut self, context: &mut EventContext<'_>) {
@@ -588,5 +590,45 @@ fn scrollbar_region(scroll: Px, content_size: Px, control_size: Px) -> Scrollbar
         }
     } else {
         ScrollbarInfo::default()
+    }
+}
+
+
+pub trait ContextScroller {
+    fn scroll_to(&self, scroll: Point<Px>);
+    fn scroll(&self) -> Point<Px>;
+    fn make_region_visible(&self, region: Rect<Px>);
+}
+
+fn get_parent_scroller(context: &EventContext<'_>) -> Option<Dynamic<ScrollController>> {
+    let mut parent = context.widget().parent();
+    while let Some(widget) = parent {
+        if let Some(scroll) = widget.lock().downcast_ref::<MyScroll>() {
+            return Some(scroll.controller.clone());
+        }
+        parent = widget.parent();
+    }
+    None
+}
+
+impl ContextScroller for EventContext<'_> {
+    fn scroll_to(&self, scroll: Point<Px>) {
+        if let Some(controller) = get_parent_scroller(self) {
+            controller.lock().scroll_to(scroll);
+        }
+    }
+
+    fn scroll(&self) -> Point<Px> {
+        if let Some(controller) = get_parent_scroller(self) {
+            controller.lock().scroll
+        } else {
+            Point::default()
+        }
+    }
+
+    fn make_region_visible(&self, region: Rect<Px>) {
+        if let Some(controller) = dbg!(get_parent_scroller(self)) {
+            controller.lock().make_region_visible(region);
+        }
     }
 }
