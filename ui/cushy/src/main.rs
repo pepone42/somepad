@@ -59,22 +59,24 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     id: "editor.goto_line",
     action: |_id, v, c| {
         let doc = v.doc.clone();
-        c.palette("Got to line").accept(move |c, _, s| {
-            if let Ok(line) = s.parse::<usize>() {
-                if line == 0 || line > doc.get().rope.len_lines() {
-                    return;
+        c.palette("Got to line")
+            .accept(move |c, _, s| {
+                if let Ok(line) = s.parse::<usize>() {
+                    if line == 0 || line > doc.get().rope.len_lines() {
+                        return;
+                    }
+
+                    let p = ndoc::Position::new(line - 1, 0);
+                    doc.lock().set_main_selection(p, p);
+
+                    c.widget()
+                        .lock()
+                        .downcast_ref::<TextEditor>()
+                        .unwrap()
+                        .refocus_main_selection(c);
                 }
-
-                let p = ndoc::Position::new(line - 1, 0);
-                doc.lock().set_main_selection(p, p);
-
-                c.widget()
-                    .lock()
-                    .downcast_ref::<TextEditor>()
-                    .unwrap()
-                    .refocus_main_selection(c);
-            }
-        }).show();
+            })
+            .show();
     },
 };
 
@@ -244,13 +246,18 @@ const SELECT_DOC: WindowCommand = WindowCommand {
                 if let Some(file_name) = d.get().file_name {
                     file_name.file_name().unwrap().to_string_lossy().to_string()
                 } else {
-                    "Untitled".to_string()
+                    format!("Untitled {}", d.get().id())
                 }
             })
             .collect();
-        c.palette("Select a document").items(items).accept(|_, i, val| {
-            dbg!("Selected!", i, val);
-        }).show();
+        let current_doc = w.current_doc.clone();
+        c.palette("Select a document")
+            .items(items)
+            .accept(move |_, i, val| {
+                dbg!("Selected!", i, val);
+                *current_doc.lock() = i;
+            })
+            .show();
     },
 };
 
