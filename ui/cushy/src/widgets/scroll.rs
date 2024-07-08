@@ -627,7 +627,7 @@ impl ContextScroller for EventContext<'_> {
     }
 
     fn make_region_visible(&self, region: Rect<Px>) {
-        if let Some(controller) = dbg!(get_parent_scroller(self)) {
+        if let Some(controller) = get_parent_scroller(self) {
             controller.lock().make_region_visible(region);
         }
     }
