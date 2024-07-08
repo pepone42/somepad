@@ -104,7 +104,6 @@ impl Widget for OpenedEditor {
     ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
         context.redraw_when_changed(&self.hovered);
         if self.on_resize_handle(location, context) {
-            dbg!("resize", location, self.width.get());
             self.hovered.replace(true);
             Some(cushy::kludgine::app::winit::window::CursorIcon::EwResize)
         } else {

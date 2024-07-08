@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use cushy::context::EventContext;
-use cushy::figures::units::{Lp, Px};
-use cushy::figures::Zero;
+use cushy::figures::units::{Lp, Px, UPx};
+use cushy::figures::{Point, Rect, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
@@ -14,7 +14,7 @@ use cushy::widget::{
 
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
-use cushy::{context, Lazy};
+use cushy::{context, ConstraintLimit, Lazy};
 use ndoc::Document;
 
 use crate::shortcut::{event_match, Shortcut};
@@ -31,14 +31,13 @@ pub struct Palette {
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
     filter: Dynamic<Filter>,
-    filter_id: WidgetId,
+    list_scroller: Dynamic<ScrollController>,
 }
 
 impl Palette {
     fn create() -> Self {
         let input = Dynamic::new(Document::default());
-        let str_input = input.map_each(|d| dbg!(d.rope.to_string()));
-        let (filter_tag, filter_id) = WidgetTag::new();
+        let str_input = input.map_each(|d| d.rope.to_string());
         let selected_idx = PALETTE_STATE.get().selected_idx;
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
             FilteredList::new(items.clone(), str_input.clone(), selected_idx)
@@ -47,8 +46,9 @@ impl Palette {
         };
 
         let filter = filtered_list.filter.clone();
-        let scroller = Dynamic::new(ScrollController::default());
-        let pal = Custom::new(
+        let editor_scroller = Dynamic::new(ScrollController::default());
+        let list_scroller = Dynamic::new(ScrollController::default());
+        let pal: cushy::widgets::Align = Custom::new(
             PALETTE_STATE
                 .get()
                 .description
@@ -56,14 +56,14 @@ impl Palette {
                 .and(
                     Custom::new(
                         MyScroll::horizontal(
-                            TextEditor::as_input(input.clone()).with_scroller(scroller.clone()),
-                            scroller.clone(),
+                            TextEditor::as_input(input.clone())
+                                .with_scroller(editor_scroller.clone()),
+                            editor_scroller.clone(),
                         )
-                        .pad(),
                     )
                     .on_mounted(move |c| c.focus()),
                 )
-                .and(filtered_list.make_with_tag(filter_tag).pad())
+                .and(MyScroll::vertical(filtered_list, list_scroller.clone()).expand())
                 .into_rows()
                 .width(Lp::new(250))
                 .height(Lp::ZERO..Lp::new(250)),
@@ -88,7 +88,7 @@ impl Palette {
             input,
             items: PALETTE_STATE.get().items,
             filter,
-            filter_id,
+            list_scroller,
         }
     }
     #[allow(clippy::new_ret_no_self)]
@@ -101,6 +101,22 @@ impl Palette {
                 Custom::empty().make_widget()
             }
         })
+    }
+
+    fn scroll_to(&mut self, context: &mut EventContext) {
+        context.redraw_when_changed(&self.list_scroller);
+        if let Some(idx) = self.filter.get().selected_idx.get() {
+            let line_height = context
+                .kludgine
+                .line_height()
+                .into_px(context.kludgine.scale());
+            let y = line_height * Px::new(idx as i32);
+            self.list_scroller.lock().make_region_visible(Rect::new(
+                Point::new(Px::ZERO, y - (line_height)),
+                Size::new(Px::ZERO, line_height * 4),
+            ));
+            
+        }
     }
 }
 
@@ -150,7 +166,7 @@ impl WrapperWidget for Palette {
                         if let Some(idx) = item {
                             self.action.get()(
                                 &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
-                                dbg!(idx.index),
+                                idx.index,
                                 idx.text,
                             );
                         }
@@ -160,15 +176,18 @@ impl WrapperWidget for Palette {
             }
             return IGNORED;
         }
+
         if let Some(s) = PALETTE_STATE.get().next_key {
             if event_match(&input, context.modifiers(), s) {
                 self.filter.lock().next();
+                self.scroll_to(context);
                 return HANDLED;
             }
         }
         if let Some(s) = PALETTE_STATE.get().prev_key {
             if event_match(&input, context.modifiers(), s) {
                 self.filter.lock().prev();
+                self.scroll_to(context);
                 return HANDLED;
             }
         }
@@ -179,7 +198,7 @@ impl WrapperWidget for Palette {
                     if let Some(idx) = item {
                         self.action.get()(
                             &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
-                            dbg!(idx.index),
+                            idx.index,
                             idx.text,
                         );
                     }
@@ -187,7 +206,7 @@ impl WrapperWidget for Palette {
                     self.action.get()(
                         &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                         0,
-                        dbg!(self.input.get().rope.to_string()),
+                        self.input.get().rope.to_string(),
                     );
                 }
                 close_palette();
@@ -199,11 +218,15 @@ impl WrapperWidget for Palette {
                 HANDLED
             }
             Key::Named(NamedKey::ArrowDown) => {
+                
                 self.filter.lock().next();
+                self.scroll_to(context);
                 HANDLED
             }
             Key::Named(NamedKey::ArrowUp) => {
+                
                 self.filter.lock().prev();
+                self.scroll_to(context);
                 HANDLED
             }
             _ => HANDLED,

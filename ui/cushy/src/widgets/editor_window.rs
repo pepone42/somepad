@@ -40,7 +40,6 @@ impl EditorWindow {
         lru.lock().insert(0, SystemTime::now());
         let h = lru.with_clone(|lru| current_doc.for_each(move |current_doc|{
             *lru.lock().entry(*current_doc).or_insert(SystemTime::now()) = SystemTime::now();
-            dbg!(lru.get());
         }));
         h.persist();
         let (editor_tag, editor_id) = WidgetTag::new();
@@ -68,7 +67,6 @@ impl EditorWindow {
     pub fn add_new_doc(&self, doc: Dynamic<Document>, _context: &mut WidgetContext) {
         self.documents.lock().push(doc);
         *self.current_doc.lock() += 1;
-        dbg!(self.current_doc.get());
     }
 
     pub fn current_doc(&self) -> Dynamic<Document> {
@@ -129,7 +127,6 @@ impl WrapperWidget for EditorWindow {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
-        dbg!("scroll mouse down");
         IGNORED
     }
 }

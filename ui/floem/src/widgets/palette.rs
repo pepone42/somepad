@@ -82,7 +82,6 @@ fn palette_free(owner_id: Id, action: impl FnOnce(String) + 'static + Clone + Co
                             remove_overlay(id);
                         })
                         .on_escape(move || {
-                            dbg!(focused_id);
                             remove_overlay(id);
                             focused_id.request_focus();
                         }),

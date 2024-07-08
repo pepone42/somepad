@@ -1,9 +1,14 @@
 use cushy::{
     figures::{
         units::{Px, UPx},
-        Point, Size, Zero,
+        Point, Rect, ScreenScale, Size, Zero,
     },
-    kludgine::{text::Text, DrawableExt},
+    kludgine::{
+        shapes::{Shape, StrokeOptions},
+        text::Text,
+        DrawableExt,
+    },
+    styles::Color,
     value::{Dynamic, DynamicReader, Source},
     widget::Widget,
 };
@@ -19,7 +24,7 @@ pub struct FilterItem {
 #[derive(Debug, Clone)]
 pub struct Filter {
     items: Dynamic<Vec<FilterItem>>,
-    selected_idx: Dynamic<Option<usize>>,
+    pub selected_idx: Dynamic<Option<usize>>,
     pub selected_item: DynamicReader<Option<FilterItem>>,
     pub filtered_items: DynamicReader<Vec<FilterItem>>,
 }
@@ -39,13 +44,13 @@ impl Filter {
                 })
                 .collect(),
         );
-        dbg!(selected_idx);
+
         let selected_idx = if items.get().is_empty() {
             Dynamic::new(None)
         } else {
             Dynamic::new(Some(selected_idx.min(items.get().len() - 1)))
         };
-        dbg!(selected_idx.get());
+
         let filtered_items = selected_idx
             .with_clone(|selected_idx| {
                 items.with_clone(|items| {
@@ -101,7 +106,7 @@ impl Filter {
                 break;
             }
         }
-        *self.selected_idx.lock() = dbg!(idx);
+        *self.selected_idx.lock() = idx;
     }
     pub fn prev(&mut self) {
         let items = self.items.get();
@@ -136,7 +141,7 @@ impl Widget for FilteredList {
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
         let mut y = Px::ZERO;
-        let selected_idx = dbg!(self.filter.get().selected_idx.get());
+        let selected_idx = self.filter.get().selected_idx.get();
         for item in self.filter.get().filtered_items.get().iter() {
             let text = format!(
                 "{}{}",
@@ -154,6 +159,21 @@ impl Widget for FilteredList {
                 .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
             y += h;
         }
+
+        let line_height = context.gfx.line_height().into_px(context.gfx.scale());
+        if let Some(idx) = self.filter.get().selected_idx.get() {
+            let y = line_height * Px::new(idx as i32);
+            context.gfx.draw_shape(
+                Shape::stroked_rect(
+                    Rect::new(
+                        Point::new(Px::ZERO, y - (line_height)),
+                        Size::new(Px::ZERO, line_height * 4),
+                    ),
+                    StrokeOptions::default().colored(Color::WHITE),
+                )
+                .translate_by(Point::ZERO),
+            )
+        }
     }
     fn layout(
         &mut self,
@@ -162,11 +182,23 @@ impl Widget for FilteredList {
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
         let mut y = UPx::ZERO;
+        let mut w = UPx::ZERO;
         for item in self.filter.get().filtered_items.get().iter() {
-            let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
+            let text = format!("{}*", item.text);
+            let text = Text::<UPx>::new(&text, cushy::kludgine::Color::WHITE);
             let h = context.gfx.measure_text(text).line_height;
             y += h;
+            if context.gfx.measure_text(text).size.width > w {
+                w = context.gfx.measure_text(text).size.width;
+            }
         }
-        Size::new(available_space.width.max() - 1, y)
+        Size::new(w, y)
+    }
+    fn hit_test(
+        &mut self,
+        location: Point<Px>,
+        context: &mut cushy::context::EventContext<'_>,
+    ) -> bool {
+        true
     }
 }

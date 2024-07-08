@@ -197,7 +197,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .map(|(k, v)| (*k, *v))
         .collect::<Vec<_>>();
     v.sort_by(|a, b| b.1.cmp(&a.1));
-    dbg!(&v);
+
     let items = v.iter().map(|(k, _)| items[*k].clone()).collect::<Vec<_>>();
     let next_key = get_settings()
         .shortcuts

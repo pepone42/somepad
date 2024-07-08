@@ -1,4 +1,5 @@
 //! A container that scrolls its contents on a virtual surface.
+use std::any::Any;
 use std::time::{Duration, Instant};
 
 use cushy::figures::units::{Px, UPx};
@@ -229,6 +230,7 @@ impl Widget for MyScroll {
         context.redraw_when_changed(&self.scrollbar_opacity);
 
         let managed = self.contents.mounted(&mut context.as_event_context());
+
         context.for_other(&managed).redraw();
 
         let size = context.gfx.region().size;

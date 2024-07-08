@@ -12,7 +12,7 @@
                 "args": [
                     "build",
                     "--bin=xncode",
-                    "--package=ncode-floem"
+                    "--package=somepad-cushy"
                 ],
                 "filter": {
                     "name": "xncode",
