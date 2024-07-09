@@ -873,10 +873,7 @@ impl CodeEditor {
             )
             .into_columns()
             .gutter(Px::new(1))
-            .with(
-                &CornerRadius,
-                CornerRadii::from(Dimension::Lp(Lp::points(0))),
-            );
+            ;
         Self {
             child: child.widget_ref(),
             scroll_id,

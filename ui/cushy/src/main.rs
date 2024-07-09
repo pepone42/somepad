@@ -20,8 +20,8 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::TextSize;
-use cushy::styles::{ColorScheme, ColorSource, ThemePair};
+use cushy::styles::components::{CornerRadius, TextSize};
+use cushy::styles::{ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
 use cushy::value::{Dynamic, ReadOnly, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetInstance, WidgetTag};
 
@@ -359,11 +359,19 @@ fn main() -> anyhow::Result<()> {
     let mut win = editor
         .make_with_tag(editor_tag)
         .expand()
-        .and(StatusBar::new(docs.clone(), cur_doc).centered().pad_by(Px::new(2)))
+        .and(
+            StatusBar::new(docs.clone(), cur_doc)
+                .centered()
+                .pad_by(Px::new(2)),
+        )
         .into_rows()
         .gutter(Px::ZERO)
         .themed(theme)
         .with(&TextSize, Lp::points(10))
+        .with(
+            &CornerRadius,
+            CornerRadii::from(Dimension::Lp(Lp::points(0))),
+        )
         .into_window()
         .on_close_requested(move |()| {
             if !docs.get().iter().any(|d| d.get().is_dirty()) {

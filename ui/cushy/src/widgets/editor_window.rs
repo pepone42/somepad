@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use cushy::context::WidgetContext;
+use cushy::figures::units::Px;
+use cushy::figures::Zero;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::kludgine::wgpu::hal::auxil::db;
@@ -21,6 +23,7 @@ use crate::CommandsRegistry;
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::OpenedEditor;
 use super::palette::Palette;
+use super::scroll::MyScroll;
 
 #[derive(Debug)]
 pub struct EditorWindow {
@@ -44,12 +47,12 @@ impl EditorWindow {
         }));
         h.persist();
         let (editor_tag, editor_id) = WidgetTag::new();
-        let child = OpenedEditor::new(documents.clone(), current_doc.clone())
+        let child = MyScroll::vertical(OpenedEditor::new(documents.clone(), current_doc.clone())).expand_vertically()
             .and(
                 EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
                     .make_with_tag(editor_tag),
             )
-            .into_columns()
+            .into_columns().gutter(Px::ZERO)
             .make_widget();
 
         let w = child
