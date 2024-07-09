@@ -697,6 +697,7 @@ impl Widget for TextEditor {
 
         match (input.state, input.text) {
             (ElementState::Pressed, Some(t)) if !context.modifiers().possible_shortcut() => {
+                dbg!(&t);
                 self.doc.lock().insert(&t);
                 self.refocus_main_selection(context);
 

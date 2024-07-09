@@ -1010,7 +1010,7 @@ impl Document {
             .take(col_idx + 1)
             .tuple_windows()
         {
-            match slice.byte_slice(i..j).char(0) {
+            match slice.slice(i..j).char(0) {
                 '\t' => vcol += tabl_len - (vcol % tabl_len),
                 _ => vcol += 1,
             }
@@ -1024,7 +1024,7 @@ impl Document {
         let mut vcol = 0;
         let mut col = 0;
         for (i, j) in rope_utils::NextGraphemeIdxIterator::new(&slice).tuple_windows() {
-            match slice.byte_slice(i..j).char(0) {
+            match slice.slice(i..j).char(0) {
                 '\t' => vcol += tabl_len - (vcol % tabl_len),
                 _ => vcol += 1,
             }
