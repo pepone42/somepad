@@ -5,10 +5,12 @@ mod widgets;
 
 use cushy::context::EventContext;
 use cushy::figures::Zero;
+use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use cushy::window::Window;
 use rfd::FileDialog;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::PaletteExt;
+use widgets::palette::{palette, PaletteExt};
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::TextEditor;
 
@@ -20,10 +22,10 @@ use cushy::figures::units::{Lp, Px};
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::TextSize;
 use cushy::styles::{ColorScheme, ColorSource, ThemePair};
-use cushy::value::{Dynamic, Source};
-use cushy::widget::{MakeWidget, WidgetId};
+use cushy::value::{Dynamic, ReadOnly, Source, Value};
+use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetInstance, WidgetTag};
 
-use cushy::{Lazy, Run};
+use cushy::{Application, Lazy, PendingApp, Run};
 use ndoc::Document;
 use settings::Settings;
 use shortcut::Shortcut;
@@ -348,19 +350,41 @@ fn main() -> anyhow::Result<()> {
         ndoc::Document::default()
     });
 
+    let (editor_tag, editor_id) = WidgetTag::new();
     let editor = EditorWindow::new(doc.clone(), cmd_reg.clone());
 
     let docs = editor.documents.clone();
     let cur_doc = editor.current_doc.clone();
 
-    editor
+    let mut win = editor
+        .make_with_tag(editor_tag)
         .expand()
-        .and(StatusBar::new(docs, cur_doc).centered().pad_by(Px::new(2)))
+        .and(StatusBar::new(docs.clone(), cur_doc).centered().pad_by(Px::new(2)))
         .into_rows()
         .gutter(Px::ZERO)
         .themed(theme)
         .with(&TextSize, Lp::points(10))
-        .run()?;
+        .into_window()
+        .on_close_requested(move |()| {
+            if !docs.get().iter().any(|d| d.get().is_dirty()) {
+                return true;
+            }
+            palette("Unsaved changes, are you sure you want to close?")
+                .owner(editor_id)
+                .items(vec!["Yes".to_string(), "No".to_string()])
+                .accept(|c, _, r| {
+                    if let "Yes" = r.as_str() {
+                        c.window_mut().close()
+                    }
+                })
+                .show();
+            false
+        });
+
+    win.title = Value::Constant("SomePad".to_string());
+    win.attributes.min_inner_size = Some(Size::Logical(LogicalSize::new(800., 600.)));
+
+    win.run()?;
 
     Ok(())
 }

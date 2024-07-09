@@ -867,7 +867,7 @@ checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 [[package]]
 name = "cushy"
 version = "0.3.0"
-source = "git+https://github.com/khonsulabs/cushy#774a8462102d7a6dae257532559a27f128a9b428"
+source = "git+https://github.com/khonsulabs/cushy#fbabbdbd99fe0a3613aeb7d3fe63515654d42cba"
 dependencies = [
  "ahash",
  "alot",
@@ -893,7 +893,7 @@ dependencies = [
 [[package]]
 name = "cushy-macros"
 version = "0.3.0"
-source = "git+https://github.com/khonsulabs/cushy#774a8462102d7a6dae257532559a27f128a9b428"
+source = "git+https://github.com/khonsulabs/cushy#fbabbdbd99fe0a3613aeb7d3fe63515654d42cba"
 dependencies = [
  "attribute-derive",
  "manyhow 0.11.1",

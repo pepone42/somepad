@@ -320,7 +320,7 @@ impl PaletteState {
         self.active = true;
         *PALETTE_STATE.lock() = self;
     }
-    fn owner(mut self, owner: WidgetId) -> Self {
+    pub fn owner(mut self, owner: WidgetId) -> Self {
         self.owner = owner;
         self
     }
@@ -332,7 +332,7 @@ pub (super) fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
 
-fn palette(description: &str) -> PaletteState {
+pub fn palette(description: &str) -> PaletteState {
     PaletteState {
         description: description.to_string(),
         ..PaletteState::new()
