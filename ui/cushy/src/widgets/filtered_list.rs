@@ -2,8 +2,7 @@ use std::fmt::Debug;
 
 use cushy::{
     figures::{
-        units::{Px, UPx},
-        Point, Rect, Round, ScreenScale, Size, Zero,
+        units::{Px, UPx}, FloatConversion, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
     },
     kludgine::{
         shapes::{Shape, StrokeOptions},
@@ -12,7 +11,7 @@ use cushy::{
     },
     styles::{components, Color},
     value::{Dynamic, DynamicReader, Source},
-    widget::{Widget, HANDLED},
+    widget::{Widget, HANDLED, IGNORED},
     ConstraintLimit,
 };
 
@@ -169,9 +168,10 @@ impl Widget for FilteredList {
 
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
+
         let scale = context.gfx.scale();
         let size = context.gfx.size();
-        let mut y = UPx::ZERO;
+        let mut y = Px::ZERO;
         let selected_idx = self.filter.get().selected_idx.get();
         let line_height = context.gfx.line_height().into_upx(scale);
         let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
@@ -183,10 +183,16 @@ impl Widget for FilteredList {
         if let Some(idx) = self.hovered_idx.get() {
             context.gfx.draw_shape(
                 Shape::filled_rect(
-                    Rect::new(Point::ZERO, Size::new(size.width, line_height)),
+                    Rect::new(
+                        Point::ZERO,
+                        Size::new(size.width, line_height).into_signed(),
+                    ),
                     bg_hovered_color,
                 )
-                .translate_by(Point::new(UPx::ZERO, line_height * UPx::new(idx as u32))),
+                .translate_by(Point::new(
+                    Px::ZERO,
+                    line_height.into_signed() * Px::new(idx as i32),
+                )),
             )
         }
 
@@ -194,10 +200,13 @@ impl Widget for FilteredList {
             if selected_idx == Some(item.index) {
                 context.gfx.draw_shape(
                     Shape::filled_rect(
-                        Rect::new(Point::ZERO, Size::new(size.width, line_height)),
+                        Rect::new(
+                            Point::ZERO,
+                            Size::new(size.width, line_height).into_signed(),
+                        ),
                         bg_selected_color,
                     )
-                    .translate_by(Point::new(UPx::ZERO, y)),
+                    .translate_by(Point::new(Px::ZERO, y)),
                 )
             }
             let color = if selected_idx == Some(item.index) {
@@ -208,10 +217,10 @@ impl Widget for FilteredList {
                 fg_color
             };
             let text = Text::new(&item.text, color);
-            let h = line_height;
+            let h = line_height.into_signed();
             context
                 .gfx
-                .draw_text(text.translate_by(Point::new(UPx::ZERO, y)));
+                .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
 
             y += h;
         }
