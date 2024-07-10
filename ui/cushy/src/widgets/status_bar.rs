@@ -1,5 +1,5 @@
 use cushy::{
-    figures::{units::Px, Point, ScreenScale, Size, Zero}, kludgine::{text::Text, DrawableExt}, styles::{components::{FontFamily, LineHeight}, Dimension}, value::{Dynamic, Source}, widget::Widget
+    figures::{units::Px, IntoUnsigned, Point, ScreenScale, Size, Zero}, kludgine::{text::Text, DrawableExt}, styles::{components::{FontFamily, LineHeight}, Dimension}, value::{Dynamic, Source}, widget::Widget
 };
 use ndoc::{Document, Indentation};
 
@@ -74,7 +74,7 @@ impl Widget for StatusBar {
         ) -> cushy::figures::Size<cushy::figures::units::UPx> {
             let heigh = match context.get(&LineHeight) {
                 Dimension::Lp(v) => v.into_upx(context.gfx.scale()),
-                Dimension::Px(v) => v.into_upx(context.gfx.scale()),
+                Dimension::Px(v) => v.into_unsigned(),
             };
             
             // if I don't substract 1 from the width, the layout/redraw is called infinitely, switching between max()+1 and max() 

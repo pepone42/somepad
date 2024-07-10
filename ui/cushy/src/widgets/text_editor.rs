@@ -7,7 +7,7 @@ use cushy::kludgine::text::Text;
 use cushy::value::Dynamic;
 
 use cushy::figures::units::{self, Lp, Px, UPx};
-use cushy::figures::{Abs, FloatConversion, Fraction, Point, Rect, Round, ScreenScale, Size, Zero};
+use cushy::figures::{Abs, FloatConversion, Fraction, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
@@ -340,7 +340,7 @@ impl Widget for TextEditor {
                 .clip_rect()
                 .size
                 .height
-                .into_px(context.gfx.scale())
+                .into_signed()
                 / self.line_height)
             + 2;
 
@@ -453,7 +453,7 @@ impl Widget for TextEditor {
 
         self.viewport.set(Rect::new(
             context.gfx.translation().abs(),
-            context.gfx.size().into_px(context.gfx.scale()),
+            context.gfx.size().into_signed(),
         ));
 
         Size::new(UPx::new(10000), UPx::new(height.ceil() as _))
@@ -748,7 +748,7 @@ impl Widget for Gutter {
                 .clip_rect()
                 .size
                 .height
-                .into_px(context.gfx.scale())
+                .into_signed()
                 / self.font_metrics.line_height)
             + 1;
 

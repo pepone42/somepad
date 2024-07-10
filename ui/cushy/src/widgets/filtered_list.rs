@@ -162,8 +162,6 @@ impl FilteredList {
 
 impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        dbg!(context.gfx.translation());
-
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
 
