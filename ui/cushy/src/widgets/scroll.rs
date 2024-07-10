@@ -1,5 +1,4 @@
 //! A container that scrolls its contents on a virtual surface.
-use std::any::Any;
 use std::time::{Duration, Instant};
 
 use cushy::figures::units::{Px, UPx};
@@ -593,7 +592,7 @@ fn scrollbar_region(scroll: Px, content_size: Px, control_size: Px) -> Scrollbar
     }
 }
 
-
+#[allow(dead_code)]
 pub trait ContextScroller {
     fn scroll_to(&self, scroll: Point<Px>);
     fn scroll(&self) -> Point<Px>;

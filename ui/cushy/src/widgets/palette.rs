@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cushy::context::EventContext;
-use cushy::figures::units::{Lp, Px, UPx};
+use cushy::figures::units::{Lp, Px};
 use cushy::figures::{Point, Rect, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
@@ -14,13 +14,13 @@ use cushy::widget::{
 
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
-use cushy::{context, ConstraintLimit, Lazy};
+use cushy::{context, Lazy};
 use ndoc::Document;
 
 use crate::shortcut::{event_match, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
-use super::scroll::{ContextScroller, MyScroll, ScrollController};
+use super::scroll::{ContextScroller, MyScroll};
 use super::text_editor::TextEditor;
 
 #[derive(PartialEq, Eq, Clone)]

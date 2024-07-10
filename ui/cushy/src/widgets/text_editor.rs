@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use cushy::context::{EventContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
-use cushy::styles::components::CornerRadius;
 use cushy::value::Dynamic;
 
 use cushy::figures::units::{self, Lp, Px, UPx};
@@ -15,7 +14,7 @@ use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{Color, CornerRadii, Dimension};
+use cushy::styles::Color;
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,

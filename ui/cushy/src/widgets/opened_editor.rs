@@ -1,14 +1,10 @@
 use cushy::{
-    figures::{
-        units::{Lp, Px, UPx}, IntoSigned, Point, Rect, ScreenScale, Size, Zero
-    },
-    kludgine::{
-        app::winit::event::MouseButton, shapes::Shape, text::Text, wgpu::hal::empty::Context,
+    context::EventContext, figures::{
+        units::{Px, UPx}, IntoSigned, IntoUnsigned, Point, Rect, ScreenScale, Size, Zero
+    }, kludgine::{
+        app::winit::event::MouseButton, shapes::Shape, text::Text,
         DrawableExt,
-    },
-    styles::components,
-    value::{Destination, Dynamic, Source},
-    widget::{Widget, HANDLED, IGNORED},
+    }, styles::components, value::{Destination, Dynamic, Source}, widget::{Widget, HANDLED, IGNORED}, ConstraintLimit
 };
 use ndoc::Document;
 
@@ -16,9 +12,7 @@ use ndoc::Document;
 pub struct OpenedEditor {
     documents: Dynamic<Vec<Dynamic<Document>>>,
     current_doc: Dynamic<usize>,
-    width: Dynamic<UPx>,
-    hovered: Dynamic<bool>,
-    dragged: Dynamic<bool>,
+    pub width: Dynamic<Px>,
 }
 
 impl OpenedEditor {
@@ -26,18 +20,8 @@ impl OpenedEditor {
         OpenedEditor {
             documents,
             current_doc,
-            width: Dynamic::new(UPx::new(100)),
-            hovered: Dynamic::new(false),
-            dragged: Dynamic::new(false),
+            width: Dynamic::new(Px::new(100)),
         }
-    }
-
-    fn on_resize_handle(
-        &mut self,
-        location: Point<Px>,
-        context: &mut cushy::context::EventContext<'_>,
-    ) -> bool {
-        location.x > self.width.get().into_px(context.kludgine.scale()) - 5
     }
 }
 
@@ -84,21 +68,7 @@ impl Widget for OpenedEditor {
             y += line_height.into_signed();
         }
 
-        if self.hovered.get() || self.dragged.get() {
-            let width = self.width.get().into_px(context.gfx.scale());
-            let scale = context.gfx.scale();
-            let height = context.gfx.size().height.into_px(scale);
-            context.gfx.draw_shape(
-                Shape::filled_rect(
-                    Rect::new(
-                        Point::new(width - 5, Px::ZERO),
-                        Size::new(Px::new(5), height),
-                    ),
-                    bg_hovered_color,
-                )
-                .translate_by(Point::ZERO),
-            );
-        }
+        
     }
 
     fn layout(
@@ -106,78 +76,117 @@ impl Widget for OpenedEditor {
         _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
+        context.invalidate_when_changed(&self.width);
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
-        Size::new(self.width.get(), h)
+        Size::new(self.width.get().into_unsigned(), h)
     }
 
     fn hit_test(
         &mut self,
-        location: Point<Px>,
-        context: &mut cushy::context::EventContext<'_>,
+        _location: Point<Px>,
+        _context: &mut cushy::context::EventContext<'_>,
     ) -> bool {
-        true //self.on_resize_handle(location, context)
+        true
     }
 
     fn hover(
         &mut self,
-        location: Point<Px>,
-        context: &mut cushy::context::EventContext<'_>,
+        _location: Point<Px>,
+        _context: &mut cushy::context::EventContext<'_>,
     ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
-        context.redraw_when_changed(&self.hovered);
-        if self.on_resize_handle(location, context) {
-            self.hovered.replace(true);
-            Some(cushy::kludgine::app::winit::window::CursorIcon::EwResize)
-        } else {
-            self.hovered.replace(false);
-            None
-        }
-    }
-    fn unhover(&mut self, context: &mut cushy::context::EventContext<'_>) {
-        context.redraw_when_changed(&self.hovered);
-        self.hovered.replace(false);
+        None
     }
 
     fn mouse_down(
         &mut self,
-        location: Point<Px>,
+        _location: Point<Px>,
         _device_id: cushy::window::DeviceId,
-        button: MouseButton,
-        context: &mut cushy::context::EventContext<'_>,
+        _button: MouseButton,
+        _context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
-        if button == MouseButton::Left && self.on_resize_handle(location, context) {
-            HANDLED
-        } else {
-            IGNORED
-        }
+        IGNORED
     }
 
+}
+
+#[derive(Debug)]
+pub struct ResizeHandle {
+    width: Dynamic<Px>,
+    hovered: Dynamic<bool>,
+    dragged: Dynamic<bool>,
+    base_width: Px,
+}
+
+impl ResizeHandle {
+    pub fn new(width: Dynamic<Px>) -> Self {
+        ResizeHandle {
+            width: width.clone(),
+            hovered: Dynamic::new(false),
+            dragged: Dynamic::new(false),
+            base_width: width.get().into_signed()
+        }
+    }
+}
+
+impl Widget for ResizeHandle {
+    fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.redraw_when_changed(&self.hovered);
+        context.redraw_when_changed(&self.dragged);
+        if self.hovered.get() || self.dragged.get() {
+            context.fill(context.get(&components::DefaultHoveredBackgroundColor));
+        } else {
+            context.fill(context.get(&components::WidgetBackground));
+        }
+    }
+    fn layout(
+        &mut self,
+        available_space: Size<ConstraintLimit>,
+        _context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+    ) -> Size<UPx> {
+        Size::new(UPx::new(5), available_space.height.max())
+    }
+    fn hover(
+        &mut self,
+        _location: Point<Px>,
+        _context: &mut EventContext<'_>,
+    ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
+        self.hovered.replace(true);
+        Some(cushy::kludgine::app::winit::window::CursorIcon::EwResize)
+    }
+    fn unhover(&mut self, _context: &mut EventContext<'_>) {
+        self.hovered.replace(false);
+    }
+    fn hit_test(&mut self, _location: Point<Px>, _context: &mut EventContext<'_>) -> bool {
+        true
+    }
+    fn mouse_down(
+        &mut self,
+        _location: Point<Px>,
+        _device_id: cushy::window::DeviceId,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut EventContext<'_>,
+    ) -> cushy::widget::EventHandling {
+        self.dragged.replace(true);
+        self.base_width = self.width.get().into_signed();
+        HANDLED
+    }
     fn mouse_up(
         &mut self,
-        location: Option<Point<Px>>,
-        device_id: cushy::window::DeviceId,
-        button: MouseButton,
-        context: &mut cushy::context::EventContext<'_>,
+        _location: Option<Point<Px>>,
+        _device_id: cushy::window::DeviceId,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut EventContext<'_>,
     ) {
-        if button == MouseButton::Left {
-            context.invalidate_when_changed(&self.dragged);
-            *self.dragged.lock() = false;
-        }
+        self.dragged.replace(false);
     }
-
     fn mouse_drag(
         &mut self,
         location: Point<Px>,
         _device_id: cushy::window::DeviceId,
-        button: cushy::kludgine::app::winit::event::MouseButton,
-        context: &mut cushy::context::EventContext<'_>,
+        _button: cushy::kludgine::app::winit::event::MouseButton,
+        _context: &mut EventContext<'_>,
     ) {
-        if button == MouseButton::Left {
-            context.invalidate_when_changed(&self.width);
-            *self.dragged.lock() = true;
-            *self.width.lock() = location.x.into_upx(context.kludgine.scale());
-        } else {
-            *self.dragged.lock() = false;
-        }
+        *self.width.lock() +=  location.x;
     }
 }

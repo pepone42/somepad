@@ -2,16 +2,16 @@ use std::fmt::Debug;
 
 use cushy::{
     figures::{
-        units::{Px, UPx}, FloatConversion, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
+        units::{Px, UPx}, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
     },
     kludgine::{
-        shapes::{Shape, StrokeOptions},
+        shapes::Shape,
         text::Text,
         DrawableExt,
     },
-    styles::{components, Color},
+    styles::components,
     value::{Dynamic, DynamicReader, Source},
-    widget::{Widget, HANDLED, IGNORED},
+    widget::{Widget, HANDLED},
     ConstraintLimit,
 };
 
