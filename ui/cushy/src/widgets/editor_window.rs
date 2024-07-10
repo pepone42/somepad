@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use cushy::context::WidgetContext;
-use cushy::figures::units::Px;
+use cushy::figures::units::{Px, UPx};
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::kludgine::wgpu::hal::auxil::db;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef, WidgetTag, WrapperWidget,
-    HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef, WidgetTag, WrapperWidget, HANDLED,
+    IGNORED,
 };
 
 use cushy::window::KeyEvent;
@@ -24,6 +24,7 @@ use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::OpenedEditor;
 use super::palette::Palette;
 use super::scroll::MyScroll;
+use super::splitter::{ResizeHandle, Splitter};
 
 #[derive(Debug)]
 pub struct EditorWindow {
@@ -31,7 +32,7 @@ pub struct EditorWindow {
     pub documents: Dynamic<Vec<Dynamic<Document>>>,
     pub current_doc: Dynamic<usize>,
     pub cmd_reg: Dynamic<CommandsRegistry>,
-    pub mru_documents: Dynamic<HashMap<usize,SystemTime>>,
+    pub mru_documents: Dynamic<HashMap<usize, SystemTime>>,
     focused: Dynamic<bool>,
 }
 
@@ -42,19 +43,28 @@ impl EditorWindow {
         let current_doc = Dynamic::new(0);
         let lru = Dynamic::new(HashMap::new());
         lru.lock().insert(0, SystemTime::now());
-        let h = lru.with_clone(|lru| current_doc.for_each(move |current_doc|{
-            *lru.lock().entry(*current_doc).or_insert(SystemTime::now()) = SystemTime::now();
-        }));
+        let h = lru.with_clone(|lru| {
+            current_doc.for_each(move |current_doc| {
+                *lru.lock().entry(*current_doc).or_insert(SystemTime::now()) = SystemTime::now();
+            })
+        });
         h.persist();
         let (editor_tag, editor_id) = WidgetTag::new();
         let child = MyScroll::vertical(OpenedEditor::new(documents.clone(), current_doc.clone())).expand_vertically()
-            .and(
+            .and(//ResizeHandle::new(Dynamic::new(UPx::new(100)))).and(
                 EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
                     .make_with_tag(editor_tag),
             )
             .into_columns().gutter(Px::ZERO)
             .make_widget();
-
+        // let child = Splitter::new(
+        //     MyScroll::vertical(OpenedEditor::new(documents.clone(), current_doc.clone()))
+        //         .expand_vertically(),
+        //     EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
+        //         .make_with_tag(editor_tag),
+        //     Dynamic::new(UPx::new(100)),
+        // )
+        //.make_widget();
         let w = child
             .and(Palette::new().with_next_focus(editor_id))
             .into_layers();

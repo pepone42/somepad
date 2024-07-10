@@ -165,6 +165,8 @@ impl FilteredList {
 
 impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        dbg!(context.gfx.translation());
+
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
         let scale = context.gfx.scale();
@@ -235,7 +237,7 @@ impl Widget for FilteredList {
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         context.apply_current_font_settings();
-        dbg!(_available_space);
+
         let mut y = UPx::ZERO;
         let mut w = UPx::ZERO;
         for item in self.filter.get().filtered_items.get().iter() {

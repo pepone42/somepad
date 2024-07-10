@@ -107,7 +107,6 @@ impl Widget for OpenedEditor {
         _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
-        dbg!(_available_space);
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
         Size::new(self.width.get(), h)
