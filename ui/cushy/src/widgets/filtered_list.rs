@@ -37,7 +37,6 @@ pub struct Filter {
 
 impl Filter {
     pub fn new(items: Vec<String>, filter: Dynamic<String>, selected_idx: usize) -> Self {
-        let mut init = true;
         let items: Dynamic<Vec<FilterItem>> = Dynamic::new(
             items
                 .into_iter()
@@ -61,7 +60,7 @@ impl Filter {
             .with_clone(|selected_idx| {
                 items.with_clone(|items| {
                     filter.map_each(move |filter| {
-                        if !init {
+                        if !filter.is_empty() {
                             for item in items.lock().iter_mut() {
                                 item.excluded = !item.text.contains(filter);
                             }
@@ -71,7 +70,6 @@ impl Filter {
                                 *selected_idx.lock() = None;
                             }
                         }
-                        init = false;
                         items
                             .get()
                             .iter()
@@ -93,7 +91,7 @@ impl Filter {
 
         Filter {
             items,
-            selected_idx,
+            selected_idx: dbg!(selected_idx),
             selected_item,
             filtered_items,
         }
