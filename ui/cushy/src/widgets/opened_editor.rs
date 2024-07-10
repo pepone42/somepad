@@ -53,11 +53,7 @@ impl Widget for OpenedEditor {
                 );
             }
 
-            let mut text = if let Some(file_name) = doc.get().file_name {
-                file_name.file_name().unwrap().to_string_lossy().to_string()
-            } else {
-                format!("Untitled {}", doc.get().id())
-            };
+            let text = doc.get().title();
             // if i == self.current_doc.get() {
             //     text.push_str(" (current)");
             // }
@@ -84,11 +80,7 @@ impl Widget for OpenedEditor {
             .get()
             .iter()
             .map(|d| {
-                if let Some(file_name) = d.get().file_name {
-                    file_name.file_name().unwrap().to_string_lossy().to_string()
-                } else {
-                    format!("Untitled {}", d.get().id())
-                }
+                d.get().title()
             })
             .max_by_key(|s| s.len())
             .unwrap_or_default();

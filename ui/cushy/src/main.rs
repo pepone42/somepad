@@ -185,11 +185,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .get()
         .iter()
         .map(|d| {
-            if let Some(file_name) = d.get().file_name {
-                file_name.file_name().unwrap().to_string_lossy().to_string()
-            } else {
-                format!("Untitled {}", d.get().id())
-            }
+            d.get().title()
         })
         .collect::<Vec<_>>();
 
@@ -244,11 +240,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
             .get()
             .iter()
             .map(|d| {
-                if let Some(file_name) = d.get().file_name {
-                    file_name.file_name().unwrap().to_string_lossy().to_string()
-                } else {
-                    format!("Untitled {}", d.get().id())
-                }
+                d.get().title()
             })
             .collect();
         let current_doc = w.current_doc.clone();

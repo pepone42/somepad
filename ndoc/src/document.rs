@@ -215,11 +215,11 @@ impl Document {
         self.id
     }
 
-    pub fn title(&self) -> Cow<'_, str> {
+    pub fn title(&self) -> String {
         if let Some(f) = &self.file_name {
-            f.file_name().unwrap().to_string_lossy()
+            f.file_name().unwrap().to_string_lossy().into()
         } else {
-            "Untitled".into()
+            format!("Untitled {}",self.id())
         }
     }
 
