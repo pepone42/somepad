@@ -1,7 +1,6 @@
 use cushy::{
     figures::{
-        units::{Lp, Px, UPx},
-        Point, Rect, ScreenScale, Size, Zero,
+        units::{Lp, Px, UPx}, IntoSigned, Point, Rect, ScreenScale, Size, Zero
     },
     kludgine::{
         app::winit::event::MouseButton, shapes::Shape, text::Text, wgpu::hal::empty::Context,
@@ -57,13 +56,13 @@ impl Widget for OpenedEditor {
         
         context.apply_current_font_settings();
         context.fill(bg_color);
-        let mut y = UPx::ZERO;
+        let mut y = Px::ZERO;
         for (i, doc) in self.documents.get().iter().enumerate() {
 
             if i == current_doc {
                 context.gfx.draw_shape(
                     Shape::filled_rect(
-                        Rect::new(Point::new(UPx::ZERO, y), Size::new(size.width, line_height)),
+                        Rect::new(Point::new(Px::ZERO, y), Size::new(size.width, line_height).into_signed()),
                         bg_selected_color,
                     )
                     .translate_by(Point::ZERO),
@@ -81,8 +80,8 @@ impl Widget for OpenedEditor {
             let text = Text::new(&text, if i == current_doc {fg_selected_color} else { fg_color });
             context
                 .gfx
-                .draw_text(text.translate_by(Point::new(UPx::ZERO, y)));
-            y += line_height;
+                .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
+            y += line_height.into_signed();
         }
 
         if self.hovered.get() || self.dragged.get() {
