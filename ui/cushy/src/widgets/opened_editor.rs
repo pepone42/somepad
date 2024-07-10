@@ -12,7 +12,7 @@ use ndoc::Document;
 pub struct OpenedEditor {
     documents: Dynamic<Vec<Dynamic<Document>>>,
     current_doc: Dynamic<usize>,
-    pub width: Dynamic<Px>,
+    //pub width: Dynamic<Px>,
 }
 
 impl OpenedEditor {
@@ -20,7 +20,7 @@ impl OpenedEditor {
         OpenedEditor {
             documents,
             current_doc,
-            width: Dynamic::new(Px::new(100)),
+            //width: Dynamic::new(Px::new(100)),
         }
     }
 }
@@ -58,9 +58,9 @@ impl Widget for OpenedEditor {
             } else {
                 format!("Untitled {}", doc.get().id())
             };
-            if i == self.current_doc.get() {
-                text.push_str(" (current)");
-            }
+            // if i == self.current_doc.get() {
+            //     text.push_str(" (current)");
+            // }
             let text = Text::new(&text, if i == current_doc {fg_selected_color} else { fg_color });
             context
                 .gfx
@@ -76,10 +76,27 @@ impl Widget for OpenedEditor {
         _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
-        context.invalidate_when_changed(&self.width);
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
-        Size::new(self.width.get().into_unsigned(), h)
+
+        let longest_item = self
+            .documents
+            .get()
+            .iter()
+            .map(|d| {
+                if let Some(file_name) = d.get().file_name {
+                    file_name.file_name().unwrap().to_string_lossy().to_string()
+                } else {
+                    format!("Untitled {}", d.get().id())
+                }
+            })
+            .max_by_key(|s| s.len())
+            .unwrap_or_default();
+        let text = Text::new(&longest_item, context.get(&components::TextColor));
+        let mtext = context.gfx.measure_text(text);
+
+
+        Size::new(mtext.size.width, h)
     }
 
     fn hit_test(

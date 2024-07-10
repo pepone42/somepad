@@ -23,6 +23,7 @@ use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
 use super::palette::Palette;
 use super::scroll::MyScroll;
+use super::side_bar::SideBar;
 
 #[derive(Debug)]
 pub struct EditorWindow {
@@ -48,10 +49,11 @@ impl EditorWindow {
         });
         h.persist();
         let (editor_tag, editor_id) = WidgetTag::new();
-        let opened_editor = OpenedEditor::new(documents.clone(), current_doc.clone());
-        let w = opened_editor.width.clone();
+        let width = Dynamic::new(Px::new(100));
+        let opened_editor = SideBar::new(OpenedEditor::new(documents.clone(), current_doc.clone()),width.clone());
+        
         let child = MyScroll::vertical(opened_editor).expand_vertically()
-            .and(ResizeHandle::new(w)).and(
+            .and(ResizeHandle::new(width)).and(
                 EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
                     .make_with_tag(editor_tag),
             )

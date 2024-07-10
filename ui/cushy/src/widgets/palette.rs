@@ -57,7 +57,7 @@ impl Palette {
                     Custom::new(MyScroll::horizontal(TextEditor::as_input(input.clone())))
                         .on_mounted(move |c| c.focus()),
                 )
-                .and(MyScroll::vertical(filtered_list.make_with_tag(filter_tag)).expand())
+                .and(MyScroll::vertical(filtered_list.make_with_tag(filter_tag)).with_scrollbars_visible().expand())
                 .into_rows()
                 .width(Lp::new(550))
                 .height(Lp::ZERO..Lp::new(250)),

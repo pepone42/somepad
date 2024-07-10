@@ -155,6 +155,11 @@ impl MyScroll {
         self
     }
 
+    pub fn with_scrollbars_visible(mut self) -> Self {
+        self.show_scrollbars = true;
+        self
+    }
+
     fn show_scrollbars(&mut self, context: &mut EventContext<'_>) {
         let should_hide = self.drag.mouse_buttons_down == 0;
         if should_hide != self.scrollbar_opacity_animation.will_hide
