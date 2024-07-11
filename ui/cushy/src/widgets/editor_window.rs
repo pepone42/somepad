@@ -49,7 +49,8 @@ impl EditorWindow {
         });
         h.persist();
         let (editor_tag, editor_id) = WidgetTag::new();
-        let width = Dynamic::new(Px::new(100));
+        // TODO: Use Lp instead of Px
+        let width = Dynamic::new(Px::new(200));
         let opened_editor = SideBar::new(OpenedEditor::new(documents.clone(), current_doc.clone()),width.clone());
         
         let child = MyScroll::vertical(opened_editor).expand_vertically()

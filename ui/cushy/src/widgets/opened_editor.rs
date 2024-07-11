@@ -1,10 +1,14 @@
 use cushy::{
-    context::EventContext, figures::{
-        units::{Px, UPx}, IntoSigned, IntoUnsigned, Point, Rect, ScreenScale, Size, Zero
-    }, kludgine::{
-        app::winit::event::MouseButton, shapes::Shape, text::Text,
-        DrawableExt,
-    }, styles::components, value::{Destination, Dynamic, Source}, widget::{Widget, HANDLED, IGNORED}, ConstraintLimit
+    context::EventContext,
+    figures::{
+        units::{Px, UPx},
+        IntoSigned, IntoUnsigned, Point, Rect, ScreenScale, Size, Zero,
+    },
+    kludgine::{app::winit::event::MouseButton, shapes::Shape, text::Text, DrawableExt},
+    styles::components,
+    value::{Destination, Dynamic, Source},
+    widget::{Widget, HANDLED, IGNORED},
+    ConstraintLimit,
 };
 use ndoc::Document;
 
@@ -12,6 +16,7 @@ use ndoc::Document;
 pub struct OpenedEditor {
     documents: Dynamic<Vec<Dynamic<Document>>>,
     current_doc: Dynamic<usize>,
+    hovered_idx: Dynamic<Option<usize>>,
     //pub width: Dynamic<Px>,
 }
 
@@ -20,13 +25,14 @@ impl OpenedEditor {
         OpenedEditor {
             documents,
             current_doc,
-            //width: Dynamic::new(Px::new(100)),
+            hovered_idx: Dynamic::new(None),
         }
     }
 }
 
 impl Widget for OpenedEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.redraw_when_changed(&self.hovered_idx);
         let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
         let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
         let fg_selected_color = context.get(&components::DefaultActiveForegroundColor);
@@ -37,34 +43,53 @@ impl Widget for OpenedEditor {
         let size = context.gfx.size();
         let line_height = context.gfx.line_height().into_upx(scale);
         let current_doc = self.current_doc.get();
-        
+
         context.apply_current_font_settings();
         context.fill(bg_color);
         let mut y = Px::ZERO;
         for (i, doc) in self.documents.get().iter().enumerate() {
-
             if i == current_doc {
                 context.gfx.draw_shape(
                     Shape::filled_rect(
-                        Rect::new(Point::new(Px::ZERO, y), Size::new(size.width, line_height).into_signed()),
+                        Rect::new(
+                            Point::new(Px::ZERO, y),
+                            Size::new(size.width, line_height).into_signed(),
+                        ),
                         bg_selected_color,
                     )
                     .translate_by(Point::ZERO),
                 );
             }
 
+            if let Some(idx) = self.hovered_idx.get() {
+                if i == idx {
+                    context.gfx.draw_shape(
+                        Shape::filled_rect(
+                            Rect::new(
+                                Point::new(Px::ZERO, y),
+                                Size::new(size.width, line_height).into_signed(),
+                            ),
+                            bg_hovered_color,
+                        )
+                        .translate_by(Point::ZERO),
+                    );
+                }
+            }
+
+            let txt_color = match (self.hovered_idx.get(), current_doc) {
+                (Some(idx), _) if i == idx => fg_hovered_color,
+                (_, idx) if i == idx => fg_selected_color,
+                _ => fg_color,
+            };
+
             let text = doc.get().title();
-            // if i == self.current_doc.get() {
-            //     text.push_str(" (current)");
-            // }
-            let text = Text::new(&text, if i == current_doc {fg_selected_color} else { fg_color });
+
+            let text = Text::new(&text, txt_color);
             context
                 .gfx
                 .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
             y += line_height.into_signed();
         }
-
-        
     }
 
     fn layout(
@@ -75,18 +100,17 @@ impl Widget for OpenedEditor {
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
 
+        // TODO, this is very wrong, we should be measuring text here
+        // We should also cache the value and/or text layout
         let longest_item = self
             .documents
             .get()
             .iter()
-            .map(|d| {
-                d.get().title()
-            })
+            .map(|d| d.get().title())
             .max_by_key(|s| s.len())
             .unwrap_or_default();
         let text = Text::new(&longest_item, context.get(&components::TextColor));
         let mtext = context.gfx.measure_text(text);
-
 
         Size::new(mtext.size.width, h)
     }
@@ -101,22 +125,46 @@ impl Widget for OpenedEditor {
 
     fn hover(
         &mut self,
-        _location: Point<Px>,
-        _context: &mut cushy::context::EventContext<'_>,
+        location: Point<Px>,
+        context: &mut cushy::context::EventContext<'_>,
     ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
+        let idx = (location.y
+            / context
+                .kludgine
+                .line_height()
+                .into_px(context.kludgine.scale()))
+        .get() as usize;
+        if idx < self.documents.get().len() {
+            self.hovered_idx.replace(Some(idx));
+        } else {
+            self.hovered_idx.replace(None);
+        }
         None
+    }
+    fn unhover(&mut self, _context: &mut EventContext<'_>) {
+        self.hovered_idx.replace(None);
     }
 
     fn mouse_down(
         &mut self,
-        _location: Point<Px>,
+        location: Point<Px>,
         _device_id: cushy::window::DeviceId,
         _button: MouseButton,
-        _context: &mut cushy::context::EventContext<'_>,
+        context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
-        IGNORED
+        let idx = (location.y
+            / context
+                .kludgine
+                .line_height()
+                .into_px(context.kludgine.scale()))
+        .get() as usize;
+        if idx < self.documents.get().len() {
+            self.current_doc.replace(idx);
+            HANDLED
+        } else {
+            IGNORED
+        }
     }
-
 }
 
 #[derive(Debug)]
@@ -133,7 +181,7 @@ impl ResizeHandle {
             width: width.clone(),
             hovered: Dynamic::new(false),
             dragged: Dynamic::new(false),
-            base_width: width.get().into_signed()
+            base_width: width.get().into_signed(),
         }
     }
 }
@@ -196,6 +244,6 @@ impl Widget for ResizeHandle {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut EventContext<'_>,
     ) {
-        *self.width.lock() +=  location.x;
+        *self.width.lock() += location.x;
     }
 }
