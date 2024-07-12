@@ -847,7 +847,7 @@ impl Widget for Gutter {
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_upx(context.gfx.scale())
-            .round();
+            .round() *2;
 
         if context.gfx.scale() != self.scale {
             self.scale = context.gfx.scale();
