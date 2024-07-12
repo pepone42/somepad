@@ -542,7 +542,7 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
         let location = location - padding;
         if !context.enabled() {
             return IGNORED;
@@ -577,7 +577,7 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
         let location = location - padding;
         if button == MouseButton::Left {
             let head = self.location_to_position(location);
@@ -893,7 +893,7 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
         let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
@@ -916,7 +916,7 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
         let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
