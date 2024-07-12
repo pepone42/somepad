@@ -45,6 +45,7 @@ impl Widget for OpenedEditor {
         let current_doc = self.current_doc.get();
 
         context.apply_current_font_settings();
+        
         context.fill(bg_color);
         let mut y = Px::ZERO;
         for (i, doc) in self.documents.get().iter().enumerate() {
@@ -172,7 +173,7 @@ pub struct ResizeHandle {
     width: Dynamic<Px>,
     hovered: Dynamic<bool>,
     dragged: Dynamic<bool>,
-    base_width: Px,
+    clip_rect: Rect<UPx>,
 }
 
 impl ResizeHandle {
@@ -181,13 +182,14 @@ impl ResizeHandle {
             width: width.clone(),
             hovered: Dynamic::new(false),
             dragged: Dynamic::new(false),
-            base_width: width.get().into_signed(),
+            clip_rect: Rect::ZERO,
         }
     }
 }
 
 impl Widget for ResizeHandle {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        self.clip_rect = context.gfx.clip_rect();
         context.redraw_when_changed(&self.hovered);
         context.redraw_when_changed(&self.dragged);
         if self.hovered.get() || self.dragged.get() {
@@ -199,7 +201,7 @@ impl Widget for ResizeHandle {
     fn layout(
         &mut self,
         available_space: Size<ConstraintLimit>,
-        _context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+        context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
         Size::new(UPx::new(5), available_space.height.max())
     }
@@ -225,7 +227,6 @@ impl Widget for ResizeHandle {
         _context: &mut EventContext<'_>,
     ) -> cushy::widget::EventHandling {
         self.dragged.replace(true);
-        self.base_width = self.width.get().into_signed();
         HANDLED
     }
     fn mouse_up(
@@ -244,6 +245,7 @@ impl Widget for ResizeHandle {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut EventContext<'_>,
     ) {
-        *self.width.lock() += location.x;
+
+        *self.width.lock() = self.clip_rect.origin.x.into_signed() + location.x;
     }
 }
