@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use cushy::context::{EventContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
-use cushy::value::{CallbackHandle, Dynamic};
+use cushy::value::{CallbackHandle, Dynamic, MapEachCloned};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
@@ -79,6 +79,7 @@ pub struct TextEditor {
     search_term: Dynamic<Document>,
     search_handle: CallbackHandle,
     highlighted_search_items: Dynamic<Vec<(Position, Position)>>,
+    current_search_item_idx: Dynamic<usize>,
 }
 
 impl TextEditor {
@@ -115,6 +116,7 @@ impl TextEditor {
             search_term: Dynamic::new(Document::default()),
             search_handle: CallbackHandle::default(),
             highlighted_search_items: Dynamic::new(Vec::new()),
+            current_search_item_idx: Dynamic::new(1),
         }
     }
 
@@ -984,11 +986,28 @@ impl CodeEditor {
         let click_info = Dynamic::new(ClickInfo::default());
         let text_editor =
             TextEditor::new(doc.clone(), cmd_reg, click_info).with_search_term(search_term.clone());
-        let nb_searched_item = search_term.with_clone(|search_term| {
-            text_editor
-                .highlighted_search_items
-                .map_each(move |h| if search_term.get().rope.len_chars()>0 { format!("0/{}", h.len()) }else { "".to_string() })
-        });
+
+        let nb_searched_item = (
+            &search_term,
+            &text_editor.current_search_item_idx,
+            &text_editor.highlighted_search_items,
+        )
+            .map_each_cloned(|(s, a, b)| {
+                if b.is_empty() {
+                    "0/0".to_string()
+                } else if s.rope.len_chars() > 0 {
+                    format!("{}/{}", a + 1, b.len())
+                } else {
+                    "".to_string()
+                }
+            });
+
+        let csi_for_button_up = text_editor.current_search_item_idx.clone();
+        let csi_for_button_down = text_editor.current_search_item_idx.clone();
+        let nsi_for_button_up = text_editor.highlighted_search_items.clone();
+        let nsi_for_button_down = text_editor.highlighted_search_items.clone();
+        let search_match = text_editor.highlighted_search_items.map_each(|s| !s.is_empty());
+
         let child = (PassiveScroll::vertical(
             Gutter::new(doc.clone(), scroller.clone(), editor_id),
             scroller.clone(),
@@ -1009,7 +1028,17 @@ impl CodeEditor {
                         .make_with_tag(search_tag)
                         .width(Lp::cm(5)),
                 ))
-                .and(nb_searched_item)
+                .and(nb_searched_item.clone())
+                .and("↑".into_button().on_click(move |_| {
+                    let i = csi_for_button_up.get();
+                    let len = nsi_for_button_up.get().len();
+                    *csi_for_button_up.lock() = (i + len - 1) % len;
+                }).with_enabled(search_match.clone()))
+                .and("↓".into_button().on_click(move |_| {
+                    let i = csi_for_button_down.get();
+                    let len = nsi_for_button_down.get().len();
+                    *csi_for_button_down.lock() = dbg!((i + 1) % len);
+                }).with_enabled(search_match.clone()))
                 .into_columns()
                 .collapse_vertically(show_search_panel.clone()),
         )
