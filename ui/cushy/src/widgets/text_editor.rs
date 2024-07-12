@@ -17,7 +17,7 @@ use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::Color;
+use cushy::styles::{components, Color};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -367,6 +367,13 @@ impl Widget for TextEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.redraw_when_changed(&self.doc);
 
+        if self.kind == TextEditorKind::Input && self.focused.get() {
+            let focus_ring_color = context.get(&components::HighlightColor);
+            let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size);
+            context.gfx.draw_shape(Shape::stroked_rect(
+            clip_rect,focus_ring_color).translate_by(Point::ZERO));
+        }
+
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
         let last_line =
             first_line + (context.gfx.clip_rect().size.height.into_signed() / self.line_height) + 2;
@@ -475,6 +482,9 @@ impl Widget for TextEditor {
             //     Size::new(Px::new(35), self.line_height + 20),
             // ),Color::WHITE).translate_by(Point::ZERO));
         }
+        context.gfx.reset_text_attributes();
+        let font_size = context.get(&components::TextSize);
+        context.gfx.set_font_size(font_size);
     }
 
     fn layout(
@@ -497,6 +507,9 @@ impl Widget for TextEditor {
             context.gfx.size().into_signed(),
         ));
 
+        context.gfx.reset_text_attributes();
+        let font_size = context.get(&components::TextSize);
+        context.gfx.set_font_size(font_size);
         Size::new(UPx::new(10000), UPx::new(height.ceil() as _))
     }
 
@@ -828,8 +841,14 @@ impl Widget for Gutter {
 
         context.gfx.set_text_attributes(attrs);
 
+        
+
         let mesured_text = context.gfx.measure_text::<UPx>(&format!(" {} ",self.doc.get().rope.len_lines()));
         let width = mesured_text.size.width;
+
+        context.gfx.reset_text_attributes();
+        let font_size = context.get(&components::TextSize);
+        context.gfx.set_font_size(font_size);
 
         Size::new(width, UPx::new(height.ceil() as _))
     }
@@ -922,11 +941,11 @@ impl CodeEditor {
         .gutter(Px::new(1)))
         .expand_vertically()
         .and(
-            MyScroll::horizontal(
+            "Search: ".and(MyScroll::horizontal(
                 TextEditor::as_input(search_term.clone())
                     .make_with_tag(search_tag)
                     .width(Lp::cm(5)),
-            )
+            )).into_columns()
             .collapse_vertically(show_search_panel.clone()),
         )
         .into_rows();
