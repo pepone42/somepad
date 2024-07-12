@@ -4,10 +4,13 @@ use std::time::{Duration, Instant};
 use cushy::context::{EventContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
-use cushy::value::Dynamic;
+use cushy::value::{CallbackHandle, Dynamic};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
-use cushy::figures::{Abs, FloatConversion, Fraction, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero};
+use cushy::figures::{
+    Abs, FloatConversion, Fraction, IntoSigned, IntoUnsigned, Point, Rect, Round, ScreenScale,
+    Size, Zero,
+};
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
@@ -29,7 +32,7 @@ use scroll::ScrollController;
 use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{CommandsRegistry, FONT_SYSTEM};
 
-use super::scroll::{self, ContextScroller, MyScroll};
+use super::scroll::{self, ContextScroller, MyScroll, PassiveScroll};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ClickInfo {
@@ -73,6 +76,9 @@ pub struct TextEditor {
     click_info: Dynamic<ClickInfo>,
     focused: Dynamic<bool>,
     kind: TextEditorKind,
+    search_term: Dynamic<Document>,
+    search_handle: CallbackHandle,
+    highlighted_search_items: Dynamic<Vec<(Position,Position)>>
 }
 
 impl TextEditor {
@@ -81,22 +87,19 @@ impl TextEditor {
         cmd_reg: Dynamic<CommandsRegistry>,
         click_info: Dynamic<ClickInfo>,
     ) -> Self {
-        Self {
-            doc,
-            viewport: Dynamic::new(Rect::default()),
-            font_metrics: Default::default(),
-            font_size: Px::ZERO,
-            line_height: Px::ZERO,
-            scale: Fraction::ZERO,
-            cmd_reg,
-            eol_width: Px::ZERO,
-            click_info,
-            focused: Dynamic::new(false),
-            kind: TextEditorKind::Code,
-        }
+        let mut editor = TextEditor::create(doc);
+        editor.cmd_reg = cmd_reg;
+        editor.click_info = click_info;
+        editor
     }
 
     pub fn as_input(doc: Dynamic<ndoc::Document>) -> Self {
+        let mut editor = TextEditor::create(doc);
+        editor.kind = TextEditorKind::Input;
+        editor
+    }
+
+    fn create(doc: Dynamic<Document>) -> Self {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
@@ -108,8 +111,28 @@ impl TextEditor {
             eol_width: Px::ZERO,
             click_info: Dynamic::new(ClickInfo::default()),
             focused: Dynamic::new(false),
-            kind: TextEditorKind::Input,
+            kind: TextEditorKind::Code,
+            search_term: Dynamic::new(Document::default()),
+            search_handle: CallbackHandle::default(),
+            highlighted_search_items: Dynamic::new(Vec::new())
         }
+    }
+
+    pub fn with_search_term(mut self, search_term: Dynamic<Document>) -> Self {
+        self.search_term = search_term;
+        self.highlighted_search_items = self.doc.with_clone(|doc| {
+            self.search_term.map_each(move|search_term| {
+                let mut items = Vec::new();
+                let mut idx = Position::new(0, 0);
+                let search_term = search_term.rope.to_string();
+                while let Some(i) = doc.get().find_from(&search_term, idx) {
+                    items.push(i);
+                    idx = i.1;
+                }
+                items
+            })
+        });
+        self
     }
 
     fn px_to_col(&self, line: usize, x: Px) -> usize {
@@ -188,8 +211,7 @@ impl TextEditor {
     }
 
     fn layout_line(&self, line_idx: usize) -> Buffer {
-        let raw_text = self.doc.get().get_visible_line(line_idx)
-                .to_string();
+        let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
         let attrs = if self.kind == TextEditorKind::Code {
             Attrs::new().family(Family::Monospace)
@@ -243,12 +265,12 @@ impl TextEditor {
 
     fn get_selection_shape(
         &self,
-        selection: Selection,
+        range: Selection,
         layouts: &HashMap<usize, Buffer>,
     ) -> Option<Path<Px, false>> {
         let rope = &self.doc.get().rope;
 
-        let rects = selection
+        let rects = range
             .areas(rope)
             .iter()
             .filter_map(|a| (layouts.contains_key(&a.line).then_some(*a)))
@@ -304,6 +326,13 @@ impl TextEditor {
             .collect()
     }
 
+    fn get_search_item_shapes(&self, layouts: &HashMap<usize, Buffer>) -> Vec<Path<Px, false>> {
+        self.highlighted_search_items.get().iter().filter_map(|s| {
+            let range = Selection::new(s.0, s.1, false);
+            self.get_selection_shape(range, layouts)
+        }).collect()
+    }
+
     fn location_to_position(&self, location: Point<Px>) -> ndoc::Position {
         let line = ((self.viewport.get().origin.y + location.y) / self.line_height)
             .floor()
@@ -329,20 +358,18 @@ impl TextEditor {
 impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
+
+        self.search_handle = self.doc.with_clone(|doc| self.search_term.for_each(|search_term| {
+           //TODO search
+           dbg!("searching",search_term.rope.to_string());
+        }));
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.redraw_when_changed(&self.doc);
 
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
-        let last_line = first_line
-            + (context
-                .gfx
-                .clip_rect()
-                .size
-                .height
-                .into_signed()
-                / self.line_height)
-            + 2;
+        let last_line =
+            first_line + (context.gfx.clip_rect().size.height.into_signed() / self.line_height) + 2;
 
         let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
@@ -368,6 +395,20 @@ impl Widget for TextEditor {
 
         // draw selections
         for path in self.get_selections_shapes(&buffers) {
+            let bg_color = context.get(&SelectionBackgroundColor);
+            let border_color = context.get(&SelectionBorderColor);
+
+            context
+                .gfx
+                .draw_shape(path.fill(bg_color).translate_by(Point::ZERO));
+            context.gfx.draw_shape(
+                path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
+                    .translate_by(Point::ZERO),
+            );
+        }
+
+        // draw search items
+        for path in self.get_search_item_shapes(&buffers) {
             let bg_color = context.get(&SelectionBackgroundColor);
             let border_color = context.get(&SelectionBorderColor);
 
@@ -588,7 +629,6 @@ impl Widget for TextEditor {
                     } else {
                         return IGNORED;
                     }
-                    
                 }
                 Key::Named(NamedKey::Backspace) => {
                     self.doc.lock().backspace();
@@ -741,16 +781,9 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        let first_line = (-self.scroller.get().scroll().y / self.font_metrics.line_height) - 1;
-        let last_line = first_line
-            + (context
-                .gfx
-                .clip_rect()
-                .size
-                .height
-                .into_signed()
-                / self.font_metrics.line_height)
-            + 1;
+        let first_line = (-context.gfx.translation().y / self.line_height) - 1;
+        let last_line =
+            first_line + (context.gfx.clip_rect().size.height.into_signed() / self.line_height) + 2;
 
         let first_line = first_line.get().max(0) as usize;
         let last_line = (last_line.get() as usize).min(self.doc.get().rope.len_lines());
@@ -762,8 +795,7 @@ impl Widget for Gutter {
         context.fill(context.get(&BackgroundColor));
 
         for i in first_line..last_line {
-            let y = self.scroller.get().scroll().y
-                + (units::Px::new(i as _) * self.font_metrics.line_height);
+            let y = (units::Px::new(i as _) * self.font_metrics.line_height);
 
             let attrs = Attrs::new().family(Family::Monospace);
 
@@ -787,9 +819,11 @@ impl Widget for Gutter {
             self.font_metrics =
                 Metrics::new(self.font_size.into_float(), self.line_height.into_float());
         }
+        let height = self.doc.get().rope.len_lines() as f32 * self.font_metrics.line_height;
+
         // I don't understand why the +1 is needed. Without it, the gutter is too short by 1pixel vs the text editor
         // But if I add it, the layout/redraw of the gutter/texteditor is called in a loop
-        Size::new(UPx::new(50), available_space.height.max())
+        Size::new(UPx::new(50), UPx::new(height.ceil() as _))
     }
     fn full_control_redraw(&self) -> bool {
         true
@@ -813,9 +847,7 @@ impl Widget for Gutter {
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
 
-            let line = ((-self.scroller.get().scroll().y + location.y) / editor.line_height)
-                .floor()
-                .get();
+            let line = (location.y / editor.line_height).floor().get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor.doc.lock().select_line(line);
@@ -835,9 +867,7 @@ impl Widget for Gutter {
             let c = context.for_other(&self.editor_id).unwrap();
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
-            let line = ((-self.scroller.get().scroll().y + location.y) / editor.line_height)
-                .floor()
-                .get();
+            let line = (location.y / editor.line_height).floor().get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor
@@ -853,29 +883,52 @@ impl Widget for Gutter {
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
     scroll_id: WidgetId,
+    search_id: WidgetId,
+    editor_id: WidgetId,
+    search_term: Dynamic<Document>,
+    collapse_search_panel: Dynamic<bool>,
 }
 
 impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
+        let search_term = Dynamic::new(Document::default());
+        let show_search_panel: Dynamic<bool> = Dynamic::new(true);
         let (scroll_tag, scroll_id) = WidgetTag::new();
-        let (editor_tag, etidor_id) = WidgetTag::new();
+        let (editor_tag, editor_id) = WidgetTag::new();
+        let (search_tag, search_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
-        let child = Gutter::new(doc.clone(), scroller.clone(), etidor_id)
-            .and(
-                MyScroll::new(
-                    TextEditor::new(doc.clone(), cmd_reg, click_info)
-                        .make_with_tag(editor_tag),
-                ).with_controller(scroller.clone())
-                .make_with_tag(scroll_tag) 
-                .expand(),
+        let child = (PassiveScroll::vertical(
+            Gutter::new(doc.clone(), scroller.clone(), editor_id),
+            scroller.clone(),
+        )
+        .and(
+            MyScroll::new(
+                TextEditor::new(doc.clone(), cmd_reg, click_info).with_search_term(search_term.clone()).make_with_tag(editor_tag),
             )
-            .into_columns()
-            .gutter(Px::new(1))
-            ;
+            .with_controller(scroller.clone())
+            .make_with_tag(scroll_tag)
+            .expand(),
+        )
+        .into_columns()
+        .gutter(Px::new(1)))
+        .expand_vertically()
+        .and(
+            MyScroll::horizontal(
+                TextEditor::as_input(search_term.clone())
+                    .make_with_tag(search_tag)
+                    .width(Lp::cm(5)),
+            )
+            .collapse_vertically(show_search_panel.clone()),
+        )
+        .into_rows();
         Self {
             child: child.widget_ref(),
             scroll_id,
+            editor_id,
+            search_id,
+            search_term,
+            collapse_search_panel: show_search_panel,
         }
     }
 }
@@ -892,19 +945,38 @@ impl WrapperWidget for CodeEditor {
         true
     }
 
-    fn mouse_wheel(
+    fn keyboard_input(
         &mut self,
         device_id: cushy::window::DeviceId,
-        delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
-        phase: cushy::kludgine::app::winit::event::TouchPhase,
-        context: &mut cushy::context::EventContext<'_>,
+        input: cushy::window::KeyEvent,
+        is_synthetic: bool,
+        context: &mut EventContext<'_>,
     ) -> EventHandling {
-        context
-            .for_other(&self.scroll_id)
-            .unwrap()
-            .mouse_wheel(device_id, delta, phase);
+        if input.state == ElementState::Pressed && matches!(input.logical_key, Key::Named(NamedKey::F3)) {
+            self.collapse_search_panel.toggle();
+            if self.collapse_search_panel.get() {
+                context.for_other(&self.editor_id).unwrap().focus();
+            } else {
+                context.for_other(&self.search_id).unwrap().focus();
+            }
+            return HANDLED;
+        }
         IGNORED
     }
+
+    // fn mouse_wheel(
+    //     &mut self,
+    //     device_id: cushy::window::DeviceId,
+    //     delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
+    //     phase: cushy::kludgine::app::winit::event::TouchPhase,
+    //     context: &mut cushy::context::EventContext<'_>,
+    // ) -> EventHandling {
+    //     context
+    //         .for_other(&self.scroll_id)
+    //         .unwrap()
+    //         .mouse_wheel(device_id, delta, phase);
+    //     IGNORED
+    // }
 }
 
 define_components! {

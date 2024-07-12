@@ -15,7 +15,9 @@ use cushy::animation::{AnimationHandle, AnimationTarget, IntoAnimate, Spawn, Zer
 use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Dynamic, Source};
-use cushy::widget::{EventHandling, MakeWidget, Widget, WidgetRef, HANDLED, IGNORED};
+use cushy::widget::{
+    EventHandling, MakeWidget, Widget, WidgetRef, WrapperWidget, HANDLED, IGNORED,
+};
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::window::DeviceId;
 use cushy::ConstraintLimit;
@@ -103,10 +105,7 @@ struct OpacityAnimationState {
 
 impl MyScroll {
     /// Returns a new scroll widget containing `contents`.
-    fn construct(
-        contents: impl MakeWidget,
-        enabled: Point<bool>,
-    ) -> Self {
+    fn construct(contents: impl MakeWidget, enabled: Point<bool>) -> Self {
         Self {
             contents: WidgetRef::new(contents),
             enabled,
@@ -136,17 +135,13 @@ impl MyScroll {
     /// Returns a new scroll widget that allows scrolling `contents`
     /// horizontally.
     #[allow(dead_code)]
-    pub fn horizontal(
-        contents: impl MakeWidget
-    ) -> Self {
+    pub fn horizontal(contents: impl MakeWidget) -> Self {
         Self::construct(contents, Point::new(true, false))
     }
 
     /// Returns a new scroll widget that allows scrolling `contents` vertically.
     #[allow(dead_code)]
-    pub fn vertical(
-        contents: impl MakeWidget
-    ) -> Self {
+    pub fn vertical(contents: impl MakeWidget) -> Self {
         Self::construct(contents, Point::new(false, true))
     }
 
@@ -594,6 +589,179 @@ fn scrollbar_region(scroll: Px, content_size: Px, control_size: Px) -> Scrollbar
         }
     } else {
         ScrollbarInfo::default()
+    }
+}
+
+#[derive(Debug)]
+pub struct PassiveScroll {
+    child: WidgetRef,
+    controller: Dynamic<ScrollController>,
+    enabled: Point<bool>,
+    line_height: Px,
+}
+
+impl PassiveScroll {
+    pub fn new(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+        Self {
+            child: child.make_widget().widget_ref(),
+            controller,
+            enabled: Point::new(true, true),
+            line_height: Px::default(),
+        }
+    }
+    pub fn vertical(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+        Self {
+            child: child.make_widget().widget_ref(),
+            controller,
+            enabled: Point::new(false, true),
+            line_height: Px::default(),
+        }
+    }
+    pub fn horizontal(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+        Self {
+            child: child.make_widget().widget_ref(),
+            controller,
+            enabled: Point::new(true, false),
+            line_height: Px::default(),
+        }
+    }
+}
+
+impl Widget for PassiveScroll {
+    fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let managed = self.child.mounted(&mut context.as_event_context());
+
+        context.for_other(&managed).redraw();
+    }
+    fn layout(
+        &mut self,
+        available_space: Size<ConstraintLimit>,
+        context: &mut LayoutContext<'_, '_, '_, '_>,
+    ) -> Size<UPx> {
+        self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
+        let (mut scroll, current_max_scroll) = self.controller.get().constrain_scroll();
+
+        let max_extents = Size::new(
+            if self.enabled.x {
+                ConstraintLimit::SizeToFit(UPx::MAX)
+            } else {
+                available_space.width
+            },
+            if self.enabled.y {
+                ConstraintLimit::SizeToFit(UPx::MAX)
+            } else {
+                available_space.height
+            },
+        );
+        let managed = self.child.mounted(&mut context.as_event_context());
+        let new_content_size = context
+            .for_other(&managed)
+            .layout(max_extents)
+            .into_signed();
+
+        let layout_size = Size::new(
+            if self.enabled.x {
+                constrain_child(available_space.width, new_content_size.width)
+            } else {
+                new_content_size.width.into_unsigned()
+            },
+            if self.enabled.y {
+                constrain_child(available_space.height, new_content_size.height)
+            } else {
+                new_content_size.height.into_unsigned()
+            },
+        );
+        let control_size = layout_size.into_signed();
+
+        // self.horizontal_bar =
+        //     scrollbar_region(scroll.x, new_content_size.width, control_size.width);
+        // let max_scroll_x = if self.enabled.x {
+        //     -self.horizontal_bar.amount_hidden
+        // } else {
+        //     Px::ZERO
+        // };
+
+        // self.vertical_bar =
+        //     scrollbar_region(scroll.y, new_content_size.height, control_size.height);
+        // let max_scroll_y = if self.enabled.y {
+        //     -self.vertical_bar.amount_hidden
+        // } else {
+        //     Px::ZERO
+        // };
+        // let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
+        // if current_max_scroll != new_max_scroll {
+        //     self.controller.lock().max_scroll = new_max_scroll;
+        //     scroll = scroll.max(new_max_scroll);
+        // }
+
+        // // Preserve the current scroll if the widget has resized
+        // if self.content_size.width != new_content_size.width
+        //     || self.controller.get().control_size.width != control_size.width
+        // {
+        //     self.content_size.width = new_content_size.width;
+        //     let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
+        //     scroll.x = max_scroll_x * scroll_pct;
+        // }
+
+        // if self.content_size.height != new_content_size.height
+        //     || self.controller.get().control_size.height != control_size.height
+        // {
+        //     self.content_size.height = new_content_size.height;
+        //     let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
+        //     scroll.y = max_scroll_y * scroll_pct;
+        // }
+        // Set the current scroll, but prevent immediately triggering
+        // invalidate.
+        {
+            let mut controller = self.controller.lock();
+            controller.prevent_notifications();
+            controller.scroll = scroll;
+            controller.control_size = control_size;
+        }
+        context.invalidate_when_changed(&self.controller);
+
+        // self.content_size = new_content_size;
+
+        // Round the scroll to the nearest pixel to prevent text artefacts
+        scroll.y = scroll.y.ceil();
+        scroll.x = scroll.x.ceil();
+
+        let region = Rect::new(
+            scroll,
+            new_content_size.min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
+        );
+        context.set_child_layout(&managed, region);
+
+        layout_size
+    }
+
+    fn mouse_wheel(
+        &mut self,
+        _device_id: DeviceId,
+        delta: MouseScrollDelta,
+        _phase: TouchPhase,
+        context: &mut EventContext<'_>,
+    ) -> EventHandling {
+        let amount = match delta {
+            MouseScrollDelta::LineDelta(x, y) => Point::new(x, y) * self.line_height.into_float(),
+            MouseScrollDelta::PixelDelta(px) => Point::new(px.x.cast(), px.y.cast()),
+        };
+        let mut controller = self.controller.lock();
+        let old_scroll = controller.scroll;
+        let new_scroll = ScrollController::constrained_scroll(
+            controller.scroll + amount.cast::<Px>(),
+            controller.max_scroll,
+        );
+        if old_scroll == new_scroll {
+            IGNORED
+        } else {
+            controller.scroll = new_scroll;
+            drop(controller);
+
+            context.set_needs_redraw();
+
+            HANDLED
+        }
     }
 }
 

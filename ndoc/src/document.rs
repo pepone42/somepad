@@ -444,6 +444,23 @@ impl Document {
         Ok(())
     }
 
+    pub fn find_from(&self, input: &str, position: Position) -> Option<(Position,Position)> {
+        if input.is_empty() {
+            return None;
+        }
+
+        let char_idx = self.position_to_char(position);
+
+        for i in char_idx .. self.rope.len_chars() {
+            let doc = self.rope.slice(i..).chars();
+            let search = input.chars();
+            if search.zip(doc).all(|(ic, c)| ic == c) {
+                return Some((self.char_to_position(i), self.char_to_position(i + input.len())));
+            }
+        }
+        None
+    }
+
     fn insert_at_position(&mut self, input: Action, start: Position, end: Position) {
         let start = self.position_to_char(start);
         let end = self.position_to_char(end);
@@ -1415,12 +1432,32 @@ fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
 mod test {
     use ropey::Rope;
 
-    use crate::rope_utils::char_to_grapheme;
+    use crate::{rope_utils::char_to_grapheme, Document};
 
     #[test]
     fn test_char_to_grapheme() {
         let rope = Rope::from("  Diamonds:         ⋄ ᛜ ⌔ ◇ ⟐ ◈ ◆   ◊");
         let column = char_to_grapheme(&rope.slice(..), 27);
         assert_eq!(column, 27);
+    }
+
+    #[test]
+    fn find_from() {
+        let mut doc = Document::default();
+        doc.insert("hello world \n hell \n hello");
+        let s = "hello";
+        let idx = doc.find_from(s, doc.char_to_position(0)).unwrap();
+        assert_eq!(idx, (doc.char_to_position(0),doc.char_to_position(5)));
+        let idx = doc.find_from(s, idx.1).unwrap();
+        assert_eq!(idx, (doc.char_to_position(21),doc.char_to_position(26)));
+    }
+
+    #[test]
+    fn find_from_no_match() {
+        let mut doc = Document::default();
+        doc.insert("hello world \n hell \n hello");
+        let s = "wrold";
+        let idx = doc.find_from(s, doc.char_to_position(0));
+        assert_eq!(idx, None);
     }
 }
