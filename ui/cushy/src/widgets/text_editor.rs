@@ -365,11 +365,16 @@ impl Widget for TextEditor {
         }));
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let padding = context
+        .get(&components::IntrinsicPadding)
+        .into_px(context.gfx.scale())
+        .round();
+
         context.redraw_when_changed(&self.doc);
 
         if self.kind == TextEditorKind::Input && self.focused.get() {
             let focus_ring_color = context.get(&components::HighlightColor);
-            let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size);
+            let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size).into_signed();
             context.gfx.draw_shape(Shape::stroked_rect(
             clip_rect,focus_ring_color).translate_by(Point::ZERO));
         }
@@ -407,10 +412,10 @@ impl Widget for TextEditor {
 
             context
                 .gfx
-                .draw_shape(path.fill(bg_color).translate_by(Point::ZERO));
+                .draw_shape(path.fill(bg_color).translate_by(Point::new(padding, padding)));
             context.gfx.draw_shape(
                 path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
-                    .translate_by(Point::ZERO),
+                    .translate_by(Point::new(padding, padding)),
             );
         }
 
@@ -421,10 +426,10 @@ impl Widget for TextEditor {
 
             context
                 .gfx
-                .draw_shape(path.fill(bg_color).translate_by(Point::ZERO));
+                .draw_shape(path.fill(bg_color).translate_by(Point::new(padding, padding)));
             context.gfx.draw_shape(
                 path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
-                    .translate_by(Point::ZERO),
+                    .translate_by(Point::new(padding, padding)),
             );
         }
 
@@ -439,7 +444,7 @@ impl Widget for TextEditor {
                         rotation: None,
                         scale: None,
                     }
-                    .translate_by(Point::new(Px::ZERO, y)),
+                    .translate_by(Point::new(padding, y+ padding)),
                     Color::WHITE,
                     cushy::kludgine::text::TextOrigin::TopLeft,
                 );
@@ -463,8 +468,8 @@ impl Widget for TextEditor {
                     Color::WHITE,
                 )
                 .translate_by(Point::new(
-                    head,
-                    Px::new(s.head.line as i32) * self.line_height,
+                    head + padding,
+                    Px::new(s.head.line as i32) * self.line_height + padding,
                 )),
             );
 
@@ -492,6 +497,11 @@ impl Widget for TextEditor {
         _available_space: Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
+        let padding = context
+        .get(&components::IntrinsicPadding)
+        .into_upx(context.gfx.scale())
+        .round() * 2 ;
+
         if context.gfx.scale() != self.scale {
             self.scale = context.gfx.scale();
             self.line_height = context.get(&LineHeight).into_px(context.gfx.scale()).ceil();
@@ -510,7 +520,7 @@ impl Widget for TextEditor {
         context.gfx.reset_text_attributes();
         let font_size = context.get(&components::TextSize);
         context.gfx.set_font_size(font_size);
-        Size::new(UPx::new(10000), UPx::new(height.ceil() as _))
+        Size::new(UPx::new(10000) + padding, UPx::new(height.ceil() as _) + padding)
     }
 
     fn accept_focus(&mut self, _context: &mut cushy::context::EventContext<'_>) -> bool {
@@ -532,6 +542,8 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let location = location - padding;
         if !context.enabled() {
             return IGNORED;
         }
@@ -565,6 +577,8 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let location = location - padding;
         if button == MouseButton::Left {
             let head = self.location_to_position(location);
             match self.click_info.get().count {
@@ -794,6 +808,11 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let padding = context
+        .get(&components::IntrinsicPadding)
+        .into_px(context.gfx.scale())
+        .round();
+
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
         let last_line =
             first_line + (context.gfx.clip_rect().size.height.into_signed() / self.line_height) + 2;
@@ -815,8 +834,8 @@ impl Widget for Gutter {
             context.gfx.set_text_attributes(attrs);
 
             context.gfx.draw_text(
-                Text::new(&format!(" {} ", i + 1), Color::WHITE)
-                    .translate_by(Point::new(Px::ZERO, y)),
+                Text::new(&format!("{}", i + 1), Color::WHITE)
+                    .translate_by(Point::new(Px::ZERO + padding, y + padding)),
             );
         }
     }
@@ -825,6 +844,11 @@ impl Widget for Gutter {
         available_space: Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_upx(context.gfx.scale())
+            .round();
+
         if context.gfx.scale() != self.scale {
             self.scale = context.gfx.scale();
             self.line_height = context.get(&LineHeight).into_px(context.gfx.scale()).ceil();
@@ -843,14 +867,14 @@ impl Widget for Gutter {
 
         
 
-        let mesured_text = context.gfx.measure_text::<UPx>(&format!(" {} ",self.doc.get().rope.len_lines()));
+        let mesured_text = context.gfx.measure_text::<UPx>(&format!("{}",self.doc.get().rope.len_lines() + 1));
         let width = mesured_text.size.width;
 
         context.gfx.reset_text_attributes();
         let font_size = context.get(&components::TextSize);
         context.gfx.set_font_size(font_size);
 
-        Size::new(width, UPx::new(height.ceil() as _))
+        Size::new(width + padding, UPx::new(height.ceil().into_signed() as _) + padding)
     }
     fn full_control_redraw(&self) -> bool {
         true
@@ -869,6 +893,8 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
             let guard = c.widget().lock();
@@ -890,6 +916,8 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
+        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale());
+        let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
             let guard = c.widget().lock();

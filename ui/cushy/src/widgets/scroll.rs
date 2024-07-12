@@ -726,6 +726,11 @@ impl Widget for PassiveScroll {
         scroll.y = scroll.y.ceil();
         scroll.x = scroll.x.ceil();
 
+        if self.enabled.y {
+            scroll.x = Px::ZERO;
+        } else if self.enabled.x {
+            scroll.y = Px::ZERO;
+        }
         let region = Rect::new(
             scroll,
             new_content_size.min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
