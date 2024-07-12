@@ -821,9 +821,17 @@ impl Widget for Gutter {
         }
         let height = self.doc.get().rope.len_lines() as f32 * self.font_metrics.line_height;
 
-        // I don't understand why the +1 is needed. Without it, the gutter is too short by 1pixel vs the text editor
-        // But if I add it, the layout/redraw of the gutter/texteditor is called in a loop
-        Size::new(UPx::new(50), UPx::new(height.ceil() as _))
+        context
+            .gfx
+            .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
+        let attrs = Attrs::new().family(Family::Monospace);
+
+        context.gfx.set_text_attributes(attrs);
+
+        let mesured_text = context.gfx.measure_text::<UPx>(&format!(" {} ",self.doc.get().rope.len_lines()));
+        let width = mesured_text.size.width;
+
+        Size::new(width, UPx::new(height.ceil() as _))
     }
     fn full_control_redraw(&self) -> bool {
         true
