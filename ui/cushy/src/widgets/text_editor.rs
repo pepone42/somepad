@@ -78,7 +78,7 @@ pub struct TextEditor {
     kind: TextEditorKind,
     search_term: Dynamic<Document>,
     search_handle: CallbackHandle,
-    highlighted_search_items: Dynamic<Vec<(Position,Position)>>
+    highlighted_search_items: Dynamic<Vec<(Position, Position)>>,
 }
 
 impl TextEditor {
@@ -114,14 +114,14 @@ impl TextEditor {
             kind: TextEditorKind::Code,
             search_term: Dynamic::new(Document::default()),
             search_handle: CallbackHandle::default(),
-            highlighted_search_items: Dynamic::new(Vec::new())
+            highlighted_search_items: Dynamic::new(Vec::new()),
         }
     }
 
     pub fn with_search_term(mut self, search_term: Dynamic<Document>) -> Self {
         self.search_term = search_term;
         self.highlighted_search_items = self.doc.with_clone(|doc| {
-            self.search_term.map_each(move|search_term| {
+            self.search_term.map_each(move |search_term| {
                 let mut items = Vec::new();
                 let mut idx = Position::new(0, 0);
                 let search_term = search_term.rope.to_string();
@@ -327,10 +327,14 @@ impl TextEditor {
     }
 
     fn get_search_item_shapes(&self, layouts: &HashMap<usize, Buffer>) -> Vec<Path<Px, false>> {
-        self.highlighted_search_items.get().iter().filter_map(|s| {
-            let range = Selection::new(s.0, s.1, false);
-            self.get_selection_shape(range, layouts)
-        }).collect()
+        self.highlighted_search_items
+            .get()
+            .iter()
+            .filter_map(|s| {
+                let range = Selection::new(s.0, s.1, false);
+                self.get_selection_shape(range, layouts)
+            })
+            .collect()
     }
 
     fn location_to_position(&self, location: Point<Px>) -> ndoc::Position {
@@ -359,24 +363,27 @@ impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
 
-        self.search_handle = self.doc.with_clone(|doc| self.search_term.for_each(|search_term| {
-           //TODO search
-           dbg!("searching",search_term.rope.to_string());
-        }));
+        self.search_handle = self.doc.with_clone(|doc| {
+            self.search_term.for_each(|search_term| {
+                //TODO search
+                dbg!("searching", search_term.rope.to_string());
+            })
+        });
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let padding = context
-        .get(&components::IntrinsicPadding)
-        .into_px(context.gfx.scale())
-        .round();
+            .get(&components::IntrinsicPadding)
+            .into_px(context.gfx.scale())
+            .round();
 
         context.redraw_when_changed(&self.doc);
 
         if self.kind == TextEditorKind::Input && self.focused.get() {
             let focus_ring_color = context.get(&components::HighlightColor);
             let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size).into_signed();
-            context.gfx.draw_shape(Shape::stroked_rect(
-            clip_rect,focus_ring_color).translate_by(Point::ZERO));
+            context.gfx.draw_shape(
+                Shape::stroked_rect(clip_rect, focus_ring_color).translate_by(Point::ZERO),
+            );
         }
 
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
@@ -410,9 +417,10 @@ impl Widget for TextEditor {
             let bg_color = context.get(&SelectionBackgroundColor);
             let border_color = context.get(&SelectionBorderColor);
 
-            context
-                .gfx
-                .draw_shape(path.fill(bg_color).translate_by(Point::new(padding, padding)));
+            context.gfx.draw_shape(
+                path.fill(bg_color)
+                    .translate_by(Point::new(padding, padding)),
+            );
             context.gfx.draw_shape(
                 path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
                     .translate_by(Point::new(padding, padding)),
@@ -424,9 +432,10 @@ impl Widget for TextEditor {
             let bg_color = context.get(&SelectionBackgroundColor);
             let border_color = context.get(&SelectionBorderColor);
 
-            context
-                .gfx
-                .draw_shape(path.fill(bg_color).translate_by(Point::new(padding, padding)));
+            context.gfx.draw_shape(
+                path.fill(bg_color)
+                    .translate_by(Point::new(padding, padding)),
+            );
             context.gfx.draw_shape(
                 path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
                     .translate_by(Point::new(padding, padding)),
@@ -444,7 +453,7 @@ impl Widget for TextEditor {
                         rotation: None,
                         scale: None,
                     }
-                    .translate_by(Point::new(padding, y+ padding)),
+                    .translate_by(Point::new(padding, y + padding)),
                     Color::WHITE,
                     cushy::kludgine::text::TextOrigin::TopLeft,
                 );
@@ -498,9 +507,10 @@ impl Widget for TextEditor {
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
         let padding = context
-        .get(&components::IntrinsicPadding)
-        .into_upx(context.gfx.scale())
-        .round() * 2 ;
+            .get(&components::IntrinsicPadding)
+            .into_upx(context.gfx.scale())
+            .round()
+            * 2;
 
         if context.gfx.scale() != self.scale {
             self.scale = context.gfx.scale();
@@ -520,7 +530,10 @@ impl Widget for TextEditor {
         context.gfx.reset_text_attributes();
         let font_size = context.get(&components::TextSize);
         context.gfx.set_font_size(font_size);
-        Size::new(UPx::new(10000) + padding, UPx::new(height.ceil() as _) + padding)
+        Size::new(
+            UPx::new(10000) + padding,
+            UPx::new(height.ceil() as _) + padding,
+        )
     }
 
     fn accept_focus(&mut self, _context: &mut cushy::context::EventContext<'_>) -> bool {
@@ -542,7 +555,10 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
         let location = location - padding;
         if !context.enabled() {
             return IGNORED;
@@ -577,7 +593,10 @@ impl Widget for TextEditor {
         button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
         let location = location - padding;
         if button == MouseButton::Left {
             let head = self.location_to_position(location);
@@ -809,9 +828,9 @@ impl Gutter {
 impl Widget for Gutter {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let padding = context
-        .get(&components::IntrinsicPadding)
-        .into_px(context.gfx.scale())
-        .round();
+            .get(&components::IntrinsicPadding)
+            .into_px(context.gfx.scale())
+            .round();
 
         let first_line = (-context.gfx.translation().y / self.line_height) - 1;
         let last_line =
@@ -847,7 +866,8 @@ impl Widget for Gutter {
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_upx(context.gfx.scale())
-            .round() *2;
+            .round()
+            * 2;
 
         if context.gfx.scale() != self.scale {
             self.scale = context.gfx.scale();
@@ -865,16 +885,19 @@ impl Widget for Gutter {
 
         context.gfx.set_text_attributes(attrs);
 
-        
-
-        let mesured_text = context.gfx.measure_text::<UPx>(&format!("{}",self.doc.get().rope.len_lines() + 1));
+        let mesured_text = context
+            .gfx
+            .measure_text::<UPx>(&format!("{}", self.doc.get().rope.len_lines() + 1));
         let width = mesured_text.size.width;
 
         context.gfx.reset_text_attributes();
         let font_size = context.get(&components::TextSize);
         context.gfx.set_font_size(font_size);
 
-        Size::new(width + padding, UPx::new(height.ceil().into_signed() as _) + padding)
+        Size::new(
+            width + padding,
+            UPx::new(height.ceil().into_signed() as _) + padding,
+        )
     }
     fn full_control_redraw(&self) -> bool {
         true
@@ -893,7 +916,10 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
         let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
@@ -916,7 +942,10 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
-        let padding = context.get(&components::IntrinsicPadding).into_px(context.kludgine.scale()).round();
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
         let location = location - padding;
         if button == MouseButton::Left {
             let c = context.for_other(&self.editor_id).unwrap();
@@ -953,28 +982,36 @@ impl CodeEditor {
         let (search_tag, search_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
+        let text_editor =
+            TextEditor::new(doc.clone(), cmd_reg, click_info).with_search_term(search_term.clone());
+        let nb_searched_item = search_term.with_clone(|search_term| {
+            text_editor
+                .highlighted_search_items
+                .map_each(move |h| if search_term.get().rope.len_chars()>0 { format!("0/{}", h.len()) }else { "".to_string() })
+        });
         let child = (PassiveScroll::vertical(
             Gutter::new(doc.clone(), scroller.clone(), editor_id),
             scroller.clone(),
         )
         .and(
-            MyScroll::new(
-                TextEditor::new(doc.clone(), cmd_reg, click_info).with_search_term(search_term.clone()).make_with_tag(editor_tag),
-            )
-            .with_controller(scroller.clone())
-            .make_with_tag(scroll_tag)
-            .expand(),
+            MyScroll::new(text_editor.make_with_tag(editor_tag))
+                .with_controller(scroller.clone())
+                .make_with_tag(scroll_tag)
+                .expand(),
         )
         .into_columns()
         .gutter(Px::new(1)))
         .expand_vertically()
         .and(
-            "Search: ".and(MyScroll::horizontal(
-                TextEditor::as_input(search_term.clone())
-                    .make_with_tag(search_tag)
-                    .width(Lp::cm(5)),
-            )).into_columns()
-            .collapse_vertically(show_search_panel.clone()),
+            "Search: "
+                .and(MyScroll::horizontal(
+                    TextEditor::as_input(search_term.clone())
+                        .make_with_tag(search_tag)
+                        .width(Lp::cm(5)),
+                ))
+                .and(nb_searched_item)
+                .into_columns()
+                .collapse_vertically(show_search_panel.clone()),
         )
         .into_rows();
         Self {
@@ -1007,7 +1044,9 @@ impl WrapperWidget for CodeEditor {
         is_synthetic: bool,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
-        if input.state == ElementState::Pressed && matches!(input.logical_key, Key::Named(NamedKey::F3)) {
+        if input.state == ElementState::Pressed
+            && matches!(input.logical_key, Key::Named(NamedKey::F3))
+        {
             self.collapse_search_panel.toggle();
             if self.collapse_search_panel.get() {
                 context.for_other(&self.editor_id).unwrap().focus();
