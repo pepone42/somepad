@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use cushy::context::{EventContext, WidgetContext};
+use cushy::context::{AsEventContext, EventContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
 use cushy::value::{CallbackHandle, Dynamic, MapEachCloned};
@@ -24,7 +24,7 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
-use cushy::{context, define_components, ModifiersExt};
+use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
@@ -78,8 +78,10 @@ pub struct TextEditor {
     kind: TextEditorKind,
     search_term: Dynamic<Document>,
     search_handle: CallbackHandle,
-    highlighted_search_items: Dynamic<Vec<(Position, Position)>>,
+    items_found: Dynamic<Vec<(Position, Position)>>,
     current_search_item_idx: Dynamic<usize>,
+    scroll: Dynamic<ScrollController>,
+    should_refocus: Dynamic<bool>,
 }
 
 impl TextEditor {
@@ -115,14 +117,16 @@ impl TextEditor {
             kind: TextEditorKind::Code,
             search_term: Dynamic::new(Document::default()),
             search_handle: CallbackHandle::default(),
-            highlighted_search_items: Dynamic::new(Vec::new()),
-            current_search_item_idx: Dynamic::new(1),
+            items_found: Dynamic::new(Vec::new()),
+            current_search_item_idx: Dynamic::new(0),
+            scroll: Dynamic::new(ScrollController::default()),
+            should_refocus: Dynamic::new(false),
         }
     }
 
     pub fn with_search_term(mut self, search_term: Dynamic<Document>) -> Self {
         self.search_term = search_term;
-        self.highlighted_search_items = self.doc.with_clone(|doc| {
+        self.items_found = self.doc.with_clone(|doc| {
             self.search_term.map_each(move |search_term| {
                 let mut items = Vec::new();
                 let mut idx = Position::new(0, 0);
@@ -329,7 +333,7 @@ impl TextEditor {
     }
 
     fn get_search_item_shapes(&self, layouts: &HashMap<usize, Buffer>) -> Vec<Path<Px, false>> {
-        self.highlighted_search_items
+        self.items_found
             .get()
             .iter()
             .filter_map(|s| {
@@ -365,14 +369,45 @@ impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
 
-        self.search_handle = self.doc.with_clone(|doc| {
-            self.search_term.for_each(|search_term| {
-                //TODO search
-                dbg!("searching", search_term.rope.to_string());
-            })
+        
+
+
+        let mut last_searched_idx = 1;
+        self.search_handle = (&self.doc, &self.items_found,&self.should_refocus).with_clone(|(doc, items_found,should_refocus)| {
+            self.current_search_item_idx
+                .for_each_cloned(move |mut seach_idx| {
+                    if items_found.get().is_empty() {
+                        return;
+                    }
+
+                    enum SearchDirection {
+                        Forward,
+                        Backward,
+                    }
+                    let search_direction = if seach_idx > last_searched_idx {
+                        SearchDirection::Forward
+                    } else {
+                        SearchDirection::Backward
+                    };
+
+                    let (head, tail) = items_found.get()[seach_idx];
+                    doc.lock().set_main_selection(head, tail);
+                    should_refocus.replace(true);
+
+                    dbg!(last_searched_idx, seach_idx);
+                    last_searched_idx = seach_idx;
+                    //dbg!("searching", search_term.get().rope.to_string());
+                })
         });
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        // So we can refocus easily from about anywere
+        if self.should_refocus.get() {
+            self.refocus_main_selection(&context.as_event_context());
+            self.should_refocus.replace(false);
+        }
+
+
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.gfx.scale())
@@ -990,7 +1025,7 @@ impl CodeEditor {
         let nb_searched_item = (
             &search_term,
             &text_editor.current_search_item_idx,
-            &text_editor.highlighted_search_items,
+            &text_editor.items_found,
         )
             .map_each_cloned(|(s, a, b)| {
                 if b.is_empty() {
@@ -1004,9 +1039,9 @@ impl CodeEditor {
 
         let csi_for_button_up = text_editor.current_search_item_idx.clone();
         let csi_for_button_down = text_editor.current_search_item_idx.clone();
-        let nsi_for_button_up = text_editor.highlighted_search_items.clone();
-        let nsi_for_button_down = text_editor.highlighted_search_items.clone();
-        let search_match = text_editor.highlighted_search_items.map_each(|s| !s.is_empty());
+        let nsi_for_button_up = text_editor.items_found.clone();
+        let nsi_for_button_down = text_editor.items_found.clone();
+        let search_match = text_editor.items_found.map_each(|s| !s.is_empty());
 
         let child = (PassiveScroll::vertical(
             Gutter::new(doc.clone(), scroller.clone(), editor_id),
@@ -1029,16 +1064,28 @@ impl CodeEditor {
                         .width(Lp::cm(5)),
                 ))
                 .and(nb_searched_item.clone())
-                .and("↑".into_button().on_click(move |_| {
-                    let i = csi_for_button_up.get();
-                    let len = nsi_for_button_up.get().len();
-                    *csi_for_button_up.lock() = (i + len - 1) % len;
-                }).with_enabled(search_match.clone()))
-                .and("↓".into_button().on_click(move |_| {
-                    let i = csi_for_button_down.get();
-                    let len = nsi_for_button_down.get().len();
-                    *csi_for_button_down.lock() = dbg!((i + 1) % len);
-                }).with_enabled(search_match.clone()))
+                .and(
+                    "↑"
+                        .into_button()
+                        .on_click(move |_| {
+                            let i = csi_for_button_up.get();
+                            let len = nsi_for_button_up.get().len();
+                            *csi_for_button_up.lock() = (i + len - 1) % len;
+                            // TODO refocus
+                        })
+                        .with_enabled(search_match.clone()),
+                )
+                .and(
+                    "↓"
+                        .into_button()
+                        .on_click(move |_| {
+                            let i = csi_for_button_down.get();
+                            let len = nsi_for_button_down.get().len();
+                            *csi_for_button_down.lock() = dbg!((i + 1) % len);
+                            // TODO: refocus
+                        })
+                        .with_enabled(search_match.clone()),
+                )
                 .into_columns()
                 .collapse_vertically(show_search_panel.clone()),
         )

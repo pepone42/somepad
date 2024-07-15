@@ -1,4 +1,5 @@
 //! A container that scrolls its contents on a virtual surface.
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use cushy::figures::units::{Px, UPx};
@@ -16,11 +17,11 @@ use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, Widget, WidgetRef, WrapperWidget, HANDLED, IGNORED,
+    EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, WrapperWidget, HANDLED, IGNORED
 };
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::window::DeviceId;
-use cushy::ConstraintLimit;
+use cushy::{ConstraintLimit, Lazy};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ScrollController {
@@ -28,6 +29,8 @@ pub struct ScrollController {
     control_size: Size<Px>,
     max_scroll: Point<Px>,
 }
+
+static SCROLLED_IDS : Lazy<Dynamic<HashMap<WidgetId,Dynamic<ScrollController>>>> = Lazy::new(|| Dynamic::new(HashMap::new()));
 
 impl ScrollController {
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
@@ -202,6 +205,9 @@ impl MyScroll {
 }
 
 impl Widget for MyScroll {
+    fn mounted(&mut self, context: &mut EventContext<'_>) {
+        SCROLLED_IDS.lock().insert(context.widget().id(),self.controller.clone());
+    }
     fn unmounted(&mut self, context: &mut EventContext<'_>) {
         self.contents.unmount_in(context);
     }
@@ -775,14 +781,16 @@ pub trait ContextScroller {
     fn scroll_to(&self, scroll: Point<Px>);
     fn scroll(&self) -> Point<Px>;
     fn make_region_visible(&self, region: Rect<Px>);
+    fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>>;
 }
 
 fn get_parent_scroller(context: &EventContext<'_>) -> Option<Dynamic<ScrollController>> {
     let mut parent = context.widget().parent();
     while let Some(widget) = parent {
-        if let Some(scroll) = widget.lock().downcast_ref::<MyScroll>() {
-            return Some(scroll.controller.clone());
+        if SCROLLED_IDS.get().contains_key(&widget.id()) {
+            return Some(SCROLLED_IDS.get()[&widget.id()].clone());
         }
+        
         parent = widget.parent();
     }
     None
@@ -807,5 +815,9 @@ impl ContextScroller for EventContext<'_> {
         if let Some(controller) = get_parent_scroller(self) {
             controller.lock().make_region_visible(region);
         }
+    }
+
+    fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>> {
+        get_parent_scroller(self)
     }
 }
