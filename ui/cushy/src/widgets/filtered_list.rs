@@ -2,17 +2,14 @@ use std::fmt::Debug;
 
 use cushy::{
     figures::{
-        units::{Px, UPx}, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
+        units::{Px, UPx},
+        IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero,
     },
-    kludgine::{
-        shapes::Shape,
-        text::Text,
-        DrawableExt,
-    },
+    kludgine::{shapes::Shape, text::Text, DrawableExt},
     styles::components,
     value::{Dynamic, DynamicReader, Source},
     widget::{Widget, HANDLED},
-    ConstraintLimit,
+    ConstraintLimit, WithClone,
 };
 
 use crate::widgets::palette::PaletteAction;
@@ -56,27 +53,25 @@ impl Filter {
             Dynamic::new(Some(selected_idx.min(items.get().len() - 1)))
         };
 
-        let filtered_items = selected_idx
-            .with_clone(|selected_idx| {
-                items.with_clone(|items| {
-                    filter.map_each(move |filter| {
-                        if !filter.is_empty() {
-                            for item in items.lock().iter_mut() {
-                                item.excluded = !item.text.contains(filter);
-                            }
-                            if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
-                                *selected_idx.lock() = Some(i.index);
-                            } else {
-                                *selected_idx.lock() = None;
-                            }
+        let filtered_items = (&selected_idx, &items)
+            .with_clone(|(selected_idx, items)| {
+                filter.map_each(move |filter| {
+                    if !filter.is_empty() {
+                        for item in items.lock().iter_mut() {
+                            item.excluded = !item.text.contains(filter);
                         }
-                        items
-                            .get()
-                            .iter()
-                            .filter(|i| !i.excluded)
-                            .cloned()
-                            .collect::<Vec<FilterItem>>()
-                    })
+                        if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
+                            *selected_idx.lock() = Some(i.index);
+                        } else {
+                            *selected_idx.lock() = None;
+                        }
+                    }
+                    items
+                        .get()
+                        .iter()
+                        .filter(|i| !i.excluded)
+                        .cloned()
+                        .collect::<Vec<FilterItem>>()
                 })
             })
             .into_reader();
