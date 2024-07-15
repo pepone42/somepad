@@ -82,6 +82,7 @@ pub struct TextEditor {
     items_found: Dynamic<Vec<(Position, Position)>>,
     current_search_item_idx: Dynamic<usize>,
     should_refocus: Dynamic<bool>,
+    page_len: usize,
 }
 
 impl TextEditor {
@@ -120,6 +121,7 @@ impl TextEditor {
             items_found: Dynamic::new(Vec::new()),
             current_search_item_idx: Dynamic::new(0),
             should_refocus: Dynamic::new(false),
+            page_len: 0,
         }
     }
 
@@ -411,6 +413,7 @@ impl Widget for TextEditor {
         let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
         let total_line = last_line - first_line;
+        self.page_len = (context.gfx.clip_rect().size.height.into_signed() / self.line_height).get() as _;
 
         if self.kind == TextEditorKind::Code {
             context.gfx.set_font_size(Lp::points(12));
@@ -769,6 +772,16 @@ impl Widget for TextEditor {
                 }
                 Key::Named(NamedKey::Home) => {
                     self.doc.lock().home(context.modifiers().only_shift());
+                    self.refocus_main_selection(context);
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::PageUp) => {
+                    self.doc.lock().page_up(self.page_len, context.modifiers().only_shift());
+                    self.refocus_main_selection(context);
+                    return HANDLED;
+                }
+                Key::Named(NamedKey::PageDown) => {
+                    self.doc.lock().page_down(self.page_len, context.modifiers().only_shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
