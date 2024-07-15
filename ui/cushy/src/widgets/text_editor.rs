@@ -8,7 +8,7 @@ use cushy::value::{CallbackHandle, Dynamic, MapEachCloned};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
-    Abs, FloatConversion, Fraction, IntoSigned, IntoUnsigned, Point, Rect, Round, ScreenScale,
+    Abs, FloatConversion, Fraction, IntoSigned, Point, Rect, Round, ScreenScale,
     Size, Zero,
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
@@ -24,6 +24,7 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
+use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
@@ -80,7 +81,6 @@ pub struct TextEditor {
     search_handle: CallbackHandle,
     items_found: Dynamic<Vec<(Position, Position)>>,
     current_search_item_idx: Dynamic<usize>,
-    scroll: Dynamic<ScrollController>,
     should_refocus: Dynamic<bool>,
 }
 
@@ -119,7 +119,6 @@ impl TextEditor {
             search_handle: CallbackHandle::default(),
             items_found: Dynamic::new(Vec::new()),
             current_search_item_idx: Dynamic::new(0),
-            scroll: Dynamic::new(ScrollController::default()),
             should_refocus: Dynamic::new(false),
         }
     }
@@ -369,36 +368,19 @@ impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
 
-        
-
-
-        let mut last_searched_idx = 1;
-        self.search_handle = (&self.doc, &self.items_found,&self.should_refocus).with_clone(|(doc, items_found,should_refocus)| {
-            self.current_search_item_idx
-                .for_each_cloned(move |mut seach_idx| {
-                    if items_found.get().is_empty() {
-                        return;
-                    }
-
-                    enum SearchDirection {
-                        Forward,
-                        Backward,
-                    }
-                    let search_direction = if seach_idx > last_searched_idx {
-                        SearchDirection::Forward
-                    } else {
-                        SearchDirection::Backward
-                    };
-
-                    let (head, tail) = items_found.get()[seach_idx];
-                    doc.lock().set_main_selection(head, tail);
-                    should_refocus.replace(true);
-
-                    dbg!(last_searched_idx, seach_idx);
-                    last_searched_idx = seach_idx;
-                    //dbg!("searching", search_term.get().rope.to_string());
-                })
-        });
+        self.search_handle = (&self.doc, &self.items_found, &self.should_refocus).with_clone(
+            |(doc, items_found, should_refocus)| {
+                self.current_search_item_idx
+                    .for_each_cloned(move |seach_idx| {
+                        if items_found.get().is_empty() {
+                            return;
+                        }
+                        let (head, tail) = items_found.get()[seach_idx];
+                        doc.lock().set_main_selection(head, tail);
+                        should_refocus.replace(true);
+                    })
+            },
+        );
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         // So we can refocus easily from about anywere
@@ -406,7 +388,6 @@ impl Widget for TextEditor {
             self.refocus_main_selection(&context.as_event_context());
             self.should_refocus.replace(false);
         }
-
 
         let padding = context
             .get(&components::IntrinsicPadding)
@@ -438,6 +419,7 @@ impl Widget for TextEditor {
         }
         let doc = self.doc.get();
 
+        // TODO: cache layouts
         let buffers = self
             .doc
             .get()
@@ -836,7 +818,6 @@ impl Widget for TextEditor {
 #[derive(Debug)]
 pub struct Gutter {
     doc: Dynamic<Document>,
-    scroller: Dynamic<ScrollController>,
     font_metrics: Metrics,
     font_size: Px,
     line_height: Px,
@@ -847,12 +828,10 @@ pub struct Gutter {
 impl Gutter {
     pub fn new(
         doc: Dynamic<Document>,
-        scroller: Dynamic<ScrollController>,
         editor_id: WidgetId,
     ) -> Self {
         Self {
             doc,
-            scroller,
             font_metrics: Metrics::new(15., 15.),
             font_size: Px::ZERO,
             line_height: Px::ZERO,
@@ -883,7 +862,7 @@ impl Widget for Gutter {
         context.fill(context.get(&BackgroundColor));
 
         for i in first_line..last_line {
-            let y = (units::Px::new(i as _) * self.font_metrics.line_height);
+            let y = units::Px::new(i as _) * self.font_metrics.line_height;
 
             let attrs = Attrs::new().family(Family::Monospace);
 
@@ -897,7 +876,7 @@ impl Widget for Gutter {
     }
     fn layout(
         &mut self,
-        available_space: Size<cushy::ConstraintLimit>,
+        _available_space: Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
         let padding = context
@@ -1003,10 +982,8 @@ impl Widget for Gutter {
 #[derive(Debug)]
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
-    scroll_id: WidgetId,
     search_id: WidgetId,
     editor_id: WidgetId,
-    search_term: Dynamic<Document>,
     collapse_search_panel: Dynamic<bool>,
 }
 
@@ -1014,7 +991,6 @@ impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
         let search_term = Dynamic::new(Document::default());
         let show_search_panel: Dynamic<bool> = Dynamic::new(true);
-        let (scroll_tag, scroll_id) = WidgetTag::new();
         let (editor_tag, editor_id) = WidgetTag::new();
         let (search_tag, search_id) = WidgetTag::new();
         let scroller = Dynamic::new(ScrollController::default());
@@ -1037,20 +1013,29 @@ impl CodeEditor {
                 }
             });
 
-        let csi_for_button_up = text_editor.current_search_item_idx.clone();
-        let csi_for_button_down = text_editor.current_search_item_idx.clone();
-        let nsi_for_button_up = text_editor.items_found.clone();
-        let nsi_for_button_down = text_editor.items_found.clone();
         let search_match = text_editor.items_found.map_each(|s| !s.is_empty());
 
+        let action_up = (&text_editor.current_search_item_idx,&text_editor.items_found).with_clone(|(idx, items)| move || {
+            if items.get().is_empty() {
+                return;
+            }
+            *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
+        });
+        let action_down = (&text_editor.current_search_item_idx,&text_editor.items_found).with_clone(|(idx, items)|move ||  {
+            if items.get().is_empty() {
+                return;
+            }
+            *idx.lock() = (idx.get() + 1) % items.get().len();
+        });
+        let action_enter = action_down.clone();
+
         let child = (PassiveScroll::vertical(
-            Gutter::new(doc.clone(), scroller.clone(), editor_id),
+            Gutter::new(doc.clone(), editor_id),
             scroller.clone(),
         )
         .and(
             MyScroll::new(text_editor.make_with_tag(editor_tag))
                 .with_controller(scroller.clone())
-                .make_with_tag(scroll_tag)
                 .expand(),
         )
         .into_columns()
@@ -1059,29 +1044,35 @@ impl CodeEditor {
         .and(
             "Search: "
                 .and(MyScroll::horizontal(
-                    TextEditor::as_input(search_term.clone())
-                        .make_with_tag(search_tag)
-                        .width(Lp::cm(5)),
+                    Custom::new(
+                        TextEditor::as_input(search_term.clone())
+                            .make_with_tag(search_tag)
+                            .width(Lp::cm(5)),
+                    )
+                    .on_keyboard_input(move |_,k,_,_| {
+                        if k.state == ElementState::Pressed
+                            && k.logical_key == Key::Named(NamedKey::Enter)
+                        {
+                           action_enter();
+                            HANDLED
+                        } else {
+                            IGNORED
+                        }
+                        
+                    }),
                 ))
                 .and(nb_searched_item.clone())
                 .and(
                     "↑"
                         .into_button()
-                        .on_click(move |_| {
-                            let i = csi_for_button_up.get();
-                            let len = nsi_for_button_up.get().len();
-                            *csi_for_button_up.lock() = (i + len - 1) % len;
-                            // TODO refocus
-                        })
+                        .on_click(move |_| action_up())
                         .with_enabled(search_match.clone()),
                 )
                 .and(
                     "↓"
                         .into_button()
                         .on_click(move |_| {
-                            let i = csi_for_button_down.get();
-                            let len = nsi_for_button_down.get().len();
-                            *csi_for_button_down.lock() = dbg!((i + 1) % len);
+                            action_down()
                             // TODO: refocus
                         })
                         .with_enabled(search_match.clone()),
@@ -1092,10 +1083,8 @@ impl CodeEditor {
         .into_rows();
         Self {
             child: child.widget_ref(),
-            scroll_id,
             editor_id,
             search_id,
-            search_term,
             collapse_search_panel: show_search_panel,
         }
     }
@@ -1115,13 +1104,13 @@ impl WrapperWidget for CodeEditor {
 
     fn keyboard_input(
         &mut self,
-        device_id: cushy::window::DeviceId,
+        _device_id: cushy::window::DeviceId,
         input: cushy::window::KeyEvent,
-        is_synthetic: bool,
+        _is_synthetic: bool,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Pressed
-            && matches!(input.logical_key, Key::Named(NamedKey::F3))
+            && event_match(&input, context.modifiers(), shortcut!(Ctrl + f))
         {
             self.collapse_search_panel.toggle();
             if self.collapse_search_panel.get() {
@@ -1133,20 +1122,6 @@ impl WrapperWidget for CodeEditor {
         }
         IGNORED
     }
-
-    // fn mouse_wheel(
-    //     &mut self,
-    //     device_id: cushy::window::DeviceId,
-    //     delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
-    //     phase: cushy::kludgine::app::winit::event::TouchPhase,
-    //     context: &mut cushy::context::EventContext<'_>,
-    // ) -> EventHandling {
-    //     context
-    //         .for_other(&self.scroll_id)
-    //         .unwrap()
-    //         .mouse_wheel(device_id, delta, phase);
-    //     IGNORED
-    // }
 }
 
 define_components! {

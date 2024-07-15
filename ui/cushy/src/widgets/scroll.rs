@@ -17,7 +17,7 @@ use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, HANDLED, IGNORED
 };
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::window::DeviceId;

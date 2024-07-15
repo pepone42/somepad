@@ -2,7 +2,7 @@ use cushy::{
     context::EventContext,
     figures::{
         units::{Px, UPx},
-        IntoSigned, IntoUnsigned, Point, Rect, ScreenScale, Size, Zero,
+        IntoSigned, Point, Rect, ScreenScale, Size, Zero,
     },
     kludgine::{app::winit::event::MouseButton, shapes::Shape, text::Text, DrawableExt},
     styles::components,
@@ -201,7 +201,7 @@ impl Widget for ResizeHandle {
     fn layout(
         &mut self,
         available_space: Size<ConstraintLimit>,
-        context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+        _context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
         Size::new(UPx::new(5), available_space.height.max())
     }
