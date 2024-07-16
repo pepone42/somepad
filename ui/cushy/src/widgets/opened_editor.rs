@@ -1,8 +1,7 @@
 use cushy::{
     context::EventContext,
     figures::{
-        units::{Px, UPx},
-        IntoSigned, Point, Rect, ScreenScale, Size, Zero,
+        units::{Px, UPx}, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
     },
     kludgine::{app::winit::event::MouseButton, shapes::{Shape, StrokeOptions}, text::Text, DrawableExt},
     styles::components,
@@ -32,6 +31,12 @@ impl OpenedEditor {
 
 impl Widget for OpenedEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let padding = context
+        .get(&components::IntrinsicPadding)
+        .into_px(context.gfx.scale())
+        .round();
+        let padding = Point::new(padding, padding);
+    
         context.redraw_when_changed(&self.hovered_idx);
         let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
         let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
@@ -58,7 +63,7 @@ impl Widget for OpenedEditor {
                         ),
                         bg_selected_color,
                     )
-                    .translate_by(Point::ZERO),
+                    .translate_by(padding),
                 );
             }
 
@@ -72,7 +77,7 @@ impl Widget for OpenedEditor {
                             ),
                             bg_hovered_color,
                         )
-                        .translate_by(Point::ZERO),
+                        .translate_by(padding),
                     );
                 }
             }
@@ -88,7 +93,7 @@ impl Widget for OpenedEditor {
             let text = Text::new(&text, txt_color);
             context
                 .gfx
-                .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
+                .draw_text(text.translate_by(padding + Point::new(Px::ZERO, y)));
             y += line_height.into_signed();
         }
     }
@@ -98,6 +103,11 @@ impl Widget for OpenedEditor {
         _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
+        let padding = context
+        .get(&components::IntrinsicPadding)
+        .into_upx(context.gfx.scale())
+        .round() * 2;
+
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
 
@@ -110,10 +120,10 @@ impl Widget for OpenedEditor {
             .map(|d| d.get().title())
             .max_by_key(|s| s.len())
             .unwrap_or_default();
-        let text = Text::new(&longest_item, context.get(&components::TextColor));
+        let text = Text::<UPx>::new(&longest_item, context.get(&components::TextColor));
         let mtext = context.gfx.measure_text(text);
 
-        Size::new(mtext.size.width, h)
+        Size::new(mtext.size.width + padding, h + padding)
     }
 
     fn hit_test(
@@ -129,6 +139,12 @@ impl Widget for OpenedEditor {
         location: Point<Px>,
         context: &mut cushy::context::EventContext<'_>,
     ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
+        let location = location - padding;
+
         let idx = (location.y
             / context
                 .kludgine
@@ -153,6 +169,11 @@ impl Widget for OpenedEditor {
         _button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
+        let location = location - padding;
         let idx = (location.y
             / context
                 .kludgine
