@@ -720,7 +720,7 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::ArrowLeft) if context.modifiers().word_select() => {
                     self.doc.lock().move_selections_word(
                         ndoc::MoveDirection::Left,
-                        context.modifiers().only_shift(),
+                        context.modifiers().shift(),
                     );
                     self.refocus_main_selection(context);
                     return HANDLED;
@@ -728,7 +728,7 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::ArrowRight) if context.modifiers().word_select() => {
                     self.doc.lock().move_selections_word(
                         ndoc::MoveDirection::Right,
-                        context.modifiers().only_shift(),
+                        context.modifiers().shift(),
                     );
                     self.refocus_main_selection(context);
                     return HANDLED;
@@ -736,7 +736,7 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::ArrowLeft) => {
                     self.doc.lock().move_selections(
                         ndoc::MoveDirection::Left,
-                        context.modifiers().only_shift(),
+                        context.modifiers().shift(),
                     );
                     self.refocus_main_selection(context);
                     return HANDLED;
@@ -744,7 +744,7 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::ArrowRight) => {
                     self.doc.lock().move_selections(
                         ndoc::MoveDirection::Right,
-                        context.modifiers().only_shift(),
+                        context.modifiers().shift(),
                     );
                     self.refocus_main_selection(context);
                     return HANDLED;
@@ -752,14 +752,14 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::ArrowUp) if self.kind == TextEditorKind::Code => {
                     self.doc
                         .lock()
-                        .move_selections(ndoc::MoveDirection::Up, context.modifiers().only_shift());
+                        .move_selections(ndoc::MoveDirection::Up, context.modifiers().shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::ArrowDown) if self.kind == TextEditorKind::Code => {
                     self.doc.lock().move_selections(
                         ndoc::MoveDirection::Down,
-                        context.modifiers().only_shift(),
+                        context.modifiers().shift(),
                     );
                     self.refocus_main_selection(context);
                     return HANDLED;
@@ -775,32 +775,32 @@ impl Widget for TextEditor {
                     }
                 }
                 Key::Named(NamedKey::End) => {
-                    self.doc.lock().end(context.modifiers().only_shift());
+                    self.doc.lock().end(context.modifiers().shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::Home) => {
-                    self.doc.lock().home(context.modifiers().only_shift());
+                    self.doc.lock().home(context.modifiers().shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::PageUp) => {
                     self.doc
                         .lock()
-                        .page_up(self.page_len, context.modifiers().only_shift());
+                        .page_up(self.page_len, context.modifiers().shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::PageDown) => {
                     self.doc
                         .lock()
-                        .page_down(self.page_len, context.modifiers().only_shift());
+                        .page_down(self.page_len, context.modifiers().shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
 
                 Key::Named(NamedKey::Tab)
-                    if context.modifiers().only_shift() && self.kind == TextEditorKind::Code =>
+                    if context.modifiers().shift() && self.kind == TextEditorKind::Code =>
                 {
                     self.doc.lock().deindent();
                     self.refocus_main_selection(context);
