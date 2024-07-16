@@ -483,7 +483,7 @@ impl Document {
             if batch.have_change {
                 self.history
                     .push(batch.rope, batch.selections, &batch.action);
-                self.update_highlight_from(self.rope.char_to_line(batch.from_char_idx));
+                self.update_highlight_from(self.rope.char_to_line(batch.from_char_idx.min(self.rope.len_chars())));
                 self.batch_edit = None;
             }
         }
