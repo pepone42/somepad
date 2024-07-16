@@ -204,10 +204,16 @@ pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     let mut count = 0;
     i -= loop {
         match iter.prev() {
-            Some(c) if c.is_whitespace() => count += 1,
-            _ => break count,
+            Some(c) if c.is_whitespace() && !WORD_BOUNDARY_LINEFEED.contains(&c) => count += 1,
+            _ => break dbg!(count),
         }
     };
+
+    // if we've skiped some whitespace and we are à the beginning of the line, stop here
+    match slice.chars_at(i).prev() {
+        Some(c) if WORD_BOUNDARY_LINEFEED.contains(&c) && i!=char_idx => return i,
+        _ => (),
+    }
 
     // if multi puctionation, skip to new non puctuation char
     let mut iter = slice.chars_at(i);
