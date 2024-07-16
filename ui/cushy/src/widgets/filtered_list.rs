@@ -157,6 +157,11 @@ impl FilteredList {
 
 impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.gfx.scale())
+            .round();
+
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
 
@@ -179,13 +184,16 @@ impl Widget for FilteredList {
                 Shape::filled_rect(
                     Rect::new(
                         Point::ZERO,
-                        Size::new(size.width, line_height).into_signed(),
+                        Size::new(
+                            size.width.into_signed() - padding * 2,
+                            line_height.into_signed(),
+                        ),
                     ),
                     bg_hovered_color,
                 )
                 .translate_by(Point::new(
-                    Px::ZERO,
-                    line_height.into_signed() * Px::new(idx as i32),
+                    padding,
+                    line_height.into_signed() * Px::new(idx as i32) + padding,
                 )),
             )
         }
@@ -196,11 +204,14 @@ impl Widget for FilteredList {
                     Shape::filled_rect(
                         Rect::new(
                             Point::ZERO,
-                            Size::new(size.width, line_height).into_signed(),
+                            Size::new(
+                                size.width.into_signed() - padding * 2,
+                                line_height.into_signed(),
+                            ),
                         ),
                         bg_selected_color,
                     )
-                    .translate_by(Point::new(Px::ZERO, y)),
+                    .translate_by(Point::new(padding, y + padding)),
                 )
             }
             let color = if selected_idx == Some(item.index) {
@@ -214,7 +225,7 @@ impl Widget for FilteredList {
             let h = line_height.into_signed();
             context
                 .gfx
-                .draw_text(text.translate_by(Point::new(Px::ZERO, y)));
+                .draw_text(text.translate_by(Point::new(Px::ZERO + padding, y + padding)));
 
             y += h;
         }
@@ -239,6 +250,11 @@ impl Widget for FilteredList {
         _available_space: cushy::figures::Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_upx(context.gfx.scale())
+            .round()
+            * 2;
         context.apply_current_font_settings();
 
         let mut y = UPx::ZERO;
@@ -257,7 +273,7 @@ impl Widget for FilteredList {
         } else {
             w
         };
-        Size::new(w, y)
+        Size::new(w, y + padding)
     }
     fn hit_test(
         &mut self,
@@ -274,6 +290,11 @@ impl Widget for FilteredList {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
+        let location = location - padding;
         let scale = context.kludgine.scale();
         let line_height = context.kludgine.line_height().into_px(scale);
         let idx = (location.y / line_height).floor().get();
@@ -295,6 +316,11 @@ impl Widget for FilteredList {
         location: Point<Px>,
         context: &mut cushy::context::EventContext<'_>,
     ) -> Option<cushy::kludgine::app::winit::window::CursorIcon> {
+        let padding = context
+            .get(&components::IntrinsicPadding)
+            .into_px(context.kludgine.scale())
+            .round();
+        let location = location - padding;
         context.redraw_when_changed(&self.hovered_idx);
         let scale = context.kludgine.scale();
         let line_height = context.kludgine.line_height().into_px(scale);
