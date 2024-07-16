@@ -89,6 +89,34 @@ macro_rules! shortcut {
             | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
         }
     };
+    (Ctrl+ArrowDown) => {
+        $crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowDown),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
+                
+        }
+    };
+    (Ctrl+Alt+ArrowDown) => {
+        $crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowDown),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
+            | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
+        }
+    };
+    (Ctrl+ArrowUp) => {
+        $crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowUp),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
+                
+        }
+    };
+    (Ctrl+Alt+ArrowUp) => {
+        $crate::shortcut::Shortcut {
+            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowUp),
+            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
+            | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
+        }
+    };
     (Ctrl+$c:ident) => {
         $crate::shortcut::Shortcut {
             key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(

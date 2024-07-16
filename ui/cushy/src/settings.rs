@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use anyhow::Context;
+use cushy::kludgine::wgpu::core::resource::CreateBufferError;
 use directories::ProjectDirs;
 use ndoc::Indentation;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,8 @@ impl Default for Settings {
         let mut shortcuts = HashMap::new();
 
         shortcuts.insert(crate::GOTO_LINE.id.to_string(),shortcut!(Ctrl + g));
+        shortcuts.insert(crate::DUPLICATE_SELECTION_DOWN.id.to_string(),shortcut!(Ctrl + Alt + ArrowDown));
+        shortcuts.insert(crate::DUPLICATE_SELECTION_UP.id.to_string(),shortcut!(Ctrl + Alt + ArrowUp));
         // shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
         // shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
         // shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));
@@ -39,6 +42,7 @@ impl Default for Settings {
 
         shortcuts.insert(crate::NEXT_DOC.id.to_string(),shortcut!(Ctrl+Tab));
         shortcuts.insert(crate::PREV_DOC.id.to_string(),shortcut!(Ctrl+Shift+Tab));
+        
 
         Self { shortcuts, indentation: Default::default() }
     }

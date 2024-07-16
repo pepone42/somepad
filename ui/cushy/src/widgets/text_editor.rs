@@ -8,8 +8,7 @@ use cushy::value::{CallbackHandle, Dynamic, MapEachCloned};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
-    Abs, FloatConversion, Fraction, IntoSigned, Point, Rect, Round, ScreenScale,
-    Size, Zero,
+    Abs, FloatConversion, Fraction, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero,
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
@@ -83,6 +82,7 @@ pub struct TextEditor {
     current_search_item_idx: Dynamic<usize>,
     should_refocus: Dynamic<bool>,
     page_len: usize,
+    higlight_ask_redraw: Dynamic<bool>,
 }
 
 impl TextEditor {
@@ -91,9 +91,17 @@ impl TextEditor {
         cmd_reg: Dynamic<CommandsRegistry>,
         click_info: Dynamic<ClickInfo>,
     ) -> Self {
-        let mut editor = TextEditor::create(doc);
+        let mut editor = TextEditor::create(doc.clone());
         editor.cmd_reg = cmd_reg;
         editor.click_info = click_info;
+
+        let higlight_finished = Dynamic::new(false);
+        higlight_finished.with_clone(|higlight_finished|
+        doc.get().on_highlighter_update(move || {
+            higlight_finished.toggle();
+        }));
+        editor.higlight_ask_redraw = higlight_finished.debounced_every(Duration::from_millis(16));
+                 
         editor
     }
 
@@ -122,6 +130,7 @@ impl TextEditor {
             current_search_item_idx: Dynamic::new(0),
             should_refocus: Dynamic::new(false),
             page_len: 0,
+            higlight_ask_redraw: Dynamic::new(false),
         }
     }
 
@@ -230,7 +239,9 @@ impl TextEditor {
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             let mut spans = Vec::new();
             for s in sl.iter() {
-                let t = &raw_text[s.range.start..s.range.end];
+                let start = s.range.start.min(raw_text.len());
+                let end = s.range.end.min(raw_text.len());
+                let t = &raw_text[start..end];
 
                 let col = cushy::kludgine::cosmic_text::Color::rgba(
                     s.style.foreground.r,
@@ -397,6 +408,7 @@ impl Widget for TextEditor {
             .round();
 
         context.redraw_when_changed(&self.doc);
+        context.redraw_when_changed(&self.higlight_ask_redraw);
 
         if self.kind == TextEditorKind::Input && self.focused.get() {
             let focus_ring_color = context.get(&components::HighlightColor);
@@ -413,7 +425,8 @@ impl Widget for TextEditor {
         let first_line = first_line.get().max(0) as usize;
         let last_line = last_line.get() as usize;
         let total_line = last_line - first_line;
-        self.page_len = (context.gfx.clip_rect().size.height.into_signed() / self.line_height).get() as _;
+        self.page_len =
+            (context.gfx.clip_rect().size.height.into_signed() / self.line_height).get() as _;
 
         if self.kind == TextEditorKind::Code {
             context.gfx.set_font_size(Lp::points(12));
@@ -776,15 +789,20 @@ impl Widget for TextEditor {
                     return HANDLED;
                 }
                 Key::Named(NamedKey::PageUp) => {
-                    self.doc.lock().page_up(self.page_len, context.modifiers().only_shift());
+                    self.doc
+                        .lock()
+                        .page_up(self.page_len, context.modifiers().only_shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
                 Key::Named(NamedKey::PageDown) => {
-                    self.doc.lock().page_down(self.page_len, context.modifiers().only_shift());
+                    self.doc
+                        .lock()
+                        .page_down(self.page_len, context.modifiers().only_shift());
                     self.refocus_main_selection(context);
                     return HANDLED;
                 }
+
                 Key::Named(NamedKey::Tab)
                     if context.modifiers().only_shift() && self.kind == TextEditorKind::Code =>
                 {
@@ -839,10 +857,7 @@ pub struct Gutter {
 }
 
 impl Gutter {
-    pub fn new(
-        doc: Dynamic<Document>,
-        editor_id: WidgetId,
-    ) -> Self {
+    pub fn new(doc: Dynamic<Document>, editor_id: WidgetId) -> Self {
         Self {
             doc,
             font_metrics: Metrics::new(15., 15.),
@@ -1028,72 +1043,81 @@ impl CodeEditor {
 
         let search_match = text_editor.items_found.map_each(|s| !s.is_empty());
 
-        let action_up = (&text_editor.current_search_item_idx,&text_editor.items_found).with_clone(|(idx, items)| move || {
-            if items.get().is_empty() {
-                return;
-            }
-            *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
-        });
-        let action_down = (&text_editor.current_search_item_idx,&text_editor.items_found).with_clone(|(idx, items)|move ||  {
-            if items.get().is_empty() {
-                return;
-            }
-            *idx.lock() = (idx.get() + 1) % items.get().len();
-        });
+        let action_up = (
+            &text_editor.current_search_item_idx,
+            &text_editor.items_found,
+        )
+            .with_clone(|(idx, items)| {
+                move || {
+                    if items.get().is_empty() {
+                        return;
+                    }
+                    *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
+                }
+            });
+        let action_down = (
+            &text_editor.current_search_item_idx,
+            &text_editor.items_found,
+        )
+            .with_clone(|(idx, items)| {
+                move || {
+                    if items.get().is_empty() {
+                        return;
+                    }
+                    *idx.lock() = (idx.get() + 1) % items.get().len();
+                }
+            });
         let action_enter = action_down.clone();
 
-        let child = (PassiveScroll::vertical(
-            Gutter::new(doc.clone(), editor_id),
-            scroller.clone(),
-        )
-        .and(
-            MyScroll::new(text_editor.make_with_tag(editor_tag))
-                .with_controller(scroller.clone())
-                .expand(),
-        )
-        .into_columns()
-        .gutter(Px::new(1)))
-        .expand_vertically()
-        .and(
-            "Search: "
-                .and(MyScroll::horizontal(
-                    Custom::new(
-                        TextEditor::as_input(search_term.clone())
-                            .make_with_tag(search_tag)
-                            .width(Lp::cm(5)),
-                    )
-                    .on_keyboard_input(move |_,k,_,_| {
-                        if k.state == ElementState::Pressed
-                            && k.logical_key == Key::Named(NamedKey::Enter)
-                        {
-                           action_enter();
-                            HANDLED
-                        } else {
-                            IGNORED
-                        }
-                        
-                    }),
-                ))
-                .and(nb_searched_item.clone())
+        let child =
+            (PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone())
                 .and(
-                    "↑"
-                        .into_button()
-                        .on_click(move |_| action_up())
-                        .with_enabled(search_match.clone()),
-                )
-                .and(
-                    "↓"
-                        .into_button()
-                        .on_click(move |_| {
-                            action_down()
-                            // TODO: refocus
-                        })
-                        .with_enabled(search_match.clone()),
+                    MyScroll::new(text_editor.make_with_tag(editor_tag))
+                        .with_controller(scroller.clone())
+                        .expand(),
                 )
                 .into_columns()
-                .collapse_vertically(show_search_panel.clone()),
-        )
-        .into_rows();
+                .gutter(Px::new(1)))
+            .expand_vertically()
+            .and(
+                "Search: "
+                    .and(MyScroll::horizontal(
+                        Custom::new(
+                            TextEditor::as_input(search_term.clone())
+                                .make_with_tag(search_tag)
+                                .width(Lp::cm(5)),
+                        )
+                        .on_keyboard_input(move |_, k, _, _| {
+                            if k.state == ElementState::Pressed
+                                && k.logical_key == Key::Named(NamedKey::Enter)
+                            {
+                                action_enter();
+                                HANDLED
+                            } else {
+                                IGNORED
+                            }
+                        }),
+                    ))
+                    .and(nb_searched_item.clone())
+                    .and(
+                        "↑"
+                            .into_button()
+                            .on_click(move |_| action_up())
+                            .with_enabled(search_match.clone()),
+                    )
+                    .and(
+                        "↓"
+                            .into_button()
+                            .on_click(move |_| {
+                                action_down()
+                                // TODO: refocus
+                            })
+                            .with_enabled(search_match.clone()),
+                    )
+                    .into_columns()
+                    .collapse_vertically(show_search_panel.clone()),
+            )
+            .into_rows();
         Self {
             child: child.widget_ref(),
             editor_id,
