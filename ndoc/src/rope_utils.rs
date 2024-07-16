@@ -169,6 +169,7 @@ fn is_boundary(a: char, b: char) -> bool {
     char_type(a) != char_type(b)
 }
 
+/// returns the char index of the current/next word boundary
 pub fn next_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     let mut i = char_idx;
 
@@ -197,6 +198,7 @@ pub fn next_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     i
 }
 
+/// returns the char index of the current/prev word boundary
 pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     let mut i = char_idx;
     // discard all space
@@ -246,6 +248,7 @@ pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     i
 }
 
+/// returns the position of the last char of the word at char_idx
 pub fn word_end(slice: &RopeSlice, char_idx: usize) -> usize {
     if char_idx >= slice.len_chars() {
         return slice.len_chars()
@@ -256,6 +259,7 @@ pub fn word_end(slice: &RopeSlice, char_idx: usize) -> usize {
     i
 }
 
+/// returns the position of the first char of the word at char_idx
 pub fn word_start(slice: &RopeSlice, char_idx: usize) -> usize {
     if char_idx >= slice.len_chars() {
         return slice.len_chars()
