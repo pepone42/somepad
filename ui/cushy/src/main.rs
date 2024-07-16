@@ -20,7 +20,7 @@ use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::{self, CornerRadius, TextSize};
-use cushy::styles::{ColorScheme, ColorSource, CornerRadii, Dimension, ThemePair};
+use cushy::styles::{ColorScheme, ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair};
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
 
@@ -304,7 +304,9 @@ impl Default for CommandsRegistry {
 }
 
 fn main() -> anyhow::Result<()> {
-    let theme = ThemePair::from_scheme(&ColorScheme::from_primary(ColorSource::new(142.0, 0.1)));
+    let theme = ThemePair::from_scheme(&ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
+    //.neutral(ColorSource::new(213., 14.2))
+    .build());
 
     let mut cmd_reg = CommandsRegistry::new();
 
@@ -315,13 +317,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
     cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
     cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
-    // cmd_reg
-    //     .view
-    //     .insert(COPY_SELECTION_CMD.id, COPY_SELECTION_CMD);
-    // cmd_reg
-    //     .view
-    //     .insert(PASTE_SELECTION_CMD.id, PASTE_SELECTION_CMD);
-    // cmd_reg.view.insert(CUT_SELECTION_CMD.id, CUT_SELECTION_CMD);
+
     cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
     cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
     cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);

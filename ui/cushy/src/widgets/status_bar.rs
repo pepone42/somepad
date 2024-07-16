@@ -1,5 +1,17 @@
 use cushy::{
-    figures::{units::Px, IntoUnsigned, Point, ScreenScale, Size, Zero}, kludgine::{text::Text, DrawableExt}, styles::{components::{FontFamily, LineHeight}, Dimension}, value::{Dynamic, Source}, widget::Widget
+    figures::{units::Px, IntoSigned, IntoUnsigned, Point, ScreenScale, Size, Zero},
+    kludgine::{
+        cosmic_text::Stretch,
+        shapes::{Path, PathBuilder, Shape, StrokeOptions},
+        text::Text,
+        DrawableExt,
+    },
+    styles::{
+        components::{self, FontFamily, LineHeight},
+        Dimension,
+    },
+    value::{Dynamic, Source},
+    widget::Widget,
 };
 use ndoc::{Document, Indentation};
 
@@ -22,7 +34,16 @@ impl Widget for StatusBar {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.apply_current_font_settings();
 
-        let font_familly= context.get(&FontFamily);
+        let border_color = context.get(&components::OutlineColor);
+        let width = context.gfx.clip_rect().size.width.into_signed();
+        context.gfx.draw_shape(
+            PathBuilder::new(Point::ZERO).line_to(
+                Point::new(width, Px::ZERO))
+                    .build()
+                    .stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color)).translate_by(Point::ZERO)
+        );
+
+        let font_familly = context.get(&FontFamily);
         if let Some(font_familly) = context.find_available_font_family(&font_familly) {
             context.gfx.set_font_family(font_familly);
         }
@@ -31,14 +52,16 @@ impl Widget for StatusBar {
         let doc = doc.get();
         let dirty = if doc.is_dirty() { "*" } else { "" };
         let s = context.gfx.region();
-        
 
-        let selection = if doc.selections.len()>1 {
+        let selection = if doc.selections.len() > 1 {
             format!("{} selections", doc.selections.len())
         } else {
-            format!("Ln {}, Col {}", doc.selections[0].head.line + 1, doc.selections[0].head.column + 1)
+            format!(
+                "Ln {}, Col {}",
+                doc.selections[0].head.line + 1,
+                doc.selections[0].head.column + 1
+            )
         };
-        
 
         let indent = match doc.file_info.indentation {
             Indentation::Space(s) => format!("Spaces: {}", s),
@@ -58,29 +81,40 @@ impl Widget for StatusBar {
         };
         let text = format!("{}{}", file_name, dirty);
         let text = Text::<Px>::new(&text, cushy::kludgine::Color::WHITE);
-        
 
         context.gfx.draw_text(text.translate_by(Point::ZERO));
-        let text = format!("{}  {}  {}  {}  {} ", selection, indent, eol , doc.file_info.encoding.name(), doc.file_info.syntax.name);
+        let text = format!(
+            "{}  {}  {}  {}  {} ",
+            selection,
+            indent,
+            eol,
+            doc.file_info.encoding.name(),
+            doc.file_info.syntax.name
+        );
         let text = Text::<Px>::new(&text, cushy::kludgine::Color::WHITE);
         let mtext = context.gfx.measure_text(text);
-        context.gfx.draw_text(text.translate_by(Point::new( s.size.width - mtext.size.width, Px::ZERO)));
-
+        context
+            .gfx
+            .draw_text(text.translate_by(Point::new(s.size.width - mtext.size.width, Px::ZERO)));
     }
     fn layout(
-            &mut self,
-            available_space: cushy::figures::Size<cushy::ConstraintLimit>,
-            context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
-        ) -> cushy::figures::Size<cushy::figures::units::UPx> {
-            let heigh = match context.get(&LineHeight) {
-                Dimension::Lp(v) => v.into_upx(context.gfx.scale()),
-                Dimension::Px(v) => v.into_unsigned(),
-            };
-            
-            // if I don't substract 1 from the width, the layout/redraw is called infinitely, switching between max()+1 and max() 
-        Size::new(available_space.width.max()-1 , heigh)
+        &mut self,
+        available_space: cushy::figures::Size<cushy::ConstraintLimit>,
+        context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
+    ) -> cushy::figures::Size<cushy::figures::units::UPx> {
+        let heigh = match context.get(&LineHeight) {
+            Dimension::Lp(v) => v.into_upx(context.gfx.scale()),
+            Dimension::Px(v) => v.into_unsigned(),
+        };
+
+        // if I don't substract 1 from the width, the layout/redraw is called infinitely, switching between max()+1 and max()
+        Size::new(available_space.width.max() - 1, heigh)
     }
-    fn hit_test(&mut self, _location: Point<Px>, _context: &mut cushy::context::EventContext<'_>) -> bool {
+    fn hit_test(
+        &mut self,
+        _location: Point<Px>,
+        _context: &mut cushy::context::EventContext<'_>,
+    ) -> bool {
         true
     }
 }

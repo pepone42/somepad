@@ -4,7 +4,7 @@ use cushy::{
         units::{Px, UPx},
         IntoSigned, Point, Rect, ScreenScale, Size, Zero,
     },
-    kludgine::{app::winit::event::MouseButton, shapes::Shape, text::Text, DrawableExt},
+    kludgine::{app::winit::event::MouseButton, shapes::{Shape, StrokeOptions}, text::Text, DrawableExt},
     styles::components,
     value::{Destination, Dynamic, Source},
     widget::{Widget, HANDLED, IGNORED},
@@ -190,6 +190,7 @@ impl ResizeHandle {
 impl Widget for ResizeHandle {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         self.clip_rect = context.gfx.clip_rect();
+
         context.redraw_when_changed(&self.hovered);
         context.redraw_when_changed(&self.dragged);
         if self.hovered.get() || self.dragged.get() {

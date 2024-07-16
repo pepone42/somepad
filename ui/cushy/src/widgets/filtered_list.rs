@@ -160,6 +160,9 @@ impl Widget for FilteredList {
         context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
 
+        let surface_color = context.get(&components::WidgetBackground);
+        context.gfx.fill(surface_color);
+
         let scale = context.gfx.scale();
         let size = context.gfx.size();
         let mut y = Px::ZERO;
