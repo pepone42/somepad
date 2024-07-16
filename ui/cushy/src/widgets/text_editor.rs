@@ -82,7 +82,6 @@ pub struct TextEditor {
     current_search_item_idx: Dynamic<usize>,
     should_refocus: Dynamic<bool>,
     page_len: usize,
-    higlight_ask_redraw: Dynamic<bool>,
 }
 
 impl TextEditor {
@@ -95,13 +94,6 @@ impl TextEditor {
         editor.cmd_reg = cmd_reg;
         editor.click_info = click_info;
 
-        let higlight_finished = Dynamic::new(false);
-        higlight_finished.with_clone(|higlight_finished|
-        doc.get().on_highlighter_update(move || {
-            higlight_finished.toggle();
-        }));
-        editor.higlight_ask_redraw = higlight_finished.debounced_every(Duration::from_millis(16));
-                 
         editor
     }
 
@@ -130,7 +122,6 @@ impl TextEditor {
             current_search_item_idx: Dynamic::new(0),
             should_refocus: Dynamic::new(false),
             page_len: 0,
-            higlight_ask_redraw: Dynamic::new(false),
         }
     }
 
@@ -408,7 +399,6 @@ impl Widget for TextEditor {
             .round();
 
         context.redraw_when_changed(&self.doc);
-        context.redraw_when_changed(&self.higlight_ask_redraw);
 
         if self.kind == TextEditorKind::Input && self.focused.get() {
             let focus_ring_color = context.get(&components::HighlightColor);

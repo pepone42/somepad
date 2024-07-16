@@ -85,9 +85,10 @@ impl History {
             (Action::Backspace, Action::Backspace) => false,
             (Action::Delete, _) => true,
             (Action::Backspace, _) => true,
+            (Action::Tab, _) => true,
+            (_, Action::Tab) => true,
             (Action::Text(t), _) if t.chars().count() > 1 => true,
             (Action::Text(t), _) if t.chars().nth(0).is_some_and(|c| !c.is_alphanumeric()) => true,
-            (Action::Batch, _) => true,
             (_, _) => false,
         }
     }
@@ -100,7 +101,7 @@ enum Action {
     Backspace,
     Delete,
     Text(String),
-    Batch,
+    Tab,
 }
 
 #[test]
@@ -308,44 +309,9 @@ impl Document {
         }
     }
 
-    pub fn begin_batch_edit(&mut self, action: Action) {
-        let rope = self.rope.clone();
-        let selections = self.selections.clone();
-        self.batch_edit = Some(BatchEdit {
-            rope,
-            selections: selections.clone(),
-            action,
-            from_char_idx: self.position_to_char(self.selections.iter().min().map(|s| s.start()).unwrap_or(Position::default())),
-            have_change: false,
-        });
-    }
-    pub fn end_batch_edit(&mut self) {
-        if let Some(batch) = self.batch_edit.take() {
-            if batch.have_change {
-                self.history
-                    .push(batch.rope, batch.selections, &batch.action);
-                self.update_highlight_from(self.rope.char_to_line(batch.from_char_idx));
-                self.batch_edit = None;
-            }
-        }
-    }
-
     pub fn get_style_line_info(&self, line_idx: usize) -> Option<StyledLine> {
         self.line_style_cache.get(line_idx)
     }
-
-    // fn update_highlight_from(&self, line_idx: usize) {
-    //     if let Some(tx) = self.message_sender.as_ref() {
-    //         let _ = tx.send(BackgroundWorkerMessage::UpdateBuffer(
-    //             self.id,
-    //             self.file_info.syntax.clone(),
-    //             self.rope.clone(),
-    //             line_idx,
-    //             self.line_style_cache.clone(),
-    //         ));
-    //         // TODO: log error
-    //     }
-    // }
 
     fn update_highlight_from(&self, line_idx: usize) {
         let (sender, receiver) = mpsc::channel();
@@ -501,13 +467,35 @@ impl Document {
         None
     }
 
-    fn insert_at_position(&mut self, input: Action, start: Position, end: Position) {
+    fn begin_batch_edit(&mut self, action: Action) {
+        let rope = self.rope.clone();
+        let selections = self.selections.clone();
+        self.batch_edit = Some(BatchEdit {
+            rope,
+            selections: selections.clone(),
+            action,
+            from_char_idx: self.position_to_char(self.selections.iter().min().map(|s| s.start()).unwrap_or_default()),
+            have_change: false,
+        });
+    }
+    fn end_batch_edit(&mut self) {
+        if let Some(batch) = self.batch_edit.take() {
+            if batch.have_change {
+                self.history
+                    .push(batch.rope, batch.selections, &batch.action);
+                self.update_highlight_from(self.rope.char_to_line(batch.from_char_idx));
+                self.batch_edit = None;
+            }
+        }
+    }
+
+    fn insert_at_position(&mut self, input: &str, start: Position, end: Position) {
         let start = self.position_to_char(start);
         let end = self.position_to_char(end);
         self.insert_at(input, start, end);
     }
 
-    fn insert_at_selection(&mut self, input: Action, selection: Selection) {
+    fn insert_at_selection(&mut self, input: &str, selection: Selection) {
         self.insert_at_position(input, selection.start(), selection.end());
     }
 
@@ -515,17 +503,8 @@ impl Document {
         !self.history.is_empty()
     }
 
-    fn insert_at(&mut self, action: Action, start: usize, end: usize) {
-        let saved_action = action.clone();
-        let input = if let Action::Text(input) = action {
-            input
-        } else {
-            String::new()
-        };
-
+    fn insert_at(&mut self, input: &str, start: usize, end: usize) {
         let mut changed = false;
-        let histo_rope = self.rope.clone();
-        let histo_selections = self.selections.clone();
 
         if start != end {
             let sel_idx = self
@@ -565,7 +544,7 @@ impl Document {
                     )
                 })
                 .collect::<Vec<(usize, usize)>>();
-            self.rope.insert(start, &input);
+            self.rope.insert(start, input);
 
             // update selections after the insertion point
             let to_add = input.chars().count();
@@ -582,16 +561,20 @@ impl Document {
             changed = true;
         }
 
-        // TODO: cause performance issue
-        if changed {
-            if let Some(batch) = &mut self.batch_edit {
-                batch.have_change = true
-            } else {
-                self.history
-                    .push(histo_rope, histo_selections, &saved_action);
-                self.update_highlight_from(self.rope.char_to_line(start));
-            }
+        if let Some(batch) = &mut self.batch_edit {
+            batch.have_change = changed;
         }
+
+        // TODO: cause performance issue
+        // if changed {
+        //     if let Some(batch) = &mut self.batch_edit {
+        //         batch.have_change = true
+        //     } else {
+        //         self.history
+        //             .push(histo_rope, histo_selections, &saved_action);
+        //         self.update_highlight_from(self.rope.char_to_line(start));
+        //     }
+        // }
     }
 
     pub fn undo(&mut self) {
@@ -639,7 +622,7 @@ impl Document {
         self.begin_batch_edit(Action::Text(input.to_string()));
         if self.selections.len() > 1 && input.lines().count() == self.selections.len() {
             for (i, l) in input.lines().enumerate() {
-                self.insert_at_selection(Action::Text(l.to_string()), self.selections[i]);
+                self.insert_at_selection(l, self.selections[i]);
             }
         } else {
             self.insert(input);
@@ -650,7 +633,7 @@ impl Document {
     pub fn insert(&mut self, input: &str) {
         self.begin_batch_edit(Action::Text(input.to_string()));
         for i in 0..self.selections.len() {
-            self.insert_at_selection(Action::Text(input.to_string()), self.selections[i]);
+            self.insert_at_selection(input, self.selections[i]);
         }
         self.merge_selections();
         self.end_batch_edit();
@@ -661,9 +644,9 @@ impl Document {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
                 let start = self.selections[i].start();
-                self.insert_at_position(Action::Backspace, self.prev_position(start), start);
+                self.insert_at_position("", self.prev_position(start), start);
             } else {
-                self.insert_at_selection(Action::Backspace, self.selections[i]);
+                self.insert_at_selection("", self.selections[i]);
             }
         }
         self.merge_selections();
@@ -675,9 +658,9 @@ impl Document {
         for i in 0..self.selections.len() {
             if self.selections[i].head == self.selections[i].tail {
                 let start = self.selections[i].start();
-                self.insert_at_position(Action::Delete, start, self.next_position(start));
+                self.insert_at_position("", start, self.next_position(start));
             } else {
-                self.insert_at_selection(Action::Delete, self.selections[i]);
+                self.insert_at_selection("", self.selections[i]);
             }
         }
         self.merge_selections();
@@ -685,7 +668,7 @@ impl Document {
     }
 
     pub fn indent(&mut self, always: bool) {
-        self.begin_batch_edit(Action::Text("\t".to_string()));
+        self.begin_batch_edit(Action::Tab);
         let main_sel = self.selections.first().unwrap();
         if always || main_sel.head.line != main_sel.tail.line {
             for s in self.selections.clone() {
@@ -693,10 +676,10 @@ impl Document {
                     let index = self.rope.line_to_char(l);
                     match self.file_info.indentation {
                         Indentation::Tab(_) => {
-                            self.insert_at(Action::Text("\t".to_string()), index, index)
+                            self.insert_at("\t", index, index)
                         }
                         Indentation::Space(x) => {
-                            self.insert_at(Action::Text(" ".repeat(x)), index, index)
+                            self.insert_at(&" ".repeat(x), index, index)
                         }
                     }
                 }
@@ -706,11 +689,11 @@ impl Document {
                 let index = position_to_char(&self.rope.slice(..), s.head);
                 match self.file_info.indentation {
                     Indentation::Tab(_) => {
-                        self.insert_at(Action::Text("\t".to_string()), index, index)
+                        self.insert_at("\t", index, index)
                     }
                     Indentation::Space(x) => {
                         let repeat = x - (s.head.column % x);
-                        self.insert_at(Action::Text(" ".repeat(repeat)), index, index);
+                        self.insert_at(&" ".repeat(repeat), index, index);
                     }
                 }
             }
@@ -727,11 +710,11 @@ impl Document {
                 let line_start = get_line_start_boundary(&self.rope.slice(..), l);
                 match self.file_info.indentation {
                     Indentation::Tab(_) => {
-                        self.insert_at(Action::Text(String::new()), index, index + 1)
+                        self.insert_at("", index, index + 1)
                     }
                     Indentation::Space(x) => {
                         let r = line_start.min(x);
-                        self.insert_at(Action::Text(String::new()), index, index + r);
+                        self.insert_at("", index, index + r);
                     }
                 }
             }
