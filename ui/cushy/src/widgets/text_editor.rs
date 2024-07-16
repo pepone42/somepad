@@ -696,6 +696,12 @@ impl Widget for TextEditor {
                 Key::Named(NamedKey::Escape) => {
                     if self.kind == TextEditorKind::Code {
                         // TODO: clear selections
+                        if self.doc.get().selections.len() > 1 {
+                            self.doc.lock().cancel_multi_cursor();
+                        } else if self.doc.get().selections[0].head != self.doc.get().selections[0].tail {
+                            let mut d = self.doc.lock();
+                            d.selections[0].tail = d.selections[0].head;
+                        } 
                         return HANDLED;
                     } else {
                         return IGNORED;
