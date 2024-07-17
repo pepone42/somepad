@@ -191,6 +191,12 @@ pub struct Document {
     batch_edit: Option<BatchEdit>,
 }
 
+impl PartialEq for Document {
+    fn eq(&self, other: &Self) -> bool {
+        self.rope == other.rope && self.file_info == other.file_info && self.selections == other.selections && self.file_name == other.file_name
+    }
+}
+
 impl Default for Document {
     fn default() -> Self {
         let rope = Rope::new();
