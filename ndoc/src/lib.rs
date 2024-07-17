@@ -2,7 +2,6 @@ mod document;
 mod file_info;
 mod rope_utils;
 pub mod syntax;
-pub mod theme;
 
 pub use document::Document;
 pub use file_info::FileInfo;

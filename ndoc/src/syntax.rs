@@ -5,13 +5,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 use syntect::{
-    highlighting::{HighlightState, Highlighter, RangedHighlightIterator, Style},
+    highlighting::{HighlightState, Highlighter, RangedHighlightIterator, Style, Theme, ThemeSet},
     parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet},
 };
 
-use crate::{rope_utils, theme::THEME};
+use crate::rope_utils;
 
 pub static SYNTAXSET: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines);
+pub static THEMESET: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
 
 #[derive(Debug)]
 pub struct StateCache {
@@ -74,9 +75,10 @@ impl Default for StyledLinesCache {
 
 impl Default for StateCache {
     fn default() -> Self {
+        
         StateCache {
             states: Vec::new(),
-            highlighter: Highlighter::new(&THEME.style),
+            highlighter: Highlighter::new(&THEMESET.themes["base16-ocean.dark"]),
         }
     }
 }

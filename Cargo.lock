@@ -2098,7 +2098,6 @@ dependencies = [
  "chardetng",
  "encoding_rs",
  "itertools 0.13.0",
- "nonepad-vscodetheme",
  "once_cell",
  "print-positions",
  "ropey",
@@ -2141,16 +2140,6 @@ name = "nominals"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd4b6e50a0a7f2214e99ecf7f4a2c9cb9572e5817d96e37a6d31387961c23994"
-
-[[package]]
-name = "nonepad-vscodetheme"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d832535bb654b55d540dc62268af644cee126531f3b81312c269f508b4f0bebe"
-dependencies = [
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "noop_proc_macro"
