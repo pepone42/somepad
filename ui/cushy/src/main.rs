@@ -271,6 +271,22 @@ const DUPLICATE_SELECTION_UP: ViewCommand = ViewCommand {
     },
 };
 
+const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
+    name: "Duplicate Selection",
+    id: "editor.duplicate_selection",
+    action: |_id, v, c| {
+        if v.doc.get().selections.len() == 1 && v.doc.get().selections[0].is_empty() {
+            let mut d= v.doc.lock();
+            let pos = d.selections[0].head;
+            d.select_word(pos);
+        } else {
+            v.doc.lock().duplicate_selection_for_selected_text();
+        }
+        v.refocus_main_selection(c);
+    },
+};
+
+
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
 
@@ -324,6 +340,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.window.insert(SELECT_DOC.id, SELECT_DOC);
     cmd_reg.view.insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
     cmd_reg.view.insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
+    cmd_reg.view.insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts

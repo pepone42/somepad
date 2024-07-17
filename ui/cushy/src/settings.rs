@@ -27,6 +27,7 @@ impl Default for Settings {
         shortcuts.insert(crate::GOTO_LINE.id.to_string(),shortcut!(Ctrl + g));
         shortcuts.insert(crate::DUPLICATE_SELECTION_DOWN.id.to_string(),shortcut!(Ctrl + Alt + ArrowDown));
         shortcuts.insert(crate::DUPLICATE_SELECTION_UP.id.to_string(),shortcut!(Ctrl + Alt + ArrowUp));
+        shortcuts.insert(crate::DUPLICATE_SELECTION.id.to_string(),shortcut!(Ctrl + d));
         // shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
         // shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
         // shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));

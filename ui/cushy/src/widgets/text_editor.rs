@@ -124,17 +124,18 @@ impl TextEditor {
             })
         });
 
-        editor.current_words_found = editor.doc.with_clone(|doc| {
-            editor.current_word.map_each(move |current_word| {
-                let mut items = Vec::new();
-                let mut idx = Position::new(0, 0);
-                while let Some(i) = doc.get().find_from(current_word, idx) {
-                    items.push(i);
-                    idx = i.1;
-                }
-                items
-            })
-        });
+        // TODO: not preformant. We need a way to cancel a foreach if the doc changes while we are still iterating
+        // editor.current_words_found = editor.doc.with_clone(|doc| {
+        //     editor.current_word.map_each(move |current_word| {
+        //         let mut items = Vec::new();
+        //         let mut idx = Position::new(0, 0);
+        //         while let Some(i) = doc.get().find_from(current_word, idx) {
+        //             items.push(i);
+        //             idx = i.1;
+        //         }
+        //         items
+        //     })
+        // });
 
         editor.foreach_handles.push(
             (&editor.doc, &editor.items_found, &editor.should_refocus).with_clone(
@@ -386,7 +387,7 @@ impl TextEditor {
             .get()
             .iter()
             .filter_map(|s| {
-                let range = Selection::new(s.0, s.1, false);
+                let range = (s.0, s.1).into();
                 self.get_selection_shape(range, layouts)
             })
             .collect()
@@ -501,19 +502,19 @@ impl Widget for TextEditor {
                 );
             }
         } else {
-            for path in self.get_items_shapes(self.current_words_found.clone(),&buffers) {
-                let bg_color = context.get(&SelectionBackgroundColor);
-                let border_color = context.get(&SelectionBorderColor);
+            // for path in self.get_items_shapes(self.current_words_found.clone(),&buffers) {
+            //     let bg_color = context.get(&SelectionBackgroundColor);
+            //     let border_color = context.get(&SelectionBorderColor);
 
-                context.gfx.draw_shape(
-                    path.fill(bg_color)
-                        .translate_by(Point::new(padding, padding)),
-                );
-                context.gfx.draw_shape(
-                    path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
-                        .translate_by(Point::new(padding, padding)),
-                );
-            }
+            //     context.gfx.draw_shape(
+            //         path.fill(bg_color)
+            //             .translate_by(Point::new(padding, padding)),
+            //     );
+            //     context.gfx.draw_shape(
+            //         path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
+            //             .translate_by(Point::new(padding, padding)),
+            //     );
+            // }
         }
 
         for i in first_line..last_line {

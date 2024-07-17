@@ -470,6 +470,19 @@ impl Document {
                 ));
             }
         }
+        dbg!("searching",char_idx);
+        for i in 0..(char_idx+input.chars().count()+1).max(self.rope.len_chars()) {
+            let doc = self.rope.slice(i..).chars();
+            let search = input.chars();
+            
+            if search.zip(doc).all(|(ic, c)| ic == c) {
+                return Some((
+                    self.char_to_position(i),
+                    self.char_to_position(i + input.len()),
+                ));
+            }
+        }
+        
         None
     }
 
@@ -761,7 +774,7 @@ impl Document {
                 }
                 let tail = if !expand { head } else { s.tail };
 
-                Selection::new(head, tail, s.is_clone)
+                Selection::new(head, tail, s.is_clone, s.generation)
             })
             .collect();
 
@@ -780,7 +793,7 @@ impl Document {
                 };
 
                 let tail = if !expand { head } else { s.tail };
-                Selection::new(head, tail, s.is_clone)
+                Selection::new(head, tail, s.is_clone, s.generation)
             })
             .collect();
 
@@ -830,6 +843,7 @@ impl Document {
             head,
             tail,
             is_clone: false,
+            generation : 0,
         }]
     }
 
@@ -887,6 +901,7 @@ impl Document {
             head,
             tail,
             is_clone: false,
+            generation: 0,
         }]
     }
 
@@ -897,6 +912,7 @@ impl Document {
             head,
             tail,
             is_clone: false,
+            generation: 0,
         }]
     }
 
@@ -905,6 +921,7 @@ impl Document {
             head,
             tail,
             is_clone: false,
+            generation: 0,
         }]
     }
 
@@ -951,6 +968,20 @@ impl Document {
         }
 
         self.merge_selections();
+    }
+
+    pub fn duplicate_selection_for_selected_text(&mut self) {
+        let start = self.position_to_char(self.selections[0].start());
+        let end = self.position_to_char(self.selections[0].end());
+        let content = self.rope.slice(start..end).to_string();
+        let mut s = self.selections.iter().max_by_key(|s| s.generation).unwrap().duplicate();
+        let next = self.find_from(&content, s.end());
+        if let Some((start, end)) = next {
+            s.tail = start;
+            s.head = end;
+            self.selections.push(s);
+            self.merge_selections();
+        }
     }
 
     pub fn page_up(&mut self, amount: usize, expand: bool) {
@@ -1279,6 +1310,7 @@ pub struct Selection {
     pub head: Position,
     pub tail: Position,
     is_clone: bool,
+    generation: usize,
 }
 
 impl PartialOrd for Selection {
@@ -1293,13 +1325,36 @@ impl Ord for Selection {
     }
 }
 
+impl From<(Position, Position)> for Selection {
+    fn from((head, tail): (Position, Position)) -> Self {
+        Self {
+            head,
+            tail,
+            is_clone: false,
+            generation: 0,
+        }
+    }
+}
+
 impl Selection {
-    pub fn new(head: Position, tail: Position, is_clone: bool) -> Self {
+    fn new(head: Position, tail: Position, is_clone: bool, generation: usize) -> Self {
         Self {
             head,
             tail,
             is_clone,
+            generation,
         }
+    }
+    pub fn duplicate(&self) -> Self {
+        Self {
+            head: self.head,
+            tail: self.tail,
+            is_clone: true,
+            generation: self.generation + 1,
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.head == self.tail
     }
     pub fn start(&self) -> Position {
         if self.head <= self.tail {
@@ -1374,10 +1429,18 @@ impl Selection {
         if self.head < self.tail {
             if other.head < self.tail {
                 self.tail = other.tail.max(self.tail);
+                if self.is_clone != other.is_clone {
+                    self.is_clone = false;
+                    self.generation = 0;
+                }
                 return true;
             }
         } else if other.tail < self.head {
             self.head = other.head.max(self.head);
+            if self.is_clone != other.is_clone {
+                self.is_clone = false;
+                self.generation = 0;
+            }
             return true;
         }
         false
