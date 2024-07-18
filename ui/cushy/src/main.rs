@@ -7,11 +7,13 @@ use cushy::context::EventContext;
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use ndoc::syntax::THEMESET;
 use rfd::FileDialog;
+use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
 use widgets::palette::{palette, PaletteExt};
 use widgets::status_bar::StatusBar;
-use widgets::text_editor::TextEditor;
+use widgets::text_editor::{CodeEditor, TextEditor};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -286,6 +288,68 @@ const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
     },
 };
 
+const CHANGE_THEME: WindowCommand = WindowCommand {
+    name: "Change Theme",
+    id: "window.change_theme",
+    action: |_id, w, c| {
+        let items = THEMESET.themes.keys().cloned().collect();
+        dbg!("palette theme");
+        let documents = w.documents.clone();
+        c.palette("Choose theme").items(items).accept(move|_, _, val| {
+            for doc in documents.get() {
+                doc.lock().update_theme(&val);
+            }
+        }).show();
+    },
+};
+
+
+const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
+    name : "Show All Commands",
+    id : "window.show_all_commands",
+    action: |_id, w, c| {
+        let mut items = w.cmd_reg.get().view.values().map(|v| (v.id,v.name)).collect::<Vec<_>>();
+        items.extend(w.cmd_reg.get().window.values().map(|v| (v.id,v.name)));
+
+        // TODO: order + show Shortcut if available
+
+        let i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
+
+        let cmd_reg = w.cmd_reg.clone();
+
+        c.palette("All Commands").items(i).accept(move |c,index,v| {
+            if items[index].0.starts_with("editor.") {
+                let editor_id = {
+                    let (current_code_editor_id, doc_id) = {
+                        let wguard = c.widget().lock();
+                        let w = wguard.downcast_ref::<EditorWindow>().unwrap();
+                        (w.editor_switcher_id, w.current_doc().get().id())
+                    };
+                    
+                    let editor_switched_id = c.for_other(&current_code_editor_id).unwrap().widget().lock().downcast_ref::<EditorSwitcher>().unwrap().editors[&doc_id].widget().id();
+                    c.for_other(&editor_switched_id).unwrap().widget().lock().downcast_ref::<CodeEditor>().unwrap().editor_id
+                };
+
+                let mut editor_context = c.for_other(&editor_id).unwrap();
+                let t = unsafe{
+                    let wguard = editor_context.widget().lock();
+                    let t = wguard.downcast_ref::<TextEditor>().unwrap() as *const TextEditor;
+                    t.as_ref().unwrap()
+                };
+                let cmd = *cmd_reg.get().view.get(dbg!(items[index].0)).unwrap();
+                (cmd.action)(editor_id,t,&mut editor_context);
+            } else {
+                let w = unsafe{
+                    let wguard = c.widget().lock();
+                    let w = wguard.downcast_ref::<EditorWindow>().unwrap() as *const EditorWindow;
+                    w.as_ref().unwrap()
+                };
+                let cmd = *cmd_reg.get().window.get(items[index].0).unwrap();
+                (cmd.action)(c.widget().id(),w,c);
+            }
+        }).show();
+    }
+};
 
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
     Lazy::new(|| Arc::new(Mutex::new(Settings::load())));
@@ -341,6 +405,8 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.view.insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
     cmd_reg.view.insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
     cmd_reg.view.insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
+    cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
+    cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
     for (command_id, shortcut) in get_settings()
         .shortcuts

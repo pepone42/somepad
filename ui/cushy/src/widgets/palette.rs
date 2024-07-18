@@ -156,6 +156,7 @@ impl WrapperWidget for Palette {
                 if matches!(input.logical_key, Key::Named(NamedKey::Control))
                     && s.modifiers.control_key()
                 {
+                    close_palette();
                     if self.items.is_some() {
                         let item = self.filter.get().selected_item.get();
                         if let Some(idx) = item {
@@ -166,7 +167,6 @@ impl WrapperWidget for Palette {
                             );
                         }
                     }
-                    close_palette();
                 }
             }
             return IGNORED;
@@ -188,6 +188,7 @@ impl WrapperWidget for Palette {
         }
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
+                close_palette();
                 if self.items.is_some() {
                     let item = self.filter.get().selected_item.get();
                     if let Some(idx) = item {
@@ -204,7 +205,7 @@ impl WrapperWidget for Palette {
                         self.input.get().rope.to_string(),
                     );
                 }
-                close_palette();
+                
 
                 HANDLED
             }

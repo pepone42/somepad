@@ -8,8 +8,7 @@ use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetRef, WidgetTag, WrapperWidget, HANDLED,
-    IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
 };
 
 use cushy::window::KeyEvent;
@@ -21,7 +20,7 @@ use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
-use super::palette::Palette;
+use super::palette::{Palette, PaletteExt};
 use super::scroll::MyScroll;
 use super::side_bar::SideBar;
 
@@ -33,6 +32,7 @@ pub struct EditorWindow {
     pub cmd_reg: Dynamic<CommandsRegistry>,
     pub mru_documents: Dynamic<HashMap<usize, SystemTime>>,
     focused: Dynamic<bool>,
+    pub editor_switcher_id: WidgetId,
 }
 
 impl EditorWindow {
@@ -51,14 +51,20 @@ impl EditorWindow {
         let (editor_tag, editor_id) = WidgetTag::new();
         // TODO: Use Lp instead of Px
         let width = Dynamic::new(Px::new(200));
-        let opened_editor = SideBar::new(OpenedEditor::new(documents.clone(), current_doc.clone()),width.clone());
-        
-        let child = MyScroll::vertical(opened_editor).expand_vertically()
-            .and(ResizeHandle::new(width)).and(
+        let opened_editor = SideBar::new(
+            OpenedEditor::new(documents.clone(), current_doc.clone()),
+            width.clone(),
+        );
+
+        let child = MyScroll::vertical(opened_editor)
+            .expand_vertically()
+            .and(ResizeHandle::new(width))
+            .and(
                 EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
                     .make_with_tag(editor_tag),
             )
-            .into_columns().gutter(Px::ZERO)
+            .into_columns()
+            .gutter(Px::ZERO)
             .make_widget();
 
         let w = child
@@ -71,6 +77,7 @@ impl EditorWindow {
             current_doc: current_doc.clone(),
             cmd_reg,
             focused: Dynamic::new(false),
+            editor_switcher_id: editor_id,
         }
     }
 

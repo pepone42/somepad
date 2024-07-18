@@ -1,8 +1,8 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use cushy::kludgine::app::winit::{
     event::{ElementState, Modifiers},
-    keyboard::{Key, ModifiersState},
+    keyboard::{Key, ModifiersState, NamedKey},
 };
 use serde::{de::Visitor, Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -209,6 +209,35 @@ impl FromStr for Shortcut {
         };
         Ok(Shortcut { key, modifiers })
     }
+}
+
+impl Display for Shortcut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut mods = Vec::new();
+
+        if self.modifiers.contains(ModifiersState::ALT) {
+            mods.push("Alt");
+        }
+        if self.modifiers.contains(ModifiersState::CONTROL) {
+            mods.push("Ctrl");
+        }
+        if self.modifiers.contains(ModifiersState::SHIFT) {
+            mods.push("Shift");
+        }
+        if self.modifiers.contains(ModifiersState::SUPER) {
+            mods.push("Meta");
+        }
+
+        match &self.key {
+            Key::Character(c) => write!(f, "{}+{}", mods.join("+"), c),
+            Key::Named(NamedKey::ArrowUp) => write!(f, "{}+Up", mods.join("+") ),
+            Key::Named(NamedKey::ArrowDown) => write!(f, "{}+Down", mods.join("+") ),
+            Key::Named(NamedKey::Tab) => write!(f, "{}+Tab", mods.join("+") ),
+            _ => Err(std::fmt::Error),
+        }
+
+    }
+
 }
 
 #[allow(dead_code)]

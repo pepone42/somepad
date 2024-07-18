@@ -89,6 +89,10 @@ impl StateCache {
         Self::default()
     }
 
+    pub fn change_theme(&mut self, theme: &str) {
+        self.highlighter = Highlighter::new(&THEMESET.themes[theme]);
+    }
+
     pub fn update_range(
         &mut self,
         highlighted_line: &StyledLinesCache,

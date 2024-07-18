@@ -43,6 +43,7 @@ impl Default for Settings {
 
         shortcuts.insert(crate::NEXT_DOC.id.to_string(),shortcut!(Ctrl+Tab));
         shortcuts.insert(crate::PREV_DOC.id.to_string(),shortcut!(Ctrl+Shift+Tab));
+        shortcuts.insert(crate::SHOW_ALL_COMMAND.id.to_string(), shortcut!(Ctrl + Shift + p));
         
 
         Self { shortcuts, indentation: Default::default() }

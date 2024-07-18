@@ -17,7 +17,7 @@ pub struct EditorSwitcher {
     pub(super) current_doc: Dynamic<usize>,
 
     last_doc: usize,
-    editors: HashMap<usize, WidgetRef>,
+    pub editors: HashMap<usize, WidgetRef>,
     cmd_reg: Dynamic<CommandsRegistry>,
 }
 

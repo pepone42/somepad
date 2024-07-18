@@ -1056,7 +1056,7 @@ impl Widget for Gutter {
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
     search_id: WidgetId,
-    editor_id: WidgetId,
+    pub editor_id: WidgetId,
     collapse_search_panel: Dynamic<bool>,
 }
 

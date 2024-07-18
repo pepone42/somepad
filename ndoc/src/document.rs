@@ -125,6 +125,7 @@ pub enum BackgroundWorkerMessage {
         Sender<()>,
         usize,
     ),
+    UpdateTheme(String),
     // WatchFile(PathBuf),
     // UnwatchFile(PathBuf),
 }
@@ -166,6 +167,10 @@ impl<'a> HighlighterState<'a> {
         self.current_index += self.chunk_len;
         // subsequent chunck are bigger, for better performance
         self.chunk_len = 1000;
+    }
+
+    fn update_theme(&mut self, theme: &str) {
+        self.state_cache.change_theme(theme);
     }
 }
 
@@ -284,6 +289,11 @@ impl Document {
                     Ok(BackgroundWorkerMessage::RegisterDocument(id, f)) => {
                         callback.insert(id, f);
                     }
+                    Ok(BackgroundWorkerMessage::UpdateTheme(theme)) => {
+                        for (_, state) in highlight_state.iter_mut() {
+                            state.update_theme(&theme);
+                        }
+                    }
                     Ok(BackgroundWorkerMessage::Stop) => return,
                     _ => (),
                 }
@@ -335,6 +345,13 @@ impl Document {
             let _ = receiver.recv();
             // TODO: log error
         }
+    }
+
+    pub fn update_theme(&self, theme: &str) {
+        if let Some(tx) = self.message_sender.as_ref() {
+            let _ = tx.send(BackgroundWorkerMessage::UpdateTheme(theme.to_string()));
+        }
+        self.update_highlight_from(0);
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {

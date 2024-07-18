@@ -300,12 +300,12 @@ impl Widget for FilteredList {
         let idx = (location.y / line_height).floor().get();
         *self.filter.get().selected_idx.lock() = Some(idx as usize);
         if let Some(item) = self.filter.get().selected_item.get() {
+            close_palette();
             self.action.get()(
                 &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                 idx as usize,
                 item.text.clone(),
             );
-            close_palette();
         }
 
         HANDLED
