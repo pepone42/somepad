@@ -12,12 +12,14 @@ use toml_edit::{de::from_document, DocumentMut};
 pub struct Settings {
     pub shortcuts: HashMap<String, Shortcut>,
     pub indentation: Indentation,
+    pub theme: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 struct OptSettings {
     pub shortcuts: Option<HashMap<String, Shortcut>>,
     pub indentation: Option<Indentation>,
+    pub theme: Option<String>,
 }
 
 impl Default for Settings {
@@ -46,7 +48,7 @@ impl Default for Settings {
         shortcuts.insert(crate::SHOW_ALL_COMMAND.id.to_string(), shortcut!(Ctrl + Shift + p));
         
 
-        Self { shortcuts, indentation: Default::default() }
+        Self { shortcuts, indentation: Default::default(), theme: "base16-eighties.dark".to_string() }
     }
 }
 
@@ -59,7 +61,7 @@ impl Settings {
         
         let config_file = ProjectDirs::from("rs", "", "somepad").context("Getting project config path")?.config_dir().join("settings.toml");
 
-        
+        dbg!("reading settings file from", &config_file);
         let config_content = std::fs::read_to_string(&config_file).context(format!("Reading settings file {}",&config_file.to_string_lossy()))?;
         let toml = config_content.parse::<DocumentMut>().context("Parsing settings")?;
         
@@ -70,6 +72,7 @@ impl Settings {
         let settings = Settings {
             shortcuts: settings.shortcuts.unwrap_or(default_settings.shortcuts),
             indentation: settings.indentation.unwrap_or(default_settings.indentation),
+            theme: settings.theme.unwrap_or(default_settings.theme),
         };
         
         Ok(dbg!(settings))

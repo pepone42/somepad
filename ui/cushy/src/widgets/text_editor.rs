@@ -31,7 +31,7 @@ use rfd::FileDialog;
 use scroll::ScrollController;
 
 use crate::shortcut::{event_match, ModifiersCustomExt};
-use crate::{CommandsRegistry, FONT_SYSTEM};
+use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, ContextScroller, MyScroll, PassiveScroll};
 
@@ -96,6 +96,9 @@ impl TextEditor {
         search_term: Dynamic<Document>,
     ) -> Self {
         let mut editor = TextEditor::create(doc.clone());
+
+        doc.lock().update_theme(&get_settings().theme);
+
         editor.cmd_reg = cmd_reg;
         editor.click_info = click_info;
         editor.search_term = search_term;
