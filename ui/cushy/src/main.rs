@@ -298,6 +298,7 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
         c.palette("Choose theme").items(items).accept(move|_, _, val| {
             for doc in documents.get() {
                 doc.lock().update_theme(&val);
+                SETTINGS.lock().unwrap().theme.clone_from(&val);
             }
         }).show();
     },
@@ -357,6 +358,7 @@ pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
 pub fn get_settings() -> Settings {
     SETTINGS.lock().unwrap().clone()
 }
+
 
 #[derive(Debug, Clone)]
 pub struct CommandsRegistry {
@@ -483,6 +485,9 @@ fn main() -> anyhow::Result<()> {
     win.attributes.min_inner_size = Some(Size::Logical(LogicalSize::new(800., 600.)));
 
     win.run()?;
+
+    // TODO: Save settings
+
 
     Ok(())
 }

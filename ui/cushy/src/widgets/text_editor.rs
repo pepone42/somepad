@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use cushy::context::{AsEventContext, EventContext, WidgetContext};
+use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
 use cushy::kludgine::wgpu::hal::vulkan::Workarounds;
@@ -24,8 +24,10 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
+use cushy::widgets::color::ComponentPicker;
 use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
+use ndoc::syntax::THEMESET;
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
@@ -34,6 +36,73 @@ use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, ContextScroller, MyScroll, PassiveScroll};
+
+pub struct CodeEditorColors {
+    bg: Color,
+    fg: Color,
+    bg_selection: Color,
+    border_selection: Color,
+    cursor: Color,
+    fg_gutter: Color,
+    bg_gutter: Color,
+}
+
+impl CodeEditorColors {
+    pub fn get(kind: TextEditorKind, context: &GraphicsContext) -> Self {
+        if kind == TextEditorKind::Code {
+            let theme = &THEMESET.themes[&get_settings().theme];
+            let fg = theme
+                .settings
+                .foreground
+                .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                .unwrap_or(context.get(&TextColor));
+            let bg = theme
+                .settings
+                .background
+                .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                .unwrap_or(context.get(&BackgroundColor));
+            CodeEditorColors {
+                bg,
+                fg,
+                bg_selection: theme
+                    .settings
+                    .selection
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(context.get(&SelectionBackgroundColor)),
+                border_selection: theme
+                    .settings
+                    .selection_border
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(context.get(&SelectionBorderColor)),
+                cursor: theme
+                    .settings
+                    .caret
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(context.get(&CursorColor)),
+                fg_gutter: theme
+                    .settings
+                    .gutter_foreground
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(fg),
+                bg_gutter: theme
+                    .settings
+                    .gutter
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(bg),
+            }
+        } else {
+            CodeEditorColors {
+                bg: context.get(&components::WidgetBackground),
+                fg: context.get(&components::TextColor),
+                bg_selection: context.get(&components::HighlightColor),
+                border_selection: context.get(&components::HighlightColor),
+                cursor: context.get(&components::OutlineColor),
+                fg_gutter: Color::BLACK,
+                bg_gutter: Color::WHITE,
+            }
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ClickInfo {
@@ -112,8 +181,6 @@ impl TextEditor {
             dbg!(d.rope.slice(word_start..word_end).to_string())
         });
 
-
-
         editor.items_found = editor.doc.with_clone(|doc| {
             editor.search_term.map_each(move |search_term| {
                 let mut items = Vec::new();
@@ -146,7 +213,6 @@ impl TextEditor {
                     editor
                         .current_search_item_idx
                         .for_each_cloned(move |seach_idx| {
-                            
                             if items_found.get().is_empty() {
                                 return;
                             }
@@ -385,7 +451,11 @@ impl TextEditor {
             .collect()
     }
 
-    fn get_items_shapes(&self, items: Dynamic<Vec<(Position,Position)>>, layouts: &HashMap<usize, Buffer>) -> Vec<Path<Px, false>> {
+    fn get_items_shapes(
+        &self,
+        items: Dynamic<Vec<(Position, Position)>>,
+        layouts: &HashMap<usize, Buffer>,
+    ) -> Vec<Path<Px, false>> {
         items
             .get()
             .iter()
@@ -423,6 +493,8 @@ impl Widget for TextEditor {
         self.focused = context.widget.window_mut().focused().clone();
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let colors = CodeEditorColors::get(self.kind, context);
+
         // So we can refocus easily from about anywere
         if self.should_refocus.get() {
             self.refocus_main_selection(&context.as_event_context());
@@ -457,9 +529,8 @@ impl Widget for TextEditor {
 
         if self.kind == TextEditorKind::Code {
             context.gfx.set_font_size(Lp::points(12));
-
-            context.fill(context.get(&BackgroundColor));
         }
+        context.fill(colors.bg);
         let doc = self.doc.get();
 
         // TODO: cache layouts
@@ -476,8 +547,8 @@ impl Widget for TextEditor {
 
         // draw selections
         for path in self.get_selections_shapes(&buffers) {
-            let bg_color = context.get(&SelectionBackgroundColor);
-            let border_color = context.get(&SelectionBorderColor);
+            let bg_color = colors.bg_selection;
+            let border_color = colors.border_selection;
 
             context.gfx.draw_shape(
                 path.fill(bg_color)
@@ -492,8 +563,9 @@ impl Widget for TextEditor {
         // draw search items
         if !self.search_panel_closed.get() {
             for path in self.get_items_shapes(self.items_found.clone(), &buffers) {
-                let bg_color = context.get(&SelectionBackgroundColor);
-                let border_color = context.get(&SelectionBorderColor);
+                // TODO: user correct colors
+                let bg_color = colors.bg_selection;
+                let border_color = colors.border_selection;
 
                 context.gfx.draw_shape(
                     path.fill(bg_color)
@@ -532,7 +604,7 @@ impl Widget for TextEditor {
                         scale: None,
                     }
                     .translate_by(Point::new(padding, y + padding)),
-                    Color::WHITE,
+                    colors.fg,
                     cushy::kludgine::text::TextOrigin::TopLeft,
                 );
             }
@@ -552,7 +624,7 @@ impl Widget for TextEditor {
                         Point::new(Px::ZERO, Px::ZERO),
                         Size::new(Px::new(1), self.line_height),
                     ),
-                    Color::WHITE,
+                    colors.cursor,
                 )
                 .translate_by(Point::new(
                     head + padding,
@@ -919,6 +991,7 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let colors = CodeEditorColors::get(TextEditorKind::Code, context);
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.gfx.scale())
@@ -935,7 +1008,7 @@ impl Widget for Gutter {
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
 
-        context.fill(context.get(&BackgroundColor));
+        context.fill(colors.bg_gutter);
 
         for i in first_line..last_line {
             let y = units::Px::new(i as _) * self.font_metrics.line_height;
@@ -945,7 +1018,7 @@ impl Widget for Gutter {
             context.gfx.set_text_attributes(attrs);
 
             context.gfx.draw_text(
-                Text::new(&format!("{}", i + 1), Color::WHITE)
+                Text::new(&format!("{}", i + 1), colors.fg_gutter)
                     .translate_by(Point::new(Px::ZERO + padding, y + padding)),
             );
         }
@@ -1212,8 +1285,12 @@ impl WrapperWidget for CodeEditor {
 define_components! {
     CodeEditor {
         TextSize(Lp, "text_size", Lp::points(11))
+        TextColor(Color, "text_color", Color::new(0xFF, 0xFF, 0xFF, 0xFF))
         LineHeight(Lp, "line_height", Lp::points(13))
         BackgroundColor(Color, "background_color", Color::new(0x34, 0x3D, 0x46, 0xFF))
+        GutterBackgroundColor(Color, "gutter_background", Color::new(0x34, 0x3D, 0x46, 0xFF))
+        GutterForegroundColor(Color, "gutter_foreground", Color::new(0xFF, 0xFF, 0xFF, 0xFF))
+        CursorColor(Color, "cursor_color", Color::new(0xFF, 0xFF, 0xFF, 0xFF))
         SelectionBackgroundColor(Color, "selection_background_color", Color::new(0x4F, 0x5B, 0x66, 0xFF))
         SelectionBorderColor(Color, "selection_border_color", Color::new(0x20, 0x30, 0x40, 0xFF))
     }
