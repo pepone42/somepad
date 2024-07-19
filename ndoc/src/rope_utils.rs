@@ -111,7 +111,7 @@ pub fn next_grapheme_boundary_byte<U: Into<usize>>(slice: &RopeSlice, byte_idx: 
         }
     }
 }
-
+#[allow(dead_code)]
 /// Returns whether the given char position is a grapheme boundary.
 pub fn is_grapheme_boundary(slice: &RopeSlice, char_idx: usize) -> bool {
     // Bounds check
@@ -320,7 +320,7 @@ pub (crate) fn get_line_info<'a>(rope: &'a RopeSlice, line_idx: usize, indent_le
         }
     }
 }
-
+#[allow(dead_code)]
 pub fn tab2space_char_idx(rope: &RopeSlice, line_idx: usize, indent_len: usize) -> Vec<usize> {
     let mut offset = 0;
     let mut v = Vec::with_capacity(rope.line(line_idx).len_chars());
@@ -339,7 +339,7 @@ pub fn tab2space_char_idx(rope: &RopeSlice, line_idx: usize, indent_len: usize) 
     }
     v
 }
-
+#[allow(dead_code)]
 pub fn grapheme_to_byte(slice: &RopeSlice, grapheme_idx: usize) -> usize {
     slice.char_to_byte(grapheme_to_char(slice,grapheme_idx))
 }
@@ -353,7 +353,7 @@ pub fn grapheme_to_char(slice: &RopeSlice, grapheme_idx: usize) -> usize {
     }
     idx
 }
-
+#[allow(dead_code)]
 pub fn byte_to_grapheme(slice: &RopeSlice, byte_idx: usize) -> usize {
     char_to_grapheme(slice,slice.byte_to_char(byte_idx))
 }

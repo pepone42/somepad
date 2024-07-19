@@ -32,6 +32,7 @@ pub struct ScrollController {
 
 static SCROLLED_IDS : Lazy<Dynamic<HashMap<WidgetId,Dynamic<ScrollController>>>> = Lazy::new(|| Dynamic::new(HashMap::new()));
 
+#[allow(dead_code)]
 impl ScrollController {
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
         let viewport = Rect::new(-self.scroll, self.control_size);
@@ -605,7 +606,7 @@ pub struct PassiveScroll {
     enabled: Point<bool>,
     line_height: Px,
 }
-
+#[allow(dead_code)]
 impl PassiveScroll {
     pub fn new(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
         Self {
@@ -645,7 +646,7 @@ impl Widget for PassiveScroll {
         context: &mut LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
         self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
-        let (mut scroll, current_max_scroll) = self.controller.get().constrain_scroll();
+        let (mut scroll, _) = self.controller.get().constrain_scroll();
 
         let max_extents = Size::new(
             if self.enabled.x {

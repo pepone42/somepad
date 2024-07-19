@@ -4,8 +4,7 @@ use std::time::{Duration, Instant};
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
-use cushy::kludgine::wgpu::hal::vulkan::Workarounds;
-use cushy::value::{CallbackHandle, Dynamic, MapEach, MapEachCloned};
+use cushy::value::{CallbackHandle, Dynamic, MapEach};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
 use cushy::figures::{
@@ -24,10 +23,9 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
-use cushy::widgets::color::ComponentPicker;
 use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
-use ndoc::syntax::{ThemeSetRegistry, THEMESET};
+use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;

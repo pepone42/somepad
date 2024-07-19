@@ -3,7 +3,7 @@ use cushy::{
     figures::{
         units::{Px, UPx}, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
     },
-    kludgine::{app::winit::event::MouseButton, shapes::{Shape, StrokeOptions}, text::Text, DrawableExt},
+    kludgine::{app::winit::event::MouseButton, shapes::Shape, text::Text, DrawableExt},
     styles::components,
     value::{Destination, Dynamic, Source},
     widget::{Widget, HANDLED, IGNORED},

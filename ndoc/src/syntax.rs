@@ -2,11 +2,10 @@ use once_cell::sync::{Lazy, OnceCell};
 use ropey::Rope;
 use std::{
     ops::{Deref, Range},
-    path::Path,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 use syntect::{
-    highlighting::{HighlightState, Highlighter, RangedHighlightIterator, Style, Theme, ThemeSet},
+    highlighting::{HighlightState, Highlighter, RangedHighlightIterator, Style, ThemeSet},
     parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet},
 };
 

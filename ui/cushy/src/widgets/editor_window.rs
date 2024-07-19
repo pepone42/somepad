@@ -20,7 +20,7 @@ use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
-use super::palette::{Palette, PaletteExt};
+use super::palette::Palette;
 use super::scroll::MyScroll;
 use super::side_bar::SideBar;
 

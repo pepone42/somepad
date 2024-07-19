@@ -21,9 +21,9 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::{self, CornerRadius, TextSize};
+use cushy::styles::components::{self};
 use cushy::styles::{
-    ColorScheme, ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair,
+    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair,
 };
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
@@ -325,7 +325,7 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
 
         c.palette("All Commands")
             .items(i)
-            .accept(move |c, index, v| {
+            .accept(move |c, index, _| {
                 if items[index].0.starts_with("editor.") {
                     let editor_id = {
                         let (current_code_editor_id, doc_id) = {
@@ -411,20 +411,9 @@ impl Default for CommandsRegistry {
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    // #[cfg(debug_assertions)]
-    // {
-    //     let subscriber = tracing_subscriber::FmtSubscriber::builder()
-    //         .with_max_level(tracing::Level::INFO)
-    //         .finish();
-
-    //     tracing::subscriber::set_global_default(subscriber)
-    //         .expect("setting default subscriber failed");
-    // }
-
     let settings = get_settings(); // force load settings
     let theme = ThemePair::from_scheme(
         &ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
-            //.neutral(ColorSource::new(213., 14.2))
             .build(),
     );
 
@@ -460,7 +449,6 @@ fn main() -> anyhow::Result<()> {
         .filter(|(id, _)| id.starts_with("editor."))
     {
         if let Some(cmd) = cmd_reg.view.get(command_id.as_str()) {
-            dbg!(command_id, shortcut);
             cmd_reg.view_shortcut.insert(shortcut.clone(), *cmd);
         }
     }
@@ -471,7 +459,6 @@ fn main() -> anyhow::Result<()> {
         .filter(|(id, _)| id.starts_with("window."))
     {
         if let Some(cmd) = cmd_reg.window.get(command_id.as_str()) {
-            dbg!(command_id, shortcut);
             cmd_reg.window_shortcut.insert(shortcut.clone(), *cmd);
         }
     }

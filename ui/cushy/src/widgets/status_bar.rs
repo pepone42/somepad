@@ -1,8 +1,7 @@
 use cushy::{
     figures::{units::Px, IntoSigned, IntoUnsigned, Point, ScreenScale, Size, Zero},
     kludgine::{
-        cosmic_text::Stretch,
-        shapes::{Path, PathBuilder, Shape, StrokeOptions},
+        shapes::{PathBuilder, StrokeOptions},
         text::Text,
         DrawableExt,
     },

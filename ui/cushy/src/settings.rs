@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use anyhow::Context;
-use cushy::kludgine::wgpu::core::resource::CreateBufferError;
 use directories::ProjectDirs;
-use ndoc::{syntax::{ThemeSetRegistry, THEMESET}, Indentation, ThemeSet};
+use ndoc::{syntax::THEMESET, Indentation, ThemeSet};
 use serde::{Deserialize, Serialize};
 use crate::shortcut::Shortcut;
 use toml_edit::{de::from_document, DocumentMut};
@@ -64,7 +63,7 @@ impl Settings {
         THEMESET.set(theme_set).unwrap();
 
         tracing::trace!("Loading settings");
-        let default_settings = Settings::default();// : Settings = toml::from_str(&config_content).context("Deserializing settings")?;
+        let default_settings = Settings::default();
 
         
         let config_file = ProjectDirs::from("rs", "", "somepad").context("Getting project config path")?.config_dir().join("settings.toml");
