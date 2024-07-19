@@ -7,7 +7,7 @@ use cushy::context::EventContext;
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use ndoc::syntax::THEMESET;
+use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
@@ -292,7 +292,7 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
     name: "Change Theme",
     id: "window.change_theme",
     action: |_id, w, c| {
-        let items = THEMESET.themes.keys().cloned().collect();
+        let items: Vec<String> = ThemeSetRegistry::get().themes.keys().cloned().collect();
         dbg!("palette theme");
         let documents = w.documents.clone();
         c.palette("Choose theme").items(items).accept(move|_, _, val| {
@@ -312,10 +312,10 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
         let mut items = w.cmd_reg.get().view.values().map(|v| (v.id,v.name)).collect::<Vec<_>>();
         items.extend(w.cmd_reg.get().window.values().map(|v| (v.id,v.name)));
 
+        items.sort_by_key(|i| i.1);
         //TODO, put recent items in front
 
-        let mut i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
-        i.sort();
+        let i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
 
         let cmd_reg = w.cmd_reg.clone();
 
@@ -387,6 +387,7 @@ impl Default for CommandsRegistry {
 }
 
 fn main() -> anyhow::Result<()> {
+    let settings = get_settings(); // force load settings
     let theme = ThemePair::from_scheme(&ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
     //.neutral(ColorSource::new(213., 14.2))
     .build());
@@ -411,7 +412,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
-    for (command_id, shortcut) in get_settings()
+    for (command_id, shortcut) in settings
         .shortcuts
         .iter()
         .filter(|(id, _)| id.starts_with("editor."))

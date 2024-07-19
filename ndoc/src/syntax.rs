@@ -1,8 +1,9 @@
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use ropey::Rope;
 use std::{
     ops::{Deref, Range},
-    sync::{Arc, Mutex},
+    path::Path,
+    sync::{Arc, Mutex, RwLock},
 };
 use syntect::{
     highlighting::{HighlightState, Highlighter, RangedHighlightIterator, Style, Theme, ThemeSet},
@@ -12,14 +13,23 @@ use syntect::{
 use crate::rope_utils;
 
 pub static SYNTAXSET: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines);
-pub static THEMESET: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
+pub static THEMESET: OnceCell<ThemeSet> = OnceCell::new();
+
+pub struct ThemeSetRegistry;
+
+impl ThemeSetRegistry {
+    pub fn get() -> &'static ThemeSet {
+        THEMESET.get_or_init(ThemeSet::load_defaults)
+    }
+}
+
 
 #[derive(Debug)]
 pub struct StateCache {
     states: Vec<(ParseState, HighlightState)>,
     highlighter: Highlighter<'static>,
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct SpanStyle {
     pub style: Style,
     pub range: Range<usize>,
@@ -31,7 +41,7 @@ impl SpanStyle {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct StyledLine {
     styles: Vec<SpanStyle>,
 }
@@ -72,17 +82,14 @@ impl Default for StyledLinesCache {
     }
 }
 
-
 impl Default for StateCache {
     fn default() -> Self {
-        
         StateCache {
             states: Vec::new(),
-            highlighter: Highlighter::new(&THEMESET.themes["base16-ocean.dark"]),
+            highlighter: Highlighter::new(&ThemeSetRegistry::get().themes["base16-ocean.dark"]),
         }
     }
 }
-
 
 impl StateCache {
     pub fn new() -> Self {
@@ -90,11 +97,11 @@ impl StateCache {
     }
 
     pub fn change_theme(&mut self, theme: &str) {
-        if !THEMESET.themes.contains_key(theme) {
+        if !ThemeSetRegistry::get().themes.contains_key(theme) {
             // TODO: logerror
             return;
         }
-        self.highlighter = Highlighter::new(&THEMESET.themes[theme]);
+        self.highlighter = Highlighter::new(&ThemeSetRegistry::get().themes[theme]);
     }
 
     pub fn update_range(
@@ -130,8 +137,6 @@ impl StateCache {
                 Vec::new()
             };
             let h = StyledLine::new(h);
-
-
 
             // let h = if let Some(str) = rope.line(i).as_str() {
             //     let ops = states.0.parse_line(&str, &SYNTAXSET);

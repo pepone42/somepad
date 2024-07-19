@@ -27,7 +27,7 @@ use cushy::widget::{
 use cushy::widgets::color::ComponentPicker;
 use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
-use ndoc::syntax::THEMESET;
+use ndoc::syntax::{ThemeSetRegistry, THEMESET};
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
 use scroll::ScrollController;
@@ -52,7 +52,7 @@ pub struct CodeEditorColors {
 impl CodeEditorColors {
     pub fn get(kind: TextEditorKind, context: &GraphicsContext) -> Self {
         if kind == TextEditorKind::Code {
-            let theme = &THEMESET.themes[&get_settings().theme];
+            let theme = &ThemeSetRegistry::get().themes[&get_settings().theme];
             let fg = theme
                 .settings
                 .foreground

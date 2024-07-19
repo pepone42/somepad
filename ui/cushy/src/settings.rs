@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use cushy::kludgine::wgpu::core::resource::CreateBufferError;
 use directories::ProjectDirs;
-use ndoc::Indentation;
+use ndoc::{syntax::{ThemeSetRegistry, THEMESET}, Indentation, ThemeSet};
 use serde::{Deserialize, Serialize};
 use crate::shortcut::Shortcut;
 use toml_edit::{de::from_document, DocumentMut};
@@ -55,6 +55,14 @@ impl Default for Settings {
 
 impl Settings {
     fn try_load() -> anyhow::Result<Self> {
+        // Load themes
+        dbg!("Loading themes");
+        let project_dir = ProjectDirs::from("rs", "", "somepad").context("Getting project config path")?;
+        let config_folder=project_dir.config_dir();
+        let mut theme_set = ThemeSet::load_defaults();
+        theme_set.add_from_folder(config_folder).context("Loading themes")?;
+        THEMESET.set(theme_set).unwrap();
+
         dbg!("Loading settings");
         let default_settings = Settings::default();// : Settings = toml::from_str(&config_content).context("Deserializing settings")?;
 
@@ -79,9 +87,10 @@ impl Settings {
     }
 
     pub fn load() -> Self {
-        if let Ok(settings) = Settings::try_load().context("Loading settings") {
+        if let Ok(settings) = dbg!(Settings::try_load().context("Loading settings")) {
             settings
         } else {
+            dbg!("Failed to load settings, using default settings");
             Settings::default()
         }
     }

@@ -260,7 +260,7 @@ impl Document {
 
         (*MESSAGE_SENDER.lock().unwrap()) = Some(tx);
 
-        thread::spawn(move || {
+        let _ = thread::Builder::new().name("Document Highlighter".to_string()).spawn(move || {
             let mut highlight_state = HashMap::new();
             let mut callback = HashMap::new();
 
