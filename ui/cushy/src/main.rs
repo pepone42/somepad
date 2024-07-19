@@ -312,9 +312,10 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
         let mut items = w.cmd_reg.get().view.values().map(|v| (v.id,v.name)).collect::<Vec<_>>();
         items.extend(w.cmd_reg.get().window.values().map(|v| (v.id,v.name)));
 
-        // TODO: order + show Shortcut if available
+        //TODO, put recent items in front
 
-        let i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
+        let mut i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
+        i.sort();
 
         let cmd_reg = w.cmd_reg.clone();
 
