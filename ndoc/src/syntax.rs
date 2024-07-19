@@ -90,6 +90,10 @@ impl StateCache {
     }
 
     pub fn change_theme(&mut self, theme: &str) {
+        if !THEMESET.themes.contains_key(theme) {
+            // TODO: logerror
+            return;
+        }
         self.highlighter = Highlighter::new(&THEMESET.themes[theme]);
     }
 
