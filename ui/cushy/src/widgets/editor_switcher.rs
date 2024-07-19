@@ -50,20 +50,9 @@ impl EditorSwitcher {
 
 impl WrapperWidget for EditorSwitcher {
     fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
-        //dbg!(self.last_doc,self.current_doc.get());
 
         let id = self.documents.get()[self.current_doc.get()].get().id();
-        // if !self.editors.contains_key(&id) {
-        //     self.editors.insert(
-        //         id,
-        //         CodeEditor::new(
-        //             self.documents.get()[self.current_doc.get()].clone(),
-        //             self.cmd_reg.clone(),
-        //         )
-        //         .make_widget()
-        //         .widget_ref(),
-        //     );
-        // }
+
         if let std::collections::hash_map::Entry::Vacant(e) = self.editors.entry(id) {
             e.insert(CodeEditor::new(
                     self.documents.get()[self.current_doc.get()].clone(),

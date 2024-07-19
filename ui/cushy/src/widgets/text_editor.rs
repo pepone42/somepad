@@ -180,7 +180,7 @@ impl TextEditor {
             let pos = d.selections[0].head;
             let word_start = d.position_to_char(d.word_start(pos));
             let word_end = d.position_to_char(d.word_end(pos));
-            dbg!(d.rope.slice(word_start..word_end).to_string())
+            d.rope.slice(word_start..word_end).to_string()
         });
 
         editor.items_found = editor.doc.with_clone(|doc| {
@@ -948,7 +948,6 @@ impl Widget for TextEditor {
 
         match (input.state, input.text) {
             (ElementState::Pressed, Some(t)) if !context.modifiers().possible_shortcut() => {
-                dbg!(&t);
                 self.doc.lock().insert(&t);
                 self.refocus_main_selection(context);
 

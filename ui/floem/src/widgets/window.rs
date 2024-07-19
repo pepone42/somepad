@@ -53,7 +53,6 @@ impl Widget for EditorWindow {
         if let Some(state) = state.downcast_ref::<WindowUpdateCommand>() {
             match state {
                 WindowUpdateCommand::LaunchCommand(cmdid) => WINDOW_COMMAND_REGISTRY.with(|registry| {
-                    dbg!(&cmdid);
                     if let Some(cmd) = registry.borrow().get(cmdid.as_str()) {
                         (cmd.action)(self);
                     }
@@ -135,7 +134,7 @@ pub fn window<V: View + 'static>(child: V, documents: RwSignal<Documents>) -> Ed
         documents,
     }; //.keyboard_navigatable();
 
-    let id = dbg!(w.id());
+    let id = w.id();
 
     let disabled = create_rw_signal(false);
     let viewport = create_rw_signal(Rect::new(0., 0., 100., 100.));

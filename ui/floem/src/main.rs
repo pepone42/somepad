@@ -534,7 +534,6 @@ impl Widget for TextEditor {
 
         match event {
             Event::FocusGained => {
-                dbg!(self.id());
                 FOCUSED_TEXT_EDITOR.store(self.id().to_raw(), std::sync::atomic::Ordering::Relaxed);
                 EventPropagation::Continue
             }
@@ -674,7 +673,6 @@ impl Widget for TextEditor {
                             EventPropagation::Stop
                         }
                         Key::Named(NamedKey::Tab) if self.multiline => {
-                            //dbg!(self.doc.file_info.indentation);
                             self.doc.update(|d| d.indent(true));
                             self.scroll_to_main_cursor();
                             cx.request_all(self.id());
@@ -1214,7 +1212,6 @@ fn main() -> anyhow::Result<()> {
         WINDOW_SHORTCUT.with(|v| {
             WINDOW_COMMAND_REGISTRY.with(|r| {
                 if let Some(cmd) = r.borrow().get(command_id.as_str()) {
-                    dbg!(command_id);
                     v.borrow_mut().insert(shortcut.clone(), *cmd);
                 }
             });

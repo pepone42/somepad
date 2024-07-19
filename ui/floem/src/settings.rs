@@ -63,7 +63,7 @@ impl Settings {
             indentation: settings.indentation.unwrap_or(default_settings.indentation),
         };
         
-        Ok(dbg!(settings))
+        Ok(settings)
     }
 
     pub fn load() -> Self {

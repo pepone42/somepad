@@ -1511,7 +1511,6 @@ fn position_to_char(slice: &RopeSlice, position: Position) -> usize {
 #[test]
 fn test_position_to_char() {
     let r = Rope::from("aaaa\r\n\r\n\r\naaaa\r\n");
-    dbg!(r.line_to_char(3));
     assert_eq!(position_to_char(&r.slice(..), Position::new(3, 0)), 10);
 }
 
@@ -1523,7 +1522,6 @@ fn test_position_from_char_idx() {
         .lines()
         .map(|l| l.split(' '))
         .map(|mut l| {
-            //dbg!(l.nth(0),l.nth(0),l.nth(0));
             (
                 l.next().unwrap().parse::<usize>().unwrap(),
                 l.next().unwrap().parse::<usize>().unwrap(),
@@ -1535,7 +1533,6 @@ fn test_position_from_char_idx() {
     let slice = rope.slice(..);
 
     for e in expected {
-        //dbg!(e.0,e.1,e.2,slice.line(e.1).to_string());
         assert_eq!(
             char_to_position(&slice, rope.byte_to_char(e.0)),
             Position::new(e.1, e.2),

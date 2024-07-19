@@ -207,7 +207,7 @@ pub fn prev_word_boundary(slice: &RopeSlice, char_idx: usize) -> usize {
     i -= loop {
         match iter.prev() {
             Some(c) if c.is_whitespace() && !WORD_BOUNDARY_LINEFEED.contains(&c) => count += 1,
-            _ => break dbg!(count),
+            _ => break count,
         }
     };
 

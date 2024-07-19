@@ -54,7 +54,7 @@ const NEW_DOC: WindowCommand = WindowCommand {
     name: "New Document",
     id: "window.newdoc",
     action: |_id, w, c| {
-        dbg!("New doc!");
+        tracing::trace!("Add New Document");
         w.add_new_doc(Dynamic::new(Document::default()), c);
     },
 };
@@ -217,7 +217,6 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .prev_key(prev_key)
         .selected_idx(1)
         .accept(move |_, i, val| {
-            dbg!("Selected!", i, val);
             *current_doc.lock() = v[i].0;
         })
         .show();
@@ -242,7 +241,6 @@ const SELECT_DOC: WindowCommand = WindowCommand {
         c.palette("Select a document")
             .items(items)
             .accept(move |_, i, val| {
-                dbg!("Selected!", i, val);
                 *current_doc.lock() = i;
             })
             .show();
@@ -286,7 +284,6 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
     id: "window.change_theme",
     action: |_id, w, c| {
         let items: Vec<String> = ThemeSetRegistry::get().themes.keys().cloned().collect();
-        dbg!("palette theme");
         let documents = w.documents.clone();
         c.palette("Choose theme")
             .items(items)
@@ -359,7 +356,7 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
                         let t = wguard.downcast_ref::<TextEditor>().unwrap() as *const TextEditor;
                         t.as_ref().unwrap()
                     };
-                    let cmd = *cmd_reg.get().view.get(dbg!(items[index].0)).unwrap();
+                    let cmd = *cmd_reg.get().view.get(items[index].0).unwrap();
                     (cmd.action)(editor_id, t, &mut editor_context);
                 } else {
                     let w = unsafe {

@@ -64,7 +64,7 @@ impl Filter {
                     } else {
                         for item in items.lock().iter_mut() {
                             let search_match = best_match(filter, &item.text);
-                            if let Some(search_match) = dbg!(search_match) {
+                            if let Some(search_match) = search_match {
                                 item.score = search_match.score();
                                 item.excluded = false;
                             } else {
@@ -106,7 +106,7 @@ impl Filter {
 
         Filter {
             items,
-            selected_idx: dbg!(selected_idx),
+            selected_idx,
             selected_item,
             filtered_items,
         }
