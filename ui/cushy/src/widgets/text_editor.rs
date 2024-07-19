@@ -186,7 +186,7 @@ impl TextEditor {
                 let mut items = Vec::new();
                 let mut idx = Position::new(0, 0);
                 let search_term = search_term.rope.to_string();
-                while let Some(i) = doc.get().find_from(&search_term, idx) {
+                while let Some(i) = doc.get().find_from(&search_term, idx, false) {
                     items.push(i);
                     idx = i.1;
                 }

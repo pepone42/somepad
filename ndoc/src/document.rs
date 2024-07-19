@@ -198,7 +198,10 @@ pub struct Document {
 
 impl PartialEq for Document {
     fn eq(&self, other: &Self) -> bool {
-        self.rope == other.rope && self.file_info == other.file_info && self.selections == other.selections && self.file_name == other.file_name
+        self.rope == other.rope
+            && self.file_info == other.file_info
+            && self.selections == other.selections
+            && self.file_name == other.file_name
     }
 }
 
@@ -470,7 +473,12 @@ impl Document {
         Ok(())
     }
 
-    pub fn find_from(&self, input: &str, position: Position) -> Option<(Position, Position)> {
+    pub fn find_from(
+        &self,
+        input: &str,
+        position: Position,
+        cycling: bool,
+    ) -> Option<(Position, Position)> {
         if input.is_empty() {
             return None;
         }
@@ -487,19 +495,20 @@ impl Document {
                 ));
             }
         }
-        dbg!("searching",char_idx);
-        for i in 0..(char_idx+input.chars().count()+1).max(self.rope.len_chars()) {
-            let doc = self.rope.slice(i..).chars();
-            let search = input.chars();
-            
-            if search.zip(doc).all(|(ic, c)| ic == c) {
-                return Some((
-                    self.char_to_position(i),
-                    self.char_to_position(i + input.len()),
-                ));
+        if cycling {
+            for i in 0..char_idx {
+                let doc = self.rope.slice(i..).chars();
+                let search = input.chars();
+
+                if search.zip(doc).all(|(ic, c)| ic == c) {
+                    return Some((
+                        self.char_to_position(i),
+                        self.char_to_position(i + input.len()),
+                    ));
+                }
             }
         }
-        
+
         None
     }
 
@@ -510,7 +519,13 @@ impl Document {
             rope,
             selections: selections.clone(),
             action,
-            from_char_idx: self.position_to_char(self.selections.iter().min().map(|s| s.start()).unwrap_or_default()),
+            from_char_idx: self.position_to_char(
+                self.selections
+                    .iter()
+                    .min()
+                    .map(|s| s.start())
+                    .unwrap_or_default(),
+            ),
             have_change: false,
         });
     }
@@ -519,7 +534,10 @@ impl Document {
             if batch.have_change {
                 self.history
                     .push(batch.rope, batch.selections, &batch.action);
-                self.update_highlight_from(self.rope.char_to_line(batch.from_char_idx.min(self.rope.len_chars())));
+                self.update_highlight_from(
+                    self.rope
+                        .char_to_line(batch.from_char_idx.min(self.rope.len_chars())),
+                );
                 self.batch_edit = None;
             }
         }
@@ -711,12 +729,8 @@ impl Document {
                 for l in s.start().line..=s.end().line {
                     let index = self.rope.line_to_char(l);
                     match self.file_info.indentation {
-                        Indentation::Tab(_) => {
-                            self.insert_at("\t", index, index)
-                        }
-                        Indentation::Space(x) => {
-                            self.insert_at(&" ".repeat(x), index, index)
-                        }
+                        Indentation::Tab(_) => self.insert_at("\t", index, index),
+                        Indentation::Space(x) => self.insert_at(&" ".repeat(x), index, index),
                     }
                 }
             }
@@ -724,9 +738,7 @@ impl Document {
             for s in self.selections.clone() {
                 let index = position_to_char(&self.rope.slice(..), s.head);
                 match self.file_info.indentation {
-                    Indentation::Tab(_) => {
-                        self.insert_at("\t", index, index)
-                    }
+                    Indentation::Tab(_) => self.insert_at("\t", index, index),
                     Indentation::Space(x) => {
                         let repeat = x - (s.head.column % x);
                         self.insert_at(&" ".repeat(repeat), index, index);
@@ -745,9 +757,7 @@ impl Document {
 
                 let line_start = get_line_start_boundary(&self.rope.slice(..), l);
                 match self.file_info.indentation {
-                    Indentation::Tab(_) => {
-                        self.insert_at("", index, index + 1)
-                    }
+                    Indentation::Tab(_) => self.insert_at("", index, index + 1),
                     Indentation::Space(x) => {
                         let r = line_start.min(x);
                         self.insert_at("", index, index + r);
@@ -860,7 +870,7 @@ impl Document {
             head,
             tail,
             is_clone: false,
-            generation : 0,
+            generation: 0,
         }]
     }
 
@@ -991,8 +1001,13 @@ impl Document {
         let start = self.position_to_char(self.selections[0].start());
         let end = self.position_to_char(self.selections[0].end());
         let content = self.rope.slice(start..end).to_string();
-        let mut s = self.selections.iter().max_by_key(|s| s.generation).unwrap().duplicate();
-        let next = self.find_from(&content, s.end());
+        let mut s = self
+            .selections
+            .iter()
+            .max_by_key(|s| s.generation)
+            .unwrap()
+            .duplicate();
+        let next = self.find_from(&content, s.end(), true);
         if let Some((start, end)) = next {
             s.tail = start;
             s.head = end;
@@ -1054,7 +1069,6 @@ impl Document {
 
         self.merge_selections();
     }
-
 
     fn merge_selections(&mut self) {
         if self.selections.len() == 1 {
@@ -1573,9 +1587,9 @@ mod test {
         let mut doc = Document::default();
         doc.insert("hello world \n hell \n hello");
         let s = "hello";
-        let idx = doc.find_from(s, doc.char_to_position(0)).unwrap();
+        let idx = doc.find_from(s, doc.char_to_position(0), false).unwrap();
         assert_eq!(idx, (doc.char_to_position(0), doc.char_to_position(5)));
-        let idx = doc.find_from(s, idx.1).unwrap();
+        let idx = doc.find_from(s, idx.1, false).unwrap();
         assert_eq!(idx, (doc.char_to_position(21), doc.char_to_position(26)));
     }
 
@@ -1584,7 +1598,7 @@ mod test {
         let mut doc = Document::default();
         doc.insert("hello world \n hell \n hello");
         let s = "wrold";
-        let idx = doc.find_from(s, doc.char_to_position(0));
+        let idx = doc.find_from(s, doc.char_to_position(0),false);
         assert_eq!(idx, None);
     }
 }
