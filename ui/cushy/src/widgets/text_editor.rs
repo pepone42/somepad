@@ -45,6 +45,8 @@ pub struct CodeEditorColors {
     cursor: Color,
     fg_gutter: Color,
     bg_gutter: Color,
+    bg_find_hightlight: Color,
+    
 }
 
 impl CodeEditorColors {
@@ -89,6 +91,7 @@ impl CodeEditorColors {
                     .gutter
                     .map(|c| Color::new(c.r, c.g, c.b, c.a))
                     .unwrap_or(bg),
+                bg_find_hightlight: theme.settings.find_highlight.map(|c| Color::new(c.r, c.g, c.b, c.a)).unwrap_or(context.get(&SelectionBackgroundColor)),
             }
         } else {
             CodeEditorColors {
@@ -99,6 +102,7 @@ impl CodeEditorColors {
                 cursor: context.get(&components::OutlineColor),
                 fg_gutter: Color::BLACK,
                 bg_gutter: Color::WHITE,
+                bg_find_hightlight: context.get(&components::HighlightColor),
             }
         }
     }
@@ -563,16 +567,10 @@ impl Widget for TextEditor {
         // draw search items
         if !self.search_panel_closed.get() {
             for path in self.get_items_shapes(self.items_found.clone(), &buffers) {
-                // TODO: user correct colors
-                let bg_color = colors.bg_selection;
-                let border_color = colors.border_selection;
+                let bg_color = colors.bg_find_hightlight;
 
                 context.gfx.draw_shape(
                     path.fill(bg_color)
-                        .translate_by(Point::new(padding, padding)),
-                );
-                context.gfx.draw_shape(
-                    path.stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
                         .translate_by(Point::new(padding, padding)),
                 );
             }
