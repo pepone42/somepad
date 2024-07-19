@@ -3230,6 +3230,7 @@ dependencies = [
  "rfd",
  "serde",
  "smol_str",
+ "sublime_fuzzy",
  "toml",
  "toml_edit 0.22.12",
  "tracing",
@@ -3270,6 +3271,12 @@ name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
+
+[[package]]
+name = "sublime_fuzzy"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa7986063f7c0ab374407e586d7048a3d5aac94f103f751088bf398e07cd5400"
 
 [[package]]
 name = "svg_fmt"

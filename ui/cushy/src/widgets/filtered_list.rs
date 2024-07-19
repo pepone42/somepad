@@ -11,6 +11,7 @@ use cushy::{
     widget::{Widget, HANDLED},
     ConstraintLimit, WithClone,
 };
+use sublime_fuzzy::best_match;
 
 use crate::widgets::palette::PaletteAction;
 
@@ -19,7 +20,7 @@ use super::palette::{close_palette, PALETTE_STATE};
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterItem {
     pub index: usize,
-    score: usize,
+    score: isize,
     pub text: String,
     excluded: bool,
 }
@@ -33,7 +34,7 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn new(items: Vec<String>, filter: Dynamic<String>, selected_idx: usize) -> Self {
+    pub fn new(items: Vec<String>, filter: Dynamic<String>, initial_selected_idx: usize) -> Self {
         let items: Dynamic<Vec<FilterItem>> = Dynamic::new(
             items
                 .into_iter()
@@ -47,31 +48,50 @@ impl Filter {
                 .collect(),
         );
 
+        let initial_selected_idx = initial_selected_idx.min(items.get().len() - 1);
+
         let selected_idx = if items.get().is_empty() {
             Dynamic::new(None)
         } else {
-            Dynamic::new(Some(selected_idx.min(items.get().len() - 1)))
+            Dynamic::new(Some(initial_selected_idx))
         };
 
         let filtered_items = (&selected_idx, &items)
             .with_clone(|(selected_idx, items)| {
                 filter.map_each(move |filter| {
-                    if !filter.is_empty() {
+                    if filter.is_empty() {
+                        items.get()
+                    } else {
                         for item in items.lock().iter_mut() {
-                            item.excluded = !item.text.contains(filter);
+                            let search_match = best_match(filter, &item.text);
+                            if let Some(search_match) = dbg!(search_match) {
+                                item.score = search_match.score();
+                                item.excluded = false;
+                            } else {
+                                item.score = 0;
+                                item.excluded = true;
+                            }
                         }
-                        if let Some(i) = items.get().iter().filter(|i| !i.excluded).nth(0) {
+                        if let Some(i) = items
+                            .get()
+                            .iter()
+                            .filter(|i| !i.excluded)
+                            .nth(initial_selected_idx)
+                        {
                             *selected_idx.lock() = Some(i.index);
                         } else {
                             *selected_idx.lock() = None;
                         }
+
+                        let mut items = items
+                            .get()
+                            .iter()
+                            .filter(|i| !i.excluded)
+                            .cloned()
+                            .collect::<Vec<FilterItem>>();
+                        items.sort_by(|a, b| b.score.cmp(&a.score));
+                        items
                     }
-                    items
-                        .get()
-                        .iter()
-                        .filter(|i| !i.excluded)
-                        .cloned()
-                        .collect::<Vec<FilterItem>>()
                 })
             })
             .into_reader();

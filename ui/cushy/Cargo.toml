@@ -20,3 +20,4 @@ toml_edit = { version = "0.22.9", features = ["serde"] }
 directories = "5.0.1"
 rfd = "0.14.1"
 tracing = "0.1.40"
+sublime_fuzzy = "0.7.0"
