@@ -3234,6 +3234,7 @@ dependencies = [
  "toml",
  "toml_edit 0.22.12",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

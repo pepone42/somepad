@@ -56,20 +56,20 @@ impl Default for Settings {
 impl Settings {
     fn try_load() -> anyhow::Result<Self> {
         // Load themes
-        dbg!("Loading themes");
+        tracing::trace!("Loading themes");
         let project_dir = ProjectDirs::from("rs", "", "somepad").context("Getting project config path")?;
         let config_folder=project_dir.config_dir();
         let mut theme_set = ThemeSet::load_defaults();
         theme_set.add_from_folder(config_folder).context("Loading themes")?;
         THEMESET.set(theme_set).unwrap();
 
-        dbg!("Loading settings");
+        tracing::trace!("Loading settings");
         let default_settings = Settings::default();// : Settings = toml::from_str(&config_content).context("Deserializing settings")?;
 
         
         let config_file = ProjectDirs::from("rs", "", "somepad").context("Getting project config path")?.config_dir().join("settings.toml");
 
-        dbg!("reading settings file from", &config_file);
+        tracing::trace!("reading settings file from {}", config_file.to_string_lossy());
         let config_content = std::fs::read_to_string(&config_file).context(format!("Reading settings file {}",&config_file.to_string_lossy()))?;
         let toml = config_content.parse::<DocumentMut>().context("Parsing settings")?;
         
@@ -83,14 +83,14 @@ impl Settings {
             theme: settings.theme.unwrap_or(default_settings.theme),
         };
         
-        Ok(dbg!(settings))
+        Ok(settings)
     }
 
     pub fn load() -> Self {
-        if let Ok(settings) = dbg!(Settings::try_load().context("Loading settings")) {
+        if let Ok(settings) = Settings::try_load().context("Loading settings") {
             settings
         } else {
-            dbg!("Failed to load settings, using default settings");
+            tracing::error!("Failed to load settings, using default settings");
             Settings::default()
         }
     }

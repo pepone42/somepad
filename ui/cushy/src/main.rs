@@ -22,7 +22,9 @@ use cushy::figures::units::{Lp, Px};
 
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::{self, CornerRadius, TextSize};
-use cushy::styles::{ColorScheme, ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair};
+use cushy::styles::{
+    ColorScheme, ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair,
+};
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
 
@@ -186,9 +188,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .documents
         .get()
         .iter()
-        .map(|d| {
-            d.get().title()
-        })
+        .map(|d| d.get().title())
         .collect::<Vec<_>>();
 
     let mut v = w
@@ -237,14 +237,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
     name: "Select Document",
     id: "window.select_doc",
     action: |_id, w, c| {
-        let items = w
-            .documents
-            .get()
-            .iter()
-            .map(|d| {
-                d.get().title()
-            })
-            .collect();
+        let items = w.documents.get().iter().map(|d| d.get().title()).collect();
         let current_doc = w.current_doc.clone();
         c.palette("Select a document")
             .items(items)
@@ -278,7 +271,7 @@ const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
     id: "editor.duplicate_selection",
     action: |_id, v, c| {
         if v.doc.get().selections.len() == 1 && v.doc.get().selections[0].is_empty() {
-            let mut d= v.doc.lock();
+            let mut d = v.doc.lock();
             let pos = d.selections[0].head;
             d.select_word(pos);
         } else {
@@ -295,62 +288,92 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
         let items: Vec<String> = ThemeSetRegistry::get().themes.keys().cloned().collect();
         dbg!("palette theme");
         let documents = w.documents.clone();
-        c.palette("Choose theme").items(items).accept(move|_, _, val| {
-            for doc in documents.get() {
-                doc.lock().update_theme(&val);
-                SETTINGS.lock().unwrap().theme.clone_from(&val);
-            }
-        }).show();
+        c.palette("Choose theme")
+            .items(items)
+            .accept(move |_, _, val| {
+                for doc in documents.get() {
+                    doc.lock().update_theme(&val);
+                    SETTINGS.lock().unwrap().theme.clone_from(&val);
+                }
+            })
+            .show();
     },
 };
 
-
 const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
-    name : "Show All Commands",
-    id : "window.show_all_commands",
+    name: "Show All Commands",
+    id: "window.show_all_commands",
     action: |_id, w, c| {
-        let mut items = w.cmd_reg.get().view.values().map(|v| (v.id,v.name)).collect::<Vec<_>>();
-        items.extend(w.cmd_reg.get().window.values().map(|v| (v.id,v.name)));
+        let mut items = w
+            .cmd_reg
+            .get()
+            .view
+            .values()
+            .map(|v| (v.id, v.name))
+            .collect::<Vec<_>>();
+        items.extend(w.cmd_reg.get().window.values().map(|v| (v.id, v.name)));
 
         items.sort_by_key(|i| i.1);
         //TODO, put recent items in front
 
-        let i = items.iter().map(|(_id,name)| name.to_string()).collect::<Vec<_>>();
+        let i = items
+            .iter()
+            .map(|(_id, name)| name.to_string())
+            .collect::<Vec<_>>();
 
         let cmd_reg = w.cmd_reg.clone();
 
-        c.palette("All Commands").items(i).accept(move |c,index,v| {
-            if items[index].0.starts_with("editor.") {
-                let editor_id = {
-                    let (current_code_editor_id, doc_id) = {
-                        let wguard = c.widget().lock();
-                        let w = wguard.downcast_ref::<EditorWindow>().unwrap();
-                        (w.editor_switcher_id, w.current_doc().get().id())
-                    };
-                    
-                    let editor_switched_id = c.for_other(&current_code_editor_id).unwrap().widget().lock().downcast_ref::<EditorSwitcher>().unwrap().editors[&doc_id].widget().id();
-                    c.for_other(&editor_switched_id).unwrap().widget().lock().downcast_ref::<CodeEditor>().unwrap().editor_id
-                };
+        c.palette("All Commands")
+            .items(i)
+            .accept(move |c, index, v| {
+                if items[index].0.starts_with("editor.") {
+                    let editor_id = {
+                        let (current_code_editor_id, doc_id) = {
+                            let wguard = c.widget().lock();
+                            let w = wguard.downcast_ref::<EditorWindow>().unwrap();
+                            (w.editor_switcher_id, w.current_doc().get().id())
+                        };
 
-                let mut editor_context = c.for_other(&editor_id).unwrap();
-                let t = unsafe{
-                    let wguard = editor_context.widget().lock();
-                    let t = wguard.downcast_ref::<TextEditor>().unwrap() as *const TextEditor;
-                    t.as_ref().unwrap()
-                };
-                let cmd = *cmd_reg.get().view.get(dbg!(items[index].0)).unwrap();
-                (cmd.action)(editor_id,t,&mut editor_context);
-            } else {
-                let w = unsafe{
-                    let wguard = c.widget().lock();
-                    let w = wguard.downcast_ref::<EditorWindow>().unwrap() as *const EditorWindow;
-                    w.as_ref().unwrap()
-                };
-                let cmd = *cmd_reg.get().window.get(items[index].0).unwrap();
-                (cmd.action)(c.widget().id(),w,c);
-            }
-        }).show();
-    }
+                        let editor_switched_id = c
+                            .for_other(&current_code_editor_id)
+                            .unwrap()
+                            .widget()
+                            .lock()
+                            .downcast_ref::<EditorSwitcher>()
+                            .unwrap()
+                            .editors[&doc_id]
+                            .widget()
+                            .id();
+                        c.for_other(&editor_switched_id)
+                            .unwrap()
+                            .widget()
+                            .lock()
+                            .downcast_ref::<CodeEditor>()
+                            .unwrap()
+                            .editor_id
+                    };
+
+                    let mut editor_context = c.for_other(&editor_id).unwrap();
+                    let t = unsafe {
+                        let wguard = editor_context.widget().lock();
+                        let t = wguard.downcast_ref::<TextEditor>().unwrap() as *const TextEditor;
+                        t.as_ref().unwrap()
+                    };
+                    let cmd = *cmd_reg.get().view.get(dbg!(items[index].0)).unwrap();
+                    (cmd.action)(editor_id, t, &mut editor_context);
+                } else {
+                    let w = unsafe {
+                        let wguard = c.widget().lock();
+                        let w =
+                            wguard.downcast_ref::<EditorWindow>().unwrap() as *const EditorWindow;
+                        w.as_ref().unwrap()
+                    };
+                    let cmd = *cmd_reg.get().window.get(items[index].0).unwrap();
+                    (cmd.action)(c.widget().id(), w, c);
+                }
+            })
+            .show();
+    },
 };
 
 pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
@@ -359,7 +382,6 @@ pub static SETTINGS: Lazy<Arc<Mutex<Settings>>> =
 pub fn get_settings() -> Settings {
     SETTINGS.lock().unwrap().clone()
 }
-
 
 #[derive(Debug, Clone)]
 pub struct CommandsRegistry {
@@ -387,10 +409,24 @@ impl Default for CommandsRegistry {
 }
 
 fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
+    // #[cfg(debug_assertions)]
+    // {
+    //     let subscriber = tracing_subscriber::FmtSubscriber::builder()
+    //         .with_max_level(tracing::Level::INFO)
+    //         .finish();
+
+    //     tracing::subscriber::set_global_default(subscriber)
+    //         .expect("setting default subscriber failed");
+    // }
+
     let settings = get_settings(); // force load settings
-    let theme = ThemePair::from_scheme(&ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
-    //.neutral(ColorSource::new(213., 14.2))
-    .build());
+    let theme = ThemePair::from_scheme(
+        &ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
+            //.neutral(ColorSource::new(213., 14.2))
+            .build(),
+    );
 
     let mut cmd_reg = CommandsRegistry::new();
 
@@ -406,9 +442,15 @@ fn main() -> anyhow::Result<()> {
     cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
     cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);
     cmd_reg.window.insert(SELECT_DOC.id, SELECT_DOC);
-    cmd_reg.view.insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
-    cmd_reg.view.insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
-    cmd_reg.view.insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
+    cmd_reg
+        .view
+        .insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
+    cmd_reg
+        .view
+        .insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
+    cmd_reg
+        .view
+        .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
@@ -489,7 +531,6 @@ fn main() -> anyhow::Result<()> {
     win.run()?;
 
     // TODO: Save settings
-
 
     Ok(())
 }
