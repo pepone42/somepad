@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
+#[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::kludgine::text::Text;
 use cushy::value::{CallbackHandle, Dynamic, MapEach};

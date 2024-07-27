@@ -8,6 +8,7 @@ mod widgets;
 use cushy::context::EventContext;
 use cushy::figures::Zero;
 use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
+#[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
