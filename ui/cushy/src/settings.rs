@@ -89,7 +89,7 @@ impl Settings {
         if let Ok(settings) = Settings::try_load().context("Loading settings") {
             settings
         } else {
-            tracing::error!("Failed to load settings, using default settings");
+            tracing::warn!("Failed to load settings, using default settings");
             Settings::default()
         }
     }
