@@ -13,11 +13,11 @@ use cushy::figures::{
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
-use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, Metrics};
+use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{components, Color};
+use cushy::styles::{components, Color, Weight};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -143,6 +143,7 @@ pub enum TextEditorKind {
 pub struct TextEditor {
     pub doc: Dynamic<ndoc::Document>,
     viewport: Dynamic<Rect<Px>>,
+    family_name: Option<String>,
     font_metrics: Metrics,
     font_size: Px,
     line_height: Px,
@@ -247,6 +248,7 @@ impl TextEditor {
             font_size: Px::ZERO,
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
+            family_name: None,
             cmd_reg: Dynamic::new(CommandsRegistry::new()),
             eol_width: Px::ZERO,
             click_info: Dynamic::new(ClickInfo::default()),
@@ -276,7 +278,11 @@ impl TextEditor {
             &mut FONT_SYSTEM.lock().unwrap(),
             &raw_text,
             if self.kind == TextEditorKind::Code {
-                Attrs::new().family(Family::Monospace)
+                Attrs::new().family(if let Some(f) = &self.family_name {
+                    Family::Name(f)
+                } else {
+                    Family::Monospace
+                })
             } else {
                 Attrs::new()
             },
@@ -301,7 +307,11 @@ impl TextEditor {
             &mut FONT_SYSTEM.lock().unwrap(),
             &raw_text,
             if self.kind == TextEditorKind::Code {
-                Attrs::new().family(Family::Monospace)
+                Attrs::new().family(if let Some(f) = &self.family_name {
+                    Family::Name(f)
+                } else {
+                    Family::Monospace
+                })
             } else {
                 Attrs::new()
             },
@@ -343,7 +353,11 @@ impl TextEditor {
         let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
         let attrs = if self.kind == TextEditorKind::Code {
-            Attrs::new().family(Family::Monospace)
+            Attrs::new().family(if let Some(f) = &self.family_name {
+                Family::Name(f)
+            } else {
+                Family::Monospace
+            })
         } else {
             Attrs::new()
         };
@@ -497,6 +511,7 @@ impl TextEditor {
 impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
+        self.family_name = get_editor_family_name(context.kludgine.font_system());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let colors = CodeEditorColors::get(self.kind, context);
@@ -970,6 +985,7 @@ pub struct Gutter {
     doc: Dynamic<Document>,
     font_metrics: Metrics,
     font_size: Px,
+    family_name : Option<String>,
     line_height: Px,
     scale: Fraction,
     editor_id: WidgetId,
@@ -982,6 +998,7 @@ impl Gutter {
             font_metrics: Metrics::new(15., 15.),
             font_size: Px::ZERO,
             line_height: Px::ZERO,
+            family_name: None,
             scale: Fraction::ZERO,
             editor_id,
         }
@@ -989,7 +1006,16 @@ impl Gutter {
 }
 
 impl Widget for Gutter {
+    fn mounted(&mut self, context: &mut EventContext<'_>) {
+        self.family_name = get_editor_family_name(context.kludgine.font_system());
+        if let Some(family_name) = &self.family_name {
+            tracing::trace!("Using font family: {}", family_name);
+        } else {
+            tracing::warn!("Invalid font familly, fallback to default");
+        }
+    }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+
         let colors = CodeEditorColors::get(TextEditorKind::Code, context);
         let padding = context
             .get(&components::IntrinsicPadding)
@@ -1018,7 +1044,14 @@ impl Widget for Gutter {
                 colors.fg_gutter.blue(),
                 colors.fg_gutter.alpha(),
             );
-            let attrs = Attrs::new().family(Family::Monospace).color(col);
+
+            let attrs = Attrs::new()
+                .family(if let Some(ref f) = self.family_name {
+                    Family::Name(f)
+                } else {
+                    Family::Monospace
+                })
+                .color(col);
 
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             buffer.set_size(
@@ -1068,7 +1101,11 @@ impl Widget for Gutter {
         context
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
-        let attrs = Attrs::new().family(Family::Monospace);
+        let attrs = Attrs::new().family(if let Some(f) = &self.family_name {
+            Family::Name(f)
+        } else {
+            Family::Monospace
+        });
 
         context.gfx.set_text_attributes(attrs);
 
@@ -1403,4 +1440,20 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
     } else {
         None
     }
+}
+
+fn get_editor_family_name(font_system: &mut FontSystem) -> Option<String> {
+    let font_id = font_system
+        .db()
+        .query(&cushy::kludgine::cosmic_text::fontdb::Query {
+            weight: cushy::kludgine::cosmic_text::fontdb::Weight::NORMAL,
+            style: cushy::kludgine::cosmic_text::fontdb::Style::Normal,
+            families: &get_settings()
+                .editor_font
+                .iter()
+                .map(|f| Family::Name(f))
+                .collect::<Vec<Family>>(),
+            stretch: cushy::kludgine::cosmic_text::fontdb::Stretch::Normal,
+        });
+    font_id.map(|id| font_system.db().face(id).unwrap().families[0].0.clone())
 }

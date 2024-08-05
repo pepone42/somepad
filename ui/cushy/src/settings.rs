@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, default};
 use anyhow::Context;
 use directories::ProjectDirs;
 use ndoc::{syntax::THEMESET, Indentation, ThemeSet};
@@ -12,6 +12,7 @@ pub struct Settings {
     pub shortcuts: HashMap<String, Shortcut>,
     pub indentation: Indentation,
     pub theme: String,
+    pub editor_font: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -19,6 +20,7 @@ struct OptSettings {
     pub shortcuts: Option<HashMap<String, Shortcut>>,
     pub indentation: Option<Indentation>,
     pub theme: Option<String>,
+    pub editor_font: Option<Vec<String>>,
 }
 
 impl Default for Settings {
@@ -46,8 +48,14 @@ impl Default for Settings {
         shortcuts.insert(crate::PREV_DOC.id.to_string(),shortcut!(Ctrl+Shift+Tab));
         shortcuts.insert(crate::SHOW_ALL_COMMAND.id.to_string(), shortcut!(Ctrl + Shift + p));
         
+        #[cfg(target_os = "macos")]
+        let default_font = vec!["Menlo".to_string(), "Monaco".to_string(), "Courier New".to_string()];
+        #[cfg(target_os = "windows")]
+        let editor_font = vec!["Consolas".to_string(), "Courier New".to_string()];
+        #[cfg(target_os = "linux")]
+        let default_font = vec!["Droid Sans Mono".to_string(), "monospace".to_string()];
 
-        Self { shortcuts, indentation: Default::default(), theme: "base16-eighties.dark".to_string() }
+        Self { shortcuts, indentation: Default::default(), theme: "base16-eighties.dark".to_string(), editor_font }
     }
 }
 
@@ -80,6 +88,7 @@ impl Settings {
             shortcuts: settings.shortcuts.unwrap_or(default_settings.shortcuts),
             indentation: settings.indentation.unwrap_or(default_settings.indentation),
             theme: settings.theme.unwrap_or(default_settings.theme),
+            editor_font: settings.editor_font.unwrap_or(default_settings.editor_font),
         };
         
         Ok(settings)
