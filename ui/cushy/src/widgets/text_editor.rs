@@ -45,7 +45,6 @@ pub struct CodeEditorColors {
     fg_gutter: Color,
     bg_gutter: Color,
     bg_find_hightlight: Color,
-    
 }
 
 impl CodeEditorColors {
@@ -90,7 +89,11 @@ impl CodeEditorColors {
                     .gutter
                     .map(|c| Color::new(c.r, c.g, c.b, c.a))
                     .unwrap_or(bg),
-                bg_find_hightlight: theme.settings.find_highlight.map(|c| Color::new(c.r, c.g, c.b, c.a)).unwrap_or(context.get(&SelectionBackgroundColor)),
+                bg_find_hightlight: theme
+                    .settings
+                    .find_highlight
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(context.get(&SelectionBackgroundColor)),
             }
         } else {
             CodeEditorColors {
@@ -1009,13 +1012,36 @@ impl Widget for Gutter {
         for i in first_line..last_line {
             let y = units::Px::new(i as _) * self.font_metrics.line_height;
 
-            let attrs = Attrs::new().family(Family::Monospace);
+            let col = cushy::kludgine::cosmic_text::Color::rgba(
+                colors.fg_gutter.red(),
+                colors.fg_gutter.green(),
+                colors.fg_gutter.blue(),
+                colors.fg_gutter.alpha(),
+            );
+            let attrs = Attrs::new().family(Family::Monospace).color(col);
 
-            context.gfx.set_text_attributes(attrs);
-
-            context.gfx.draw_text(
-                Text::new(&format!("{}", i + 1), colors.fg_gutter)
-                    .translate_by(Point::new(Px::ZERO + padding, y + padding)),
+            let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
+            buffer.set_size(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                10000.,
+                self.font_metrics.line_height,
+            );
+            buffer.set_text(
+                &mut FONT_SYSTEM.lock().unwrap(),
+                &format!("{}", i + 1),
+                attrs,
+                cushy::kludgine::cosmic_text::Shaping::Advanced,
+            );
+            context.gfx.draw_text_buffer(
+                Drawable {
+                    source: &buffer,
+                    translation: Point::new(Px::ZERO + padding, y + padding),
+                    opacity: None,
+                    rotation: None,
+                    scale: None,
+                },
+                colors.fg_gutter,
+                cushy::kludgine::text::TextOrigin::TopLeft,
             );
         }
     }
