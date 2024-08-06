@@ -48,7 +48,7 @@ impl Filter {
                 .collect(),
         );
 
-        let initial_selected_idx = initial_selected_idx.min(items.get().len() - 1);
+        let initial_selected_idx = initial_selected_idx.min(items.get().len().saturating_sub(1));
 
         let selected_idx = if items.get().is_empty() {
             Dynamic::new(None)
