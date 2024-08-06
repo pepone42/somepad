@@ -25,7 +25,7 @@ use cushy::widget::{
 };
 
 use cushy::widgets::Custom;
-use cushy::{context, define_components, ModifiersExt, WithClone};
+use cushy::{context, define_components, Cushy, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
@@ -35,6 +35,7 @@ use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
 
 use super::scroll::{self, ContextScroller, MyScroll, PassiveScroll};
+use super::status_bar;
 
 pub struct CodeEditorColors {
     bg: Color,
@@ -45,6 +46,7 @@ pub struct CodeEditorColors {
     fg_gutter: Color,
     bg_gutter: Color,
     bg_find_hightlight: Color,
+    fg_find_hightlight: Option<Color>,
 }
 
 impl CodeEditorColors {
@@ -94,6 +96,10 @@ impl CodeEditorColors {
                     .find_highlight
                     .map(|c| Color::new(c.r, c.g, c.b, c.a))
                     .unwrap_or(context.get(&SelectionBackgroundColor)),
+                fg_find_hightlight: theme
+                    .settings
+                    .find_highlight_foreground
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a)),
             }
         } else {
             CodeEditorColors {
@@ -105,6 +111,7 @@ impl CodeEditorColors {
                 fg_gutter: Color::BLACK,
                 bg_gutter: Color::WHITE,
                 bg_find_hightlight: context.get(&components::HighlightColor),
+                fg_find_hightlight: Some(context.get(&components::TextColor)),
             }
         }
     }
@@ -349,7 +356,7 @@ impl TextEditor {
         }
     }
 
-    fn layout_line(&self, line_idx: usize) -> Buffer {
+    fn layout_line(&self, line_idx: usize, colors: &CodeEditorColors) -> Buffer {
         let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
         let attrs = if self.kind == TextEditorKind::Code {
@@ -362,23 +369,130 @@ impl TextEditor {
             Attrs::new()
         };
 
+        let find_aera = self
+            .items_found
+            .get()
+            .iter()
+            .flat_map(|(start, end)| Selection::from((*start, *end)).areas(&self.doc.get().rope))
+            .filter(|a| a.line == line_idx)
+            .collect::<Vec<_>>();
+
         if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             let mut spans = Vec::new();
-            for s in sl.iter() {
-                let start = s.range.start.min(raw_text.len());
-                let end = s.range.end.min(raw_text.len());
-                let t = &raw_text[start..end];
 
-                let col = cushy::kludgine::cosmic_text::Color::rgba(
-                    s.style.foreground.r,
-                    s.style.foreground.g,
-                    s.style.foreground.b,
-                    s.style.foreground.a,
-                );
+            if let Some(fg_find_hightlight) = colors.fg_find_hightlight {
+                let fg_find_hightlight = ndoc::Color {
+                    r: fg_find_hightlight.red(),
+                    g: fg_find_hightlight.green(),
+                    b: fg_find_hightlight.blue(),
+                    a: fg_find_hightlight.alpha(),
+                };
 
-                spans.push((t, attrs.color(col)));
+                for s in sl.iter() {
+                    let mut in_search = false;
+                    let mut processed = false;
+                    if !self.search_panel_closed.get() {
+                        for span in find_aera.iter().flat_map(|a| {
+                            if a.col_start >= s.range.start && a.col_end <= s.range.end {
+                                // |------||-----|....
+                                //   |--|
+                                vec![
+                                    (s.range.start, a.col_start, s.style.foreground),
+                                    (a.col_start, a.col_end, fg_find_hightlight),
+                                    (a.col_end, s.range.end, s.style.foreground),
+                                ]
+                            } else if s.range.start <= a.col_start && s.range.end >= a.col_end {
+                                // |------|
+                                //     |------|
+                                in_search = true;
+                                vec![
+                                    (s.range.start, a.col_start, s.style.foreground),
+                                    (a.col_start, s.range.end, fg_find_hightlight),
+                                ]
+                            } else if s.range.start <= a.col_end && s.range.end >= a.col_end {
+                                //       |-----|....
+                                //    |------|
+                                in_search = false;
+                                vec![
+                                    (s.range.start, a.col_end, fg_find_hightlight),
+                                    (a.col_end, s.range.end, s.style.foreground),
+                                ]
+                            } else if s.range.start >= a.col_start && s.range.end <= a.col_end {
+                                // |----||------||------|
+                                //    |-------------|
+                                let col = if in_search {
+                                    fg_find_hightlight
+                                } else {
+                                    s.style.foreground
+                                };
+                                vec![(s.range.start, s.range.end, col)]
+                            } else {
+                                // |----|
+                                //  nothing
+                                vec![]
+                            }
+                        }) {
+                            processed = true;
+                            let start = span.0.min(raw_text.len());
+                            let end = span.1.min(raw_text.len());
+                            let t = &raw_text[start..end];
+                            let col = cushy::kludgine::cosmic_text::Color::rgba(
+                                span.2.r, span.2.g, span.2.b, span.2.a,
+                            );
+                            spans.push((t, attrs.color(col)));
+                        }
+                    }
+                    if !processed {
+                        let start = s.range.start.min(raw_text.len());
+                        let end = s.range.end.min(raw_text.len());
+                        let t = &raw_text[start..end];
+
+                        let col = cushy::kludgine::cosmic_text::Color::rgba(
+                            s.style.foreground.r,
+                            s.style.foreground.g,
+                            s.style.foreground.b,
+                            s.style.foreground.a,
+                        );
+
+                        spans.push((t, attrs.color(col)));
+                    }
+                }
+            } else {
+                for s in sl.iter() {
+                    let start = s.range.start.min(raw_text.len());
+                    let end = s.range.end.min(raw_text.len());
+                    let t = &raw_text[start..end];
+
+                    let col = cushy::kludgine::cosmic_text::Color::rgba(
+                        s.style.foreground.r,
+                        s.style.foreground.g,
+                        s.style.foreground.b,
+                        s.style.foreground.a,
+                    );
+
+                    spans.push((t, attrs.color(col)));
+                }
             }
+            // if let Some(col) = colors.fg_find_hightlight {
+            //     for a in find_aera {
+            //         let start = a.col_start;
+            //         let end = a.col_end;
+            //         let t = &raw_text[start..end];
+            //         dbg!(start, end, t);
+            //         let col = cushy::kludgine::cosmic_text::Color::rgba(
+            //             col.red(),
+            //             col.green(),
+            //             col.blue(),
+            //             col.alpha(),
+            //         );
+            //         spans.push((
+            //             t,
+            //             attrs.color(cushy::kludgine::cosmic_text::Color::rgb(255, 255, 255)),
+            //         ))
+            //     }
+            // }
+            // dbg!(&spans);
             buffer.set_rich_text(
                 &mut FONT_SYSTEM.lock().unwrap(),
                 spans,
@@ -563,7 +677,7 @@ impl Widget for TextEditor {
             .enumerate()
             .skip(first_line)
             .take(total_line)
-            .map(|(i, _)| (i, self.layout_line(i)))
+            .map(|(i, _)| (i, self.layout_line(i, &colors)))
             .collect::<HashMap<usize, Buffer>>();
 
         // draw selections
@@ -985,7 +1099,7 @@ pub struct Gutter {
     doc: Dynamic<Document>,
     font_metrics: Metrics,
     font_size: Px,
-    family_name : Option<String>,
+    family_name: Option<String>,
     line_height: Px,
     scale: Fraction,
     editor_id: WidgetId,
@@ -1015,7 +1129,6 @@ impl Widget for Gutter {
         }
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-
         let colors = CodeEditorColors::get(TextEditorKind::Code, context);
         let padding = context
             .get(&components::IntrinsicPadding)
