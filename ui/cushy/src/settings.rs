@@ -21,6 +21,8 @@ struct OptSettings {
     pub indentation: Option<Indentation>,
     pub theme: Option<String>,
     pub editor_font: Option<Vec<String>>,
+    pub editor_font_size: Option<f32>,
+    pub editor_font_weight: Option<String>,
 }
 
 impl Default for Settings {

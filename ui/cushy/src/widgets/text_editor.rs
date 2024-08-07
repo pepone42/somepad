@@ -273,6 +273,14 @@ impl TextEditor {
         }
     }
 
+    fn get_editor_default_attr(&self) -> Attrs {
+        if self.kind == TextEditorKind::Code {
+            get_editor_default_attr(self.family_name.as_deref())
+        } else {
+            Attrs::new()
+        }
+    }
+
     fn px_to_col(&self, line: usize, x: Px) -> usize {
         let raw_text = self.doc.get().get_visible_line(line).to_string();
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
@@ -284,15 +292,7 @@ impl TextEditor {
         buffer.set_text(
             &mut FONT_SYSTEM.lock().unwrap(),
             &raw_text,
-            if self.kind == TextEditorKind::Code {
-                Attrs::new().family(if let Some(f) = &self.family_name {
-                    Family::Name(f)
-                } else {
-                    Family::Monospace
-                })
-            } else {
-                Attrs::new()
-            },
+            self.get_editor_default_attr(),
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
         let byte_idx = buffer
@@ -313,15 +313,7 @@ impl TextEditor {
         buffer.set_text(
             &mut FONT_SYSTEM.lock().unwrap(),
             &raw_text,
-            if self.kind == TextEditorKind::Code {
-                Attrs::new().family(if let Some(f) = &self.family_name {
-                    Family::Name(f)
-                } else {
-                    Family::Monospace
-                })
-            } else {
-                Attrs::new()
-            },
+            self.get_editor_default_attr(),
             cushy::kludgine::cosmic_text::Shaping::Advanced,
         );
         let col = self.doc.get().col_to_byte(line, index);
@@ -359,15 +351,7 @@ impl TextEditor {
     fn layout_line(&self, line_idx: usize, colors: &CodeEditorColors) -> Buffer {
         let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
-        let attrs = if self.kind == TextEditorKind::Code {
-            Attrs::new().family(if let Some(f) = &self.family_name {
-                Family::Name(f)
-            } else {
-                Family::Monospace
-            })
-        } else {
-            Attrs::new()
-        };
+        let attrs = self.get_editor_default_attr();
 
         if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
@@ -1140,13 +1124,7 @@ impl Widget for Gutter {
                 colors.fg_gutter.alpha(),
             );
 
-            let attrs = Attrs::new()
-                .family(if let Some(ref f) = self.family_name {
-                    Family::Name(f)
-                } else {
-                    Family::Monospace
-                })
-                .color(col);
+            let attrs = get_editor_default_attr(self.family_name.as_deref()).color(col);
 
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             buffer.set_size(
@@ -1196,11 +1174,7 @@ impl Widget for Gutter {
         context
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
-        let attrs = Attrs::new().family(if let Some(f) = &self.family_name {
-            Family::Name(f)
-        } else {
-            Family::Monospace
-        });
+        let attrs =get_editor_default_attr(self.family_name.as_deref());
 
         context.gfx.set_text_attributes(attrs);
 
@@ -1535,6 +1509,14 @@ fn make_selection_path(rects: &[Rect<Px>]) -> Option<Path<Px, false>> {
     } else {
         None
     }
+}
+
+fn get_editor_default_attr(family_name: Option<&str>) -> Attrs {
+    Attrs::new().family(if let Some(f) = family_name {
+        Family::Name(f)
+    } else {
+        Family::Monospace
+    })
 }
 
 fn get_editor_family_name(font_system: &mut FontSystem) -> Option<String> {
