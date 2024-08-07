@@ -389,73 +389,56 @@ impl TextEditor {
                     a: fg_find_hightlight.alpha(),
                 };
 
-                for s in sl.iter() {
-                    let mut in_search = false;
-                    let mut processed = false;
-                    if !self.search_panel_closed.get() {
-                        for span in find_aera.iter().flat_map(|a| {
-                            if a.col_start >= s.range.start && a.col_end <= s.range.end {
-                                // |------||-----|....
-                                //   |--|
-                                vec![
-                                    (s.range.start, a.col_start, s.style.foreground),
-                                    (a.col_start, a.col_end, fg_find_hightlight),
-                                    (a.col_end, s.range.end, s.style.foreground),
-                                ]
-                            } else if s.range.start <= a.col_start && s.range.end >= a.col_end {
-                                // |------|
-                                //     |------|
-                                in_search = true;
-                                vec![
-                                    (s.range.start, a.col_start, s.style.foreground),
-                                    (a.col_start, s.range.end, fg_find_hightlight),
-                                ]
-                            } else if s.range.start <= a.col_end && s.range.end >= a.col_end {
-                                //       |-----|....
-                                //    |------|
-                                in_search = false;
-                                vec![
-                                    (s.range.start, a.col_end, fg_find_hightlight),
-                                    (a.col_end, s.range.end, s.style.foreground),
-                                ]
-                            } else if s.range.start >= a.col_start && s.range.end <= a.col_end {
-                                // |----||------||------|
-                                //    |-------------|
-                                let col = if in_search {
-                                    fg_find_hightlight
-                                } else {
-                                    s.style.foreground
-                                };
-                                vec![(s.range.start, s.range.end, col)]
-                            } else {
-                                // |----|
-                                //  nothing
-                                vec![]
-                            }
-                        }) {
-                            processed = true;
-                            let start = span.0.min(raw_text.len());
-                            let end = span.1.min(raw_text.len());
-                            let t = &raw_text[start..end];
-                            let col = cushy::kludgine::cosmic_text::Color::rgba(
-                                span.2.r, span.2.g, span.2.b, span.2.a,
-                            );
-                            spans.push((t, attrs.color(col)));
-                        }
-                    }
-                    if !processed {
-                        let start = s.range.start.min(raw_text.len());
-                        let end = s.range.end.min(raw_text.len());
-                        let t = &raw_text[start..end];
+                let mut style_ranges = sl
+                    .iter()
+                    .map(|f| (f.range.end, f.style.foreground, None))
+                    .collect::<Vec<_>>();
+                style_ranges.append(
+                    &mut find_aera
+                        .iter()
+                        .map(|a| (a.col_start, fg_find_hightlight, Some(true)))
+                        .collect::<Vec<_>>(),
+                );
+                style_ranges.append(
+                    &mut find_aera
+                        .iter()
+                        .map(|a| (a.col_end, fg_find_hightlight, Some(false)))
+                        .collect::<Vec<_>>(),
+                );
 
-                        let col = cushy::kludgine::cosmic_text::Color::rgba(
-                            s.style.foreground.r,
-                            s.style.foreground.g,
-                            s.style.foreground.b,
-                            s.style.foreground.a,
-                        );
+                if style_ranges.first().map(|f| f.0) != Some(0) && !sl.is_empty() {
+                    style_ranges.insert(0, (0, sl[0].style.foreground, None));
+                }
 
-                        spans.push((t, attrs.color(col)));
+                style_ranges.sort_by_key(|f| f.0);
+
+                let mut cur = 0;
+                let mut col = style_ranges
+                    .first()
+                    .map(|f| f.1)
+                    .unwrap_or(ndoc::Color::BLACK);
+                let mut inside_found = false;
+                for style in style_ranges {
+                    let start = cur.min(raw_text.len());
+                    let end = style.0.min(raw_text.len());
+                    let t = &raw_text[start..end];
+
+                    let c = if inside_found {
+                        fg_find_hightlight
+                    } else {
+                        col
+                    };
+
+                    let span_col = cushy::kludgine::cosmic_text::Color::rgba(c.r, c.g, c.b, c.a);
+
+                    spans.push((t, attrs.color(span_col)));
+
+                    cur = style.0;
+
+                    if let Some(push) = style.2 {
+                        inside_found = push;
+                    } else {
+                        col = style.1;
                     }
                 }
             } else {
@@ -474,25 +457,6 @@ impl TextEditor {
                     spans.push((t, attrs.color(col)));
                 }
             }
-            // if let Some(col) = colors.fg_find_hightlight {
-            //     for a in find_aera {
-            //         let start = a.col_start;
-            //         let end = a.col_end;
-            //         let t = &raw_text[start..end];
-            //         dbg!(start, end, t);
-            //         let col = cushy::kludgine::cosmic_text::Color::rgba(
-            //             col.red(),
-            //             col.green(),
-            //             col.blue(),
-            //             col.alpha(),
-            //         );
-            //         spans.push((
-            //             t,
-            //             attrs.color(cushy::kludgine::cosmic_text::Color::rgb(255, 255, 255)),
-            //         ))
-            //     }
-            // }
-            // dbg!(&spans);
             buffer.set_rich_text(
                 &mut FONT_SYSTEM.lock().unwrap(),
                 spans,
