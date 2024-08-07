@@ -369,19 +369,21 @@ impl TextEditor {
             Attrs::new()
         };
 
-        let find_aera = self
-            .items_found
-            .get()
-            .iter()
-            .flat_map(|(start, end)| Selection::from((*start, *end)).areas(&self.doc.get().rope))
-            .filter(|a| a.line == line_idx)
-            .collect::<Vec<_>>();
-
         if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             let mut spans = Vec::new();
 
             if let Some(fg_find_hightlight) = colors.fg_find_hightlight {
+                let find_aera = self
+                    .items_found
+                    .get()
+                    .iter()
+                    .flat_map(|(start, end)| {
+                        Selection::from((*start, *end)).areas(&self.doc.get().rope)
+                    })
+                    .filter(|a| a.line == line_idx)
+                    .collect::<Vec<_>>();
+
                 let fg_find_hightlight = ndoc::Color {
                     r: fg_find_hightlight.red(),
                     g: fg_find_hightlight.green(),
@@ -389,25 +391,31 @@ impl TextEditor {
                     a: fg_find_hightlight.alpha(),
                 };
 
+                enum Style {
+                    FoundItemStart,
+                    FoundItemEnd,
+                    Normal(ndoc::Color),
+                }
+
                 let mut style_ranges = sl
                     .iter()
-                    .map(|f| (f.range.end, f.style.foreground, None))
+                    .map(|f| (f.range.end, Style::Normal(f.style.foreground)))
                     .collect::<Vec<_>>();
                 style_ranges.append(
                     &mut find_aera
                         .iter()
-                        .map(|a| (a.col_start, fg_find_hightlight, Some(true)))
+                        .map(|a| (a.col_start, Style::FoundItemStart))
                         .collect::<Vec<_>>(),
                 );
                 style_ranges.append(
                     &mut find_aera
                         .iter()
-                        .map(|a| (a.col_end, fg_find_hightlight, Some(false)))
+                        .map(|a| (a.col_end, Style::FoundItemEnd))
                         .collect::<Vec<_>>(),
                 );
 
                 if style_ranges.first().map(|f| f.0) != Some(0) && !sl.is_empty() {
-                    style_ranges.insert(0, (0, sl[0].style.foreground, None));
+                    style_ranges.insert(0, (0, Style::Normal(sl[0].style.foreground)));
                 }
 
                 style_ranges.sort_by_key(|f| f.0);
@@ -415,7 +423,11 @@ impl TextEditor {
                 let mut cur = 0;
                 let mut col = style_ranges
                     .first()
-                    .map(|f| f.1)
+                    .map(|f| match f.1 {
+                        Style::FoundItemStart => fg_find_hightlight,
+                        Style::FoundItemEnd => fg_find_hightlight,
+                        Style::Normal(c) => c,
+                    })
                     .unwrap_or(ndoc::Color::BLACK);
                 let mut inside_found = false;
                 for style in style_ranges {
@@ -435,10 +447,16 @@ impl TextEditor {
 
                     cur = style.0;
 
-                    if let Some(push) = style.2 {
-                        inside_found = push;
-                    } else {
-                        col = style.1;
+                    match style.1 {
+                        Style::FoundItemStart => {
+                            inside_found = true;
+                        }
+                        Style::FoundItemEnd => {
+                            inside_found = false;
+                        }
+                        Style::Normal(c) => {
+                            col = c;
+                        }
                     }
                 }
             } else {
