@@ -23,12 +23,12 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 
+use super::scroll::ScrollController;
 use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
-use super::scroll::ScrollController;
 
 use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
@@ -383,186 +383,193 @@ impl TextEditor {
             ));
         }
     }
+    fn layout_line_simple(&self, line_idx: usize) -> Buffer {
+        let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
+
+        let attrs = self.get_editor_default_attr();
+        let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
+        buffer.set_text(
+            &mut FONT_SYSTEM.lock().unwrap(),
+            &raw_text,
+            attrs,
+            cushy::kludgine::cosmic_text::Shaping::Advanced,
+        );
+        buffer.set_size(
+            &mut FONT_SYSTEM.lock().unwrap(),
+            10000.,
+            self.font_metrics.line_height,
+        );
+        buffer
+    }
 
     fn layout_line(&self, line_idx: usize, colors: &CodeEditorColors) -> Buffer {
+        let style_line_info = self.doc.get().get_style_line_info(line_idx as _);
+        if self.kind == TextEditorKind::Input || style_line_info.is_none() {
+            return self.layout_line_simple(line_idx);
+        }
+
         let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
         let attrs = self.get_editor_default_attr();
 
-        if let Some(sl) = self.doc.get().get_style_line_info(line_idx as _) {
-            let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
-            let mut spans = Vec::new();
+        let sl = style_line_info.unwrap();
+        let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
+        let mut spans = Vec::new();
 
-            if let Some(fg_find_hightlight) = colors.fg_find_hightlight {
-                let find_aera = self
-                    .items_found
-                    .get()
+        if colors.fg_find_hightlight.is_some() && !self.search_panel_closed.get() {
+            let fg_find_hightlight = colors.fg_find_hightlight.unwrap();
+            let find_aera = self
+                .items_found
+                .get()
+                .iter()
+                .flat_map(|(start, end)| {
+                    Selection::from((*start, *end)).areas(&self.doc.get().rope)
+                })
+                .filter(|a| a.line == line_idx)
+                .collect::<Vec<_>>();
+
+            let fg_find_hightlight = ndoc::Color {
+                r: fg_find_hightlight.red(),
+                g: fg_find_hightlight.green(),
+                b: fg_find_hightlight.blue(),
+                a: fg_find_hightlight.alpha(),
+            };
+
+            let mut style_ranges = sl
+                .iter()
+                .map(|f| (f.range.start, StyleSpan::SytleStart(f.style.foreground)))
+                .collect::<Vec<_>>();
+            style_ranges.append(
+                &mut sl
                     .iter()
-                    .flat_map(|(start, end)| {
-                        Selection::from((*start, *end)).areas(&self.doc.get().rope)
-                    })
-                    .filter(|a| a.line == line_idx)
-                    .collect::<Vec<_>>();
-
-                let fg_find_hightlight = ndoc::Color {
-                    r: fg_find_hightlight.red(),
-                    g: fg_find_hightlight.green(),
-                    b: fg_find_hightlight.blue(),
-                    a: fg_find_hightlight.alpha(),
-                };
-
-                let mut style_ranges = sl
+                    .map(|f| (f.range.end, StyleSpan::StyleEnd))
+                    .collect::<Vec<_>>(),
+            );
+            style_ranges.append(
+                &mut find_aera
                     .iter()
-                    .map(|f| (f.range.start, StyleSpan::SytleStart(f.style.foreground)))
-                    .collect::<Vec<_>>();
-                style_ranges.append(
-                    &mut sl
-                        .iter()
-                        .map(|f| (f.range.end, StyleSpan::StyleEnd))
-                        .collect::<Vec<_>>(),
-                );
-                style_ranges.append(
-                    &mut find_aera
-                        .iter()
-                        .map(|a| (a.col_start, StyleSpan::FoundItemStart))
-                        .collect::<Vec<_>>(),
-                );
-                style_ranges.append(
-                    &mut find_aera
-                        .iter()
-                        .map(|a| (a.col_end, StyleSpan::FoundItemEnd))
-                        .collect::<Vec<_>>(),
-                );
+                    .map(|a| (a.col_start, StyleSpan::FoundItemStart))
+                    .collect::<Vec<_>>(),
+            );
+            style_ranges.append(
+                &mut find_aera
+                    .iter()
+                    .map(|a| (a.col_end, StyleSpan::FoundItemEnd))
+                    .collect::<Vec<_>>(),
+            );
 
-                style_ranges.sort_by(|l, r| {
-                    if l.0 == r.0 {
-                        l.1.cmp(&r.1)
-                    } else {
-                        l.0.cmp(&r.0)
-                    }
-                });
-
-                //dbg!(&style_ranges);
-
-                let mut cur = 0;
-                let mut inside_found = false;
-                let mut col = ndoc::Color::BLACK;
-                for style in style_ranges {
-                    match (inside_found, style.0, style.1) {
-                        (true, _, StyleSpan::FoundItemStart) => {
-                            unreachable!("FoundItemStart inside found item");
-                        }
-                        (false, _, StyleSpan::FoundItemEnd) => {
-                            unreachable!("FoundItemEnd outside found item");
-                        }
-                        (false, i, StyleSpan::FoundItemStart) => {
-                            let start = cur.min(raw_text.len());
-                            let end = i.min(raw_text.len());
-                            let t = &raw_text[start..end];
-                            spans.push((
-                                t,
-                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
-                                    col.r, col.g, col.b, col.a,
-                                )),
-                            ));
-
-                            inside_found = true;
-                            cur = i;
-                        }
-                        (true, i, StyleSpan::FoundItemEnd) => {
-                            let start = cur.min(raw_text.len());
-                            let end = i.min(raw_text.len());
-                            let t = &raw_text[start..end];
-                            spans.push((
-                                t,
-                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
-                                    fg_find_hightlight.r,
-                                    fg_find_hightlight.g,
-                                    fg_find_hightlight.b,
-                                    fg_find_hightlight.a,
-                                )),
-                            ));
-
-                            inside_found = false;
-                            cur = i;
-                        }
-                        (_, i, StyleSpan::SytleStart(c)) => {
-                            col = c;
-                            cur = i;
-                        }
-                        (false, i, StyleSpan::StyleEnd) => {
-                            let start = cur.min(raw_text.len());
-                            let end = i.min(raw_text.len());
-                            let t = &raw_text[start..end];
-
-                            spans.push((
-                                t,
-                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
-                                    col.r, col.g, col.b, col.a,
-                                )),
-                            ));
-                            cur = i;
-                        }
-                        (true, i, StyleSpan::StyleEnd) => {
-                            let start = cur.min(raw_text.len());
-                            let end = i.min(raw_text.len());
-                            let t = &raw_text[start..end];
-                            spans.push((
-                                t,
-                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
-                                    fg_find_hightlight.r,
-                                    fg_find_hightlight.g,
-                                    fg_find_hightlight.b,
-                                    fg_find_hightlight.a,
-                                )),
-                            ));
-                            cur = i;
-                        }
-                    }
+            style_ranges.sort_by(|l, r| {
+                if l.0 == r.0 {
+                    l.1.cmp(&r.1)
+                } else {
+                    l.0.cmp(&r.0)
                 }
-            } else {
-                for s in sl.iter() {
-                    let start = s.range.start.min(raw_text.len());
-                    let end = s.range.end.min(raw_text.len());
-                    let t = &raw_text[start..end];
+            });
 
-                    let col = cushy::kludgine::cosmic_text::Color::rgba(
-                        s.style.foreground.r,
-                        s.style.foreground.g,
-                        s.style.foreground.b,
-                        s.style.foreground.a,
-                    );
+            let mut cur = 0;
+            let mut inside_found = false;
+            let mut col = ndoc::Color::BLACK;
+            for style in style_ranges {
+                match (inside_found, style.0, style.1) {
+                    (true, _, StyleSpan::FoundItemStart) => {
+                        unreachable!("FoundItemStart inside found item");
+                    }
+                    (false, _, StyleSpan::FoundItemEnd) => {
+                        unreachable!("FoundItemEnd outside found item");
+                    }
+                    (false, i, StyleSpan::FoundItemStart) => {
+                        let start = cur.min(raw_text.len());
+                        let end = i.min(raw_text.len());
+                        let t = &raw_text[start..end];
+                        spans.push((
+                            t,
+                            attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                col.r, col.g, col.b, col.a,
+                            )),
+                        ));
 
-                    spans.push((t, attrs.color(col)));
+                        inside_found = true;
+                        cur = i;
+                    }
+                    (true, i, StyleSpan::FoundItemEnd) => {
+                        let start = cur.min(raw_text.len());
+                        let end = i.min(raw_text.len());
+                        let t = &raw_text[start..end];
+                        spans.push((
+                            t,
+                            attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                fg_find_hightlight.r,
+                                fg_find_hightlight.g,
+                                fg_find_hightlight.b,
+                                fg_find_hightlight.a,
+                            )),
+                        ));
+
+                        inside_found = false;
+                        cur = i;
+                    }
+                    (_, i, StyleSpan::SytleStart(c)) => {
+                        col = c;
+                        cur = i;
+                    }
+                    (false, i, StyleSpan::StyleEnd) => {
+                        let start = cur.min(raw_text.len());
+                        let end = i.min(raw_text.len());
+                        let t = &raw_text[start..end];
+
+                        spans.push((
+                            t,
+                            attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                col.r, col.g, col.b, col.a,
+                            )),
+                        ));
+                        cur = i;
+                    }
+                    (true, i, StyleSpan::StyleEnd) => {
+                        let start = cur.min(raw_text.len());
+                        let end = i.min(raw_text.len());
+                        let t = &raw_text[start..end];
+                        spans.push((
+                            t,
+                            attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                fg_find_hightlight.r,
+                                fg_find_hightlight.g,
+                                fg_find_hightlight.b,
+                                fg_find_hightlight.a,
+                            )),
+                        ));
+                        cur = i;
+                    }
                 }
             }
-            buffer.set_rich_text(
-                &mut FONT_SYSTEM.lock().unwrap(),
-                spans,
-                attrs,
-                cushy::kludgine::cosmic_text::Shaping::Advanced,
-            );
-            buffer.set_size(
-                &mut FONT_SYSTEM.lock().unwrap(),
-                10000.,
-                self.font_metrics.line_height,
-            );
-            buffer
         } else {
-            let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
-            buffer.set_text(
-                &mut FONT_SYSTEM.lock().unwrap(),
-                &raw_text,
-                attrs,
-                cushy::kludgine::cosmic_text::Shaping::Advanced,
-            );
-            buffer.set_size(
-                &mut FONT_SYSTEM.lock().unwrap(),
-                10000.,
-                self.font_metrics.line_height,
-            );
-            buffer
+            for s in sl.iter() {
+                let start = s.range.start.min(raw_text.len());
+                let end = s.range.end.min(raw_text.len());
+                let t = &raw_text[start..end];
+
+                let col = cushy::kludgine::cosmic_text::Color::rgba(
+                    s.style.foreground.r,
+                    s.style.foreground.g,
+                    s.style.foreground.b,
+                    s.style.foreground.a,
+                );
+
+                spans.push((t, attrs.color(col)));
+            }
         }
+        buffer.set_rich_text(
+            &mut FONT_SYSTEM.lock().unwrap(),
+            spans,
+            attrs,
+            cushy::kludgine::cosmic_text::Shaping::Advanced,
+        );
+        buffer.set_size(
+            &mut FONT_SYSTEM.lock().unwrap(),
+            10000.,
+            self.font_metrics.line_height,
+        );
+        buffer
     }
 
     fn get_selection_shape(
