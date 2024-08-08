@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use cushy::kludgine::text::Text;
 use cushy::value::{CallbackHandle, Dynamic, MapEach};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
@@ -17,7 +16,7 @@ use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Me
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{components, Color, Weight};
+use cushy::styles::{components, Color};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -25,17 +24,16 @@ use cushy::widget::{
 };
 
 use cushy::widgets::Custom;
-use cushy::{context, define_components, Cushy, ModifiersExt, WithClone};
+use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
 use rfd::FileDialog;
-use scroll::ScrollController;
+use super::scroll::ScrollController;
 
 use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
 
-use super::scroll::{self, ContextScroller, MyScroll, PassiveScroll};
-use super::status_bar;
+use super::scroll::{ContextScroller, MyScroll, PassiveScroll};
 
 pub struct CodeEditorColors {
     bg: Color,

@@ -219,7 +219,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .next_key(next_key)
         .prev_key(prev_key)
         .selected_idx(1)
-        .accept(move |_, i, val| {
+        .accept(move |_, i, _| {
             *current_doc.lock() = v[i].0;
         })
         .show();
@@ -243,7 +243,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
         let current_doc = w.current_doc.clone();
         c.palette("Select a document")
             .items(items)
-            .accept(move |_, i, val| {
+            .accept(move |_, i, _| {
                 *current_doc.lock() = i;
             })
             .show();

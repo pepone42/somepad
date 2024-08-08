@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default};
+use std::collections::HashMap;
 use anyhow::Context;
 use directories::ProjectDirs;
 use ndoc::{syntax::THEMESET, Indentation, ThemeSet};
