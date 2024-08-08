@@ -117,6 +117,44 @@ impl CodeEditorColors {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum StyleSpan {
+    FoundItemEnd,
+    StyleEnd,
+    FoundItemStart,
+    SytleStart(ndoc::Color),
+}
+
+impl StyleSpan {
+    fn discriminant(&self) -> u8 {
+        match self {
+            StyleSpan::FoundItemEnd => 0,
+            StyleSpan::StyleEnd => 1,
+            StyleSpan::FoundItemStart => 2,
+            StyleSpan::SytleStart(_) => 3,
+        }
+    }
+}
+
+impl PartialEq for StyleSpan {
+    fn eq(&self, other: &Self) -> bool {
+        self.discriminant() == other.discriminant()
+    }
+}
+impl Eq for StyleSpan {}
+
+impl PartialOrd for StyleSpan {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for StyleSpan {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.discriminant().cmp(&other.discriminant())
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ClickInfo {
     count: usize,
@@ -375,71 +413,112 @@ impl TextEditor {
                     a: fg_find_hightlight.alpha(),
                 };
 
-                enum Style {
-                    FoundItemStart,
-                    FoundItemEnd,
-                    Normal(ndoc::Color),
-                }
-
                 let mut style_ranges = sl
                     .iter()
-                    .map(|f| (f.range.end, Style::Normal(f.style.foreground)))
+                    .map(|f| (f.range.start, StyleSpan::SytleStart(f.style.foreground)))
                     .collect::<Vec<_>>();
                 style_ranges.append(
-                    &mut find_aera
+                    &mut sl
                         .iter()
-                        .map(|a| (a.col_start, Style::FoundItemStart))
+                        .map(|f| (f.range.end, StyleSpan::StyleEnd))
                         .collect::<Vec<_>>(),
                 );
                 style_ranges.append(
                     &mut find_aera
                         .iter()
-                        .map(|a| (a.col_end, Style::FoundItemEnd))
+                        .map(|a| (a.col_start, StyleSpan::FoundItemStart))
+                        .collect::<Vec<_>>(),
+                );
+                style_ranges.append(
+                    &mut find_aera
+                        .iter()
+                        .map(|a| (a.col_end, StyleSpan::FoundItemEnd))
                         .collect::<Vec<_>>(),
                 );
 
-                if style_ranges.first().map(|f| f.0) != Some(0) && !sl.is_empty() {
-                    style_ranges.insert(0, (0, Style::Normal(sl[0].style.foreground)));
-                }
+                style_ranges.sort_by(|l, r| {
+                    if l.0 == r.0 {
+                        l.1.cmp(&r.1)
+                    } else {
+                        l.0.cmp(&r.0)
+                    }
+                });
 
-                style_ranges.sort_by_key(|f| f.0);
+                //dbg!(&style_ranges);
 
                 let mut cur = 0;
-                let mut col = style_ranges
-                    .first()
-                    .map(|f| match f.1 {
-                        Style::FoundItemStart => fg_find_hightlight,
-                        Style::FoundItemEnd => fg_find_hightlight,
-                        Style::Normal(c) => c,
-                    })
-                    .unwrap_or(ndoc::Color::BLACK);
                 let mut inside_found = false;
+                let mut col = ndoc::Color::BLACK;
                 for style in style_ranges {
-                    let start = cur.min(raw_text.len());
-                    let end = style.0.min(raw_text.len());
-                    let t = &raw_text[start..end];
+                    match (inside_found, style.0, style.1) {
+                        (true, _, StyleSpan::FoundItemStart) => {
+                            unreachable!("FoundItemStart inside found item");
+                        }
+                        (false, _, StyleSpan::FoundItemEnd) => {
+                            unreachable!("FoundItemEnd outside found item");
+                        }
+                        (false, i, StyleSpan::FoundItemStart) => {
+                            let start = cur.min(raw_text.len());
+                            let end = i.min(raw_text.len());
+                            let t = &raw_text[start..end];
+                            spans.push((
+                                t,
+                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                    col.r, col.g, col.b, col.a,
+                                )),
+                            ));
 
-                    let c = if inside_found {
-                        fg_find_hightlight
-                    } else {
-                        col
-                    };
-
-                    let span_col = cushy::kludgine::cosmic_text::Color::rgba(c.r, c.g, c.b, c.a);
-
-                    spans.push((t, attrs.color(span_col)));
-
-                    cur = style.0;
-
-                    match style.1 {
-                        Style::FoundItemStart => {
                             inside_found = true;
+                            cur = i;
                         }
-                        Style::FoundItemEnd => {
+                        (true, i, StyleSpan::FoundItemEnd) => {
+                            let start = cur.min(raw_text.len());
+                            let end = i.min(raw_text.len());
+                            let t = &raw_text[start..end];
+                            spans.push((
+                                t,
+                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                    fg_find_hightlight.r,
+                                    fg_find_hightlight.g,
+                                    fg_find_hightlight.b,
+                                    fg_find_hightlight.a,
+                                )),
+                            ));
+
                             inside_found = false;
+                            cur = i;
                         }
-                        Style::Normal(c) => {
+                        (_, i, StyleSpan::SytleStart(c)) => {
                             col = c;
+                            cur = i;
+                        }
+                        (false, i, StyleSpan::StyleEnd) => {
+                            let start = cur.min(raw_text.len());
+                            let end = i.min(raw_text.len());
+                            let t = &raw_text[start..end];
+
+                            spans.push((
+                                t,
+                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                    col.r, col.g, col.b, col.a,
+                                )),
+                            ));
+                            cur = i;
+                        }
+                        (true, i, StyleSpan::StyleEnd) => {
+                            let start = cur.min(raw_text.len());
+                            let end = i.min(raw_text.len());
+                            let t = &raw_text[start..end];
+                            spans.push((
+                                t,
+                                attrs.color(cushy::kludgine::cosmic_text::Color::rgba(
+                                    fg_find_hightlight.r,
+                                    fg_find_hightlight.g,
+                                    fg_find_hightlight.b,
+                                    fg_find_hightlight.a,
+                                )),
+                            ));
+                            cur = i;
                         }
                     }
                 }
@@ -1174,7 +1253,7 @@ impl Widget for Gutter {
         context
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
-        let attrs =get_editor_default_attr(self.family_name.as_deref());
+        let attrs = get_editor_default_attr(self.family_name.as_deref());
 
         context.gfx.set_text_attributes(attrs);
 
