@@ -51,11 +51,11 @@ impl Default for Settings {
         shortcuts.insert(crate::SHOW_ALL_COMMAND.id.to_string(), shortcut!(Ctrl + Shift + p));
         
         #[cfg(target_os = "macos")]
-        let default_font = vec!["Menlo".to_string(), "Monaco".to_string(), "Courier New".to_string()];
+        let editor_font = vec!["Menlo".to_string(), "Monaco".to_string(), "Courier New".to_string()];
         #[cfg(target_os = "windows")]
         let editor_font = vec!["Consolas".to_string(), "Courier New".to_string()];
         #[cfg(target_os = "linux")]
-        let default_font = vec!["Droid Sans Mono".to_string(), "monospace".to_string()];
+        let editor_font = vec!["Droid Sans Mono".to_string(), "monospace".to_string()];
 
         Self { shortcuts, indentation: Default::default(), theme: "base16-eighties.dark".to_string(), editor_font }
     }
