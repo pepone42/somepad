@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::format;
 use std::time::{Duration, Instant};
 
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
@@ -12,11 +13,11 @@ use cushy::figures::{
 };
 use cushy::kludgine::app::winit::event::{ElementState, MouseButton};
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
-use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics};
+use cushy::kludgine::cosmic_text::{Attrs, Buffer, Cursor, Family, FontSystem, Metrics, Stretch};
 use cushy::kludgine::shapes::{Path, PathBuilder, Shape, StrokeOptions};
 use cushy::kludgine::{Drawable, DrawableExt};
 
-use cushy::styles::{components, Color};
+use cushy::styles::{components, Color, Weight};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
@@ -187,6 +188,8 @@ pub struct TextEditor {
     pub doc: Dynamic<ndoc::Document>,
     viewport: Dynamic<Rect<Px>>,
     family_name: Option<String>,
+    font_weight: Weight,
+    font_stretch: Stretch,
     font_metrics: Metrics,
     font_size: Px,
     line_height: Px,
@@ -289,6 +292,8 @@ impl TextEditor {
             viewport: Dynamic::new(Rect::default()),
             font_metrics: Default::default(),
             font_size: Px::ZERO,
+            font_weight: Weight::NORMAL,
+            font_stretch: Stretch::Normal,
             line_height: Px::ZERO,
             scale: Fraction::ZERO,
             family_name: None,
@@ -311,7 +316,7 @@ impl TextEditor {
 
     fn get_editor_default_attr(&self) -> Attrs {
         if self.kind == TextEditorKind::Code {
-            get_editor_default_attr(self.family_name.as_deref())
+            get_editor_default_attr(self.family_name.as_deref()).weight(self.font_weight).stretch(self.font_stretch)
         } else {
             Attrs::new()
         }
@@ -675,7 +680,7 @@ impl TextEditor {
 impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
-        self.family_name = get_editor_family_name(context.kludgine.font_system());
+        (self.family_name, self.font_weight, self.font_stretch) = get_editor_family_name(context.kludgine.font_system());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let colors = CodeEditorColors::get(self.kind, context);
@@ -1150,6 +1155,8 @@ pub struct Gutter {
     font_metrics: Metrics,
     font_size: Px,
     family_name: Option<String>,
+    font_weight: Weight,
+    font_stretch: Stretch,
     line_height: Px,
     scale: Fraction,
     editor_id: WidgetId,
@@ -1163,6 +1170,8 @@ impl Gutter {
             font_size: Px::ZERO,
             line_height: Px::ZERO,
             family_name: None,
+            font_weight: Weight::NORMAL,
+            font_stretch: Stretch::Normal,
             scale: Fraction::ZERO,
             editor_id,
         }
@@ -1171,7 +1180,7 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn mounted(&mut self, context: &mut EventContext<'_>) {
-        self.family_name = get_editor_family_name(context.kludgine.font_system());
+        (self.family_name,self.font_weight,self.font_stretch) = get_editor_family_name(context.kludgine.font_system());
         if let Some(family_name) = &self.family_name {
             tracing::trace!("Using font family: {}", family_name);
         } else {
@@ -1208,7 +1217,7 @@ impl Widget for Gutter {
                 colors.fg_gutter.alpha(),
             );
 
-            let attrs = get_editor_default_attr(self.family_name.as_deref()).color(col);
+            let attrs = get_editor_default_attr(self.family_name.as_deref()).color(col).weight(self.font_weight).stretch(self.font_stretch);
 
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             buffer.set_size(
@@ -1258,7 +1267,7 @@ impl Widget for Gutter {
         context
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
-        let attrs = get_editor_default_attr(self.family_name.as_deref());
+        let attrs = get_editor_default_attr(self.family_name.as_deref()).weight(self.font_weight).stretch(self.font_stretch);
 
         context.gfx.set_text_attributes(attrs);
 
@@ -1603,18 +1612,71 @@ fn get_editor_default_attr(family_name: Option<&str>) -> Attrs {
     })
 }
 
-fn get_editor_family_name(font_system: &mut FontSystem) -> Option<String> {
-    let font_id = font_system
-        .db()
-        .query(&cushy::kludgine::cosmic_text::fontdb::Query {
-            weight: cushy::kludgine::cosmic_text::fontdb::Weight::NORMAL,
-            style: cushy::kludgine::cosmic_text::fontdb::Style::Normal,
-            families: &get_settings()
-                .editor_font
-                .iter()
-                .map(|f| Family::Name(f))
-                .collect::<Vec<Family>>(),
-            stretch: cushy::kludgine::cosmic_text::fontdb::Stretch::Normal,
-        });
-    font_id.map(|id| font_system.db().face(id).unwrap().families[0].0.clone())
+fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>,Weight,Stretch) {
+    let font_names = {
+        let mut font_names = HashMap::new();
+        let attrs = Attrs::new().family(Family::Monospace);
+        for face in font_system.db().faces() {
+            if attrs.matches(face) {
+                //TODO: get localized name if possible
+                let font_name = face
+                    .families
+                    .first()
+                    .map_or_else(|| face.post_script_name.to_string(), |x| x.0.to_string());
+                let font_weight = match face.weight {
+                    Weight::THIN => "Thin",
+                    Weight::EXTRA_LIGHT => "ExtraLight",
+                    Weight::LIGHT => "Light",
+                    Weight::NORMAL => "Regular",
+                    Weight::MEDIUM => "Medium",
+                    Weight::SEMIBOLD => "SemiBold",
+                    Weight::BOLD => "Bold",
+                    Weight::EXTRA_BOLD => "ExtraBold",
+                    Weight::BLACK => "Black",
+                    _ => "Regular",
+                };
+                let font_strech = match face.stretch {
+                    Stretch::UltraCondensed => "UltraCondensed",
+                    Stretch::ExtraCondensed => "ExtraCondensed",
+                    Stretch::Condensed => "Condensed",
+                    Stretch::SemiCondensed => "SemiCondensed",
+                    Stretch::Normal => "Normal",
+                    Stretch::SemiExpanded => "SemiExpanded",
+                    Stretch::Expanded => "Expanded",
+                    Stretch::ExtraExpanded => "ExtraExpanded",
+                    Stretch::UltraExpanded => "UltraExpanded",
+                };
+                let full_font_name = match (font_weight,font_strech) {
+                    ("Regular","Normal") => font_name.clone(),
+                    ("Regular",_) => format!("{} {}",font_name,font_strech),
+                    (_,"Normal") => format!("{} {}",font_name,font_weight),
+                    (weight,stretch) => format!("{} {} {}",font_name,stretch,weight)
+                };
+                font_names.entry(full_font_name).or_insert((font_name, face.weight,face.stretch));
+            }
+        }
+        font_names
+    };
+    //dbg!(&font_names);
+
+    for font in get_settings().editor_font.iter() {
+        if let Some((name, weight,stretch)) = font_names.get(font) {
+            return (Some(name.to_string()),*weight,*stretch);
+        }
+    }
+    (None,Weight::NORMAL,Stretch::Normal)
+
+    // let font_id = font_system
+    //     .db()
+    //     .query(&cushy::kludgine::cosmic_text::fontdb::Query {
+    //         weight: cushy::kludgine::cosmic_text::fontdb::Weight::NORMAL,
+    //         style: cushy::kludgine::cosmic_text::fontdb::Style::Normal,
+    //         families: &get_settings()
+    //             .editor_font
+    //             .iter()
+    //             .map(|f| Family::Name(f))
+    //             .collect::<Vec<Family>>(),
+    //         stretch: cushy::kludgine::cosmic_text::fontdb::Stretch::Normal,
+    //     });
+    // (font_id.map(|id| font_system.db().face(id).unwrap().families[0].0.clone())
 }
