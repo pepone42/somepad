@@ -714,14 +714,34 @@ impl Document {
         self.begin_batch_edit(Action::Text(input.to_string()));
         for i in 0..self.selections.len() {
             let selection = self.selections[i];
-            let char_idx = self.position_to_char(selection.head);
+            let char_idx_start = self.position_to_char(selection.start());
+            let char_idx_end = self.position_to_char(selection.start());
             let (input, selection) = match (
                 input,
-                self.rope.chars_at(char_idx).prev(),
-                self.rope.chars_at(char_idx).next()
+                selection.is_empty(),
+                self.rope.chars_at(char_idx_start).prev(),
+                self.rope.chars_at(char_idx_end).next()
             ) {
+                // insert { and do nothing because } is allready there
+                ("{", true, _, Some('}')) => {
+                    (input.to_string(), None)
+                }
+                // } is allready there, insert nothing, just move the cursor to the right
+                ("}", true, _, Some('}')) => {
+                    let mut selection = selection;
+                    selection.head = Position::new(selection.head.line, selection.head.column + 1);
+                    selection.tail = selection.head;
+                    ("".to_string(), Some(selection))
+                }
+                // insert {} and move the cursor to the right
+                ("{", true, _, _) => {
+                    let mut selection = selection;
+                    selection.head = Position::new(selection.head.line, selection.head.column + 1);
+                    selection.tail = selection.head;
+                    ("{}".to_string(), Some(selection))
+                }
                 // insert new line between { and } insert two line with the correct indentation and place the cursor in between
-                ("\r" | "\n" | "\r\n", Some('{'), Some('}')) => {
+                ("\r" | "\n" | "\r\n",_, Some('{'), Some('}')) => {
                     let indent1 = self.compute_indentation(selection.head.line, 1);
                     let indent2 = self.compute_indentation(selection.head.line, 0);
                     let first_part = format!("{}{}", self.file_info.linefeed, indent1);
@@ -734,7 +754,7 @@ impl Document {
                     (input, Some(selection))
                 }
                 // insert new line after a { should increment the indentation
-                ("\r" | "\n" | "\r\n", Some('{'), _) => (
+                ("\r" | "\n" | "\r\n",_, Some('{'), _) => (
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
@@ -743,7 +763,7 @@ impl Document {
                     None,
                 ),
                 // insert new line before a } should decrement the indentation
-                ("\r" | "\n" | "\r\n", _, Some('}')) => (
+                ("\r" | "\n" | "\r\n", _, _, Some('}')) => (
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
@@ -752,7 +772,7 @@ impl Document {
                     None,
                 ),
                 // Insert new line should preserve the indentation
-                ("\r" | "\n" | "\r\n", _, _) => (
+                ("\r" | "\n" | "\r\n", _, _, _) => (
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
