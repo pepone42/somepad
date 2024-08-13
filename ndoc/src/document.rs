@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    fmt::format,
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -260,63 +261,65 @@ impl Document {
 
         (*MESSAGE_SENDER.lock().unwrap()) = Some(tx);
 
-        let _ = thread::Builder::new().name("Document Highlighter".to_string()).spawn(move || {
-            let mut highlight_state = HashMap::new();
-            let mut callback = HashMap::new();
+        let _ = thread::Builder::new()
+            .name("Document Highlighter".to_string())
+            .spawn(move || {
+                let mut highlight_state = HashMap::new();
+                let mut callback = HashMap::new();
 
-            loop {
-                match rx.try_recv() {
-                    Ok(BackgroundWorkerMessage::UpdateBuffer(
-                        id,
-                        s,
-                        r,
-                        start,
-                        cache,
-                        tx,
-                        tab_len,
-                    )) => {
-                        let state = highlight_state
-                            .entry(id)
-                            .or_insert(HighlighterState::new(id));
+                loop {
+                    match rx.try_recv() {
+                        Ok(BackgroundWorkerMessage::UpdateBuffer(
+                            id,
+                            s,
+                            r,
+                            start,
+                            cache,
+                            tx,
+                            tab_len,
+                        )) => {
+                            let state = highlight_state
+                                .entry(id)
+                                .or_insert(HighlighterState::new(id));
 
-                        state.rope = r;
-                        state.tab_len = tab_len;
-                        state.current_index = start;
-                        state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
-                        state.lines_cache = cache;
-                        // smaller chunk for the first synchronous update
-                        state.chunk_len = 100;
-                        state.update_chunk();
-                        let _ = tx.send(());
-                    }
-                    Ok(BackgroundWorkerMessage::RegisterDocument(id, f)) => {
-                        callback.insert(id, f);
-                    }
-                    Ok(BackgroundWorkerMessage::UpdateTheme(theme)) => {
-                        for (_, state) in highlight_state.iter_mut() {
-                            state.update_theme(&theme);
+                            state.rope = r;
+                            state.tab_len = tab_len;
+                            state.current_index = start;
+                            state.syntax = SYNTAXSET.find_syntax_by_name(&s.name).unwrap();
+                            state.lines_cache = cache;
+                            // smaller chunk for the first synchronous update
+                            state.chunk_len = 100;
+                            state.update_chunk();
+                            let _ = tx.send(());
                         }
-                    }
-                    Ok(BackgroundWorkerMessage::Stop) => return,
-                    _ => (),
-                }
-                if highlight_state
-                    .values()
-                    .any(|s| s.current_index < s.rope.len_lines())
-                {
-                    for h in highlight_state.values_mut() {
-                        h.update_chunk();
-                    }
-                    for id in highlight_state.keys() {
-                        if let Some(f) = callback.get(id) {
-                            f();
+                        Ok(BackgroundWorkerMessage::RegisterDocument(id, f)) => {
+                            callback.insert(id, f);
                         }
+                        Ok(BackgroundWorkerMessage::UpdateTheme(theme)) => {
+                            for (_, state) in highlight_state.iter_mut() {
+                                state.update_theme(&theme);
+                            }
+                        }
+                        Ok(BackgroundWorkerMessage::Stop) => return,
+                        _ => (),
                     }
-                } else {
-                    thread::sleep(Duration::from_millis(1));
+                    if highlight_state
+                        .values()
+                        .any(|s| s.current_index < s.rope.len_lines())
+                    {
+                        for h in highlight_state.values_mut() {
+                            h.update_chunk();
+                        }
+                        for id in highlight_state.keys() {
+                            if let Some(f) = callback.get(id) {
+                                f();
+                            }
+                        }
+                    } else {
+                        thread::sleep(Duration::from_millis(1));
+                    }
                 }
-            }
-        });
+            });
     }
 
     pub fn on_highlighter_update(&self, f: impl Fn() + Send + 'static) {
@@ -549,8 +552,31 @@ impl Document {
         self.insert_at(input, start, end);
     }
 
+    fn compute_indentation(&self, line: usize, delta: isize) -> String {
+        let indent_len = self.line_indent_len(line);
+        let indent = self.rope.line(line).slice(..indent_len).to_string();
+
+        match delta.cmp(&0) {
+            std::cmp::Ordering::Less => match self.file_info.indentation {
+                Indentation::Tab(_) => {
+                    let l = indent_len.saturating_sub(-delta as usize);
+                    "\t".repeat(l)
+                }
+                Indentation::Space(x) => {
+                    let l = indent_len.saturating_sub(-delta as usize * x);
+                    " ".repeat(l)
+                }
+            },
+            std::cmp::Ordering::Equal => indent,
+            std::cmp::Ordering::Greater => match self.file_info.indentation {
+                Indentation::Tab(_) => format!("{}{}", indent, "\t".repeat(delta as usize)),
+                Indentation::Space(x) => format!("{}{}", indent, " ".repeat(delta as usize * x)),
+            },
+        }
+    }
+
     fn insert_at_selection(&mut self, input: &str, selection: Selection) {
-        self.insert_at_position(input, selection.start(), selection.end());
+        self.insert_at_position(&input, selection.start(), selection.end());
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -687,7 +713,61 @@ impl Document {
     pub fn insert(&mut self, input: &str) {
         self.begin_batch_edit(Action::Text(input.to_string()));
         for i in 0..self.selections.len() {
-            self.insert_at_selection(input, self.selections[i]);
+            let selection = self.selections[i];
+            let char_idx = self.position_to_char(selection.head);
+            let (input, selection) = match (
+                input,
+                self.rope.chars_at(char_idx).prev(),
+                self.rope.chars_at(char_idx).next()
+            ) {
+                // insert new line between { and } insert two line with the correct indentation and place the cursor in between
+                ("\r" | "\n" | "\r\n", Some('{'), Some('}')) => {
+                    let indent1 = self.compute_indentation(selection.head.line, 1);
+                    let indent2 = self.compute_indentation(selection.head.line, 0);
+                    let first_part = format!("{}{}", self.file_info.linefeed, indent1);
+
+                    let mut selection = selection;
+                    selection.head = Position::new(selection.head.line + 1, indent1.chars().count());
+                    selection.tail = selection.head;
+                    let second_part = format!("{}{}", self.file_info.linefeed, indent2);
+                    let input = format!("{}{}", first_part, second_part);
+                    (input, Some(selection))
+                }
+                // insert new line after a { should increment the indentation
+                ("\r" | "\n" | "\r\n", Some('{'), _) => (
+                    format!(
+                        "{}{}",
+                        self.file_info.linefeed,
+                        self.compute_indentation(selection.head.line, 1),
+                    ),
+                    None,
+                ),
+                // insert new line before a } should decrement the indentation
+                ("\r" | "\n" | "\r\n", _, Some('}')) => (
+                    format!(
+                        "{}{}",
+                        self.file_info.linefeed,
+                        self.compute_indentation(selection.head.line, -1),
+                    ),
+                    None,
+                ),
+                // Insert new line should preserve the indentation
+                ("\r" | "\n" | "\r\n", _, _) => (
+                    format!(
+                        "{}{}",
+                        self.file_info.linefeed,
+                        self.compute_indentation(selection.head.line, 0),
+                    ),
+                    None,
+                ),
+                // TODO: find a way to not reallocate the string
+                _ => (input.to_string(), None),
+            };
+
+            self.insert_at_selection(&input, self.selections[i]);
+            if let Some(selection) = selection {
+                self.selections[i] = selection;
+            }
         }
         self.merge_selections();
         self.end_batch_edit();
@@ -908,6 +988,10 @@ impl Document {
 
     pub fn line_start(&mut self, line: usize) -> Position {
         char_to_position(&self.rope.slice(..), self.rope.line_to_char(line))
+    }
+
+    pub fn line_indent_len(&self, line: usize) -> usize {
+        get_line_start_boundary(&self.rope.slice(..), line)
     }
 
     pub fn line_end(&mut self, line: usize) -> Position {
@@ -1595,7 +1679,7 @@ mod test {
         let mut doc = Document::default();
         doc.insert("hello world \n hell \n hello");
         let s = "wrold";
-        let idx = doc.find_from(s, doc.char_to_position(0),false);
+        let idx = doc.find_from(s, doc.char_to_position(0), false);
         assert_eq!(idx, None);
     }
 }

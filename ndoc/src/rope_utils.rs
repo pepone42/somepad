@@ -281,7 +281,7 @@ pub fn get_line_start_boundary(slice: &RopeSlice, line_idx: usize) -> usize {
     slice
         .line(line_idx)
         .chars()
-        .take_while(|c| c.is_whitespace())
+        .take_while(|c| c.is_whitespace() && !['\n', '\r'].contains(c))
         .count()
 }
 
