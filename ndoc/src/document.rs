@@ -114,7 +114,7 @@ fn new_doc_id() {
     assert_eq!(d2.id, 1);
 }
 
-pub enum BackgroundWorkerMessage {
+enum BackgroundWorkerMessage {
     Stop,
     RegisterDocument(usize, Box<dyn Send + Fn()>),
     UpdateBuffer(
@@ -184,13 +184,19 @@ struct BatchEdit {
     have_change: bool,
 }
 
+/// A Document represent a editable text, it can be attached to a file or not
+/// Document use Ropey as the underlying data structure
 #[derive(Debug, Clone)]
 pub struct Document {
     id: usize,
+    /// The text content
     pub rope: Rope,
     history: History,
+    /// File information about the document such as encoding, syntax, indentation, etc
     pub file_info: FileInfo,
+    /// The selections (or cursors) used to edit the document
     pub selections: Vec<Selection>,
+    /// The filename of the document if a file is bound to it, None otherwise
     pub file_name: Option<PathBuf>,
     message_sender: Option<Sender<BackgroundWorkerMessage>>,
     line_style_cache: StyledLinesCache,
@@ -234,16 +240,19 @@ impl Document {
         DOCID.fetch_add(1, Ordering::Relaxed)
     }
 
+    /// Create a new Document with the given indentation
     pub fn new(indentation: Indentation) -> Self {
         let mut d = Document::default();
         d.file_info.indentation = indentation;
         d
     }
 
+    /// Return the id of the document
     pub fn id(&self) -> usize {
         self.id
     }
 
+    /// Return the title of the document
     pub fn title(&self) -> String {
         if let Some(f) = &self.file_name {
             f.file_name().unwrap().to_string_lossy().into()
@@ -252,6 +261,7 @@ impl Document {
         }
     }
 
+    /// Initialize the highlighter thread
     pub fn init_highlighter() {
         if MESSAGE_SENDER.lock().is_ok_and(|m| m.is_some()) {
             return;
@@ -322,6 +332,7 @@ impl Document {
             });
     }
 
+    /// Register a callback to be called when the highlighter update the document
     pub fn on_highlighter_update(&self, f: impl Fn() + Send + 'static) {
         if let Some(mg) = &self.message_sender {
             let _ = mg.send(BackgroundWorkerMessage::RegisterDocument(
@@ -331,6 +342,7 @@ impl Document {
         }
     }
 
+    /// Return style information for the given line, None if the line is not yet highlighted, out of range, or the document is plain text
     pub fn get_style_line_info(&self, line_idx: usize) -> Option<StyledLine> {
         self.line_style_cache.get(line_idx)
     }
@@ -353,6 +365,7 @@ impl Document {
         }
     }
 
+    /// Update the theme of the document
     pub fn update_theme(&self, theme: &str) {
         if let Some(tx) = self.message_sender.as_ref() {
             let _ = tx.send(BackgroundWorkerMessage::UpdateTheme(theme.to_string()));
@@ -360,6 +373,7 @@ impl Document {
         self.update_highlight_from(0);
     }
 
+    /// Create a new Document from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut file = fs::File::open(&path)?;
 
@@ -445,6 +459,7 @@ impl Document {
         self.history = Default::default();
     }
 
+    /// Save the document to the given path
     pub fn save_as(&mut self, path: &Path) -> Result<()> {
         let mut file = fs::File::create(path)?;
         let input = self.rope.to_string();
@@ -476,6 +491,9 @@ impl Document {
         Ok(())
     }
 
+    /// Find the input string inside the Document starting at the given position and return the start and end position of the first match
+    /// If cycling is true, the search will continue from the beginning of the document if the end is reached
+    /// If no match is found, return None
     pub fn find_from(
         &self,
         input: &str,
@@ -515,6 +533,9 @@ impl Document {
         None
     }
 
+    /// Start a batch of edit Action
+    /// The batch will be committed when end_batch_edit is called
+    /// Batching permit undo and redo to treat the whole batch as a single action
     fn begin_batch_edit(&mut self, action: Action) {
         let rope = self.rope.clone();
         let selections = self.selections.clone();
@@ -532,6 +553,8 @@ impl Document {
             have_change: false,
         });
     }
+
+    /// End the current batch
     fn end_batch_edit(&mut self) {
         if let Some(batch) = self.batch_edit.take() {
             if batch.have_change {
@@ -552,33 +575,11 @@ impl Document {
         self.insert_at(input, start, end);
     }
 
-    fn compute_indentation(&self, line: usize, delta: isize) -> String {
-        let indent_len = self.line_indent_len(line);
-        let indent = self.rope.line(line).slice(..indent_len).to_string();
-
-        match delta.cmp(&0) {
-            std::cmp::Ordering::Less => match self.file_info.indentation {
-                Indentation::Tab(_) => {
-                    let l = indent_len.saturating_sub(-delta as usize);
-                    "\t".repeat(l)
-                }
-                Indentation::Space(x) => {
-                    let l = indent_len.saturating_sub(-delta as usize * x);
-                    " ".repeat(l)
-                }
-            },
-            std::cmp::Ordering::Equal => indent,
-            std::cmp::Ordering::Greater => match self.file_info.indentation {
-                Indentation::Tab(_) => format!("{}{}", indent, "\t".repeat(delta as usize)),
-                Indentation::Space(x) => format!("{}{}", indent, " ".repeat(delta as usize * x)),
-            },
-        }
-    }
-
     fn insert_at_selection(&mut self, input: &str, selection: Selection) {
         self.insert_at_position(&input, selection.start(), selection.end());
     }
 
+    /// Modification of the document content are not saved to disk
     pub fn is_dirty(&self) -> bool {
         !self.history.is_empty()
     }
@@ -657,6 +658,7 @@ impl Document {
         // }
     }
 
+    /// Undo the last action
     pub fn undo(&mut self) {
         if let Some((rope, selections)) = self
             .history
@@ -668,6 +670,8 @@ impl Document {
             self.update_highlight_from(0);
         }
     }
+
+    /// Redo the last undone action
     pub fn redo(&mut self) {
         if let Some((rope, selections)) = self.history.redo() {
             self.rope = rope;
@@ -677,14 +681,18 @@ impl Document {
         }
     }
 
+    /// Convert a [position](Position) to a char index
     pub fn position_to_char(&self, position: Position) -> usize {
         position_to_char(&self.rope.slice(..), position)
     }
 
+    /// Convert a char index to a [position](Position)
     pub fn char_to_position(&self, char_idx: usize) -> Position {
         char_to_position(&self.rope.slice(..), char_idx)
     }
 
+    /// Return the content of all the selections
+    /// The different selections are separated by a new line
     pub fn get_selection_content(&self) -> String {
         let r = self
             .selections
@@ -698,6 +706,9 @@ impl Document {
         r.join(&LineFeed::default().to_string())
     }
 
+    /// Insert the given string at the current [selection](Selection).
+    /// If the number of lines in the input string is equal to the number of selections, each line is inserted at the corresponding selection.
+    /// This is mostly useful for copy/pasting in multi-cursor situation.
     pub fn insert_many(&mut self, input: &str) {
         self.begin_batch_edit(Action::Text(input.to_string()));
         if self.selections.len() > 1 && input.lines().count() == self.selections.len() {
@@ -710,6 +721,7 @@ impl Document {
         self.end_batch_edit();
     }
 
+    /// Insert the given string at the current [selection](Selection).
     pub fn insert(&mut self, input: &str) {
         self.begin_batch_edit(Action::Text(input.to_string()));
         for i in 0..self.selections.len() {
@@ -793,6 +805,7 @@ impl Document {
         self.end_batch_edit();
     }
 
+    /// Delete the character juste before [selections](Self::selections)
     pub fn backspace(&mut self) {
         self.begin_batch_edit(Action::Backspace);
         for i in 0..self.selections.len() {
@@ -807,6 +820,7 @@ impl Document {
         self.end_batch_edit();
     }
 
+    /// Delete the character under [selections](Self::selections)
     pub fn delete(&mut self) {
         self.begin_batch_edit(Action::Delete);
         for i in 0..self.selections.len() {
@@ -821,6 +835,31 @@ impl Document {
         self.end_batch_edit();
     }
 
+    fn compute_indentation(&self, line: usize, delta: isize) -> String {
+        let indent_len = self.line_indent_len(line);
+        let indent = self.rope.line(line).slice(..indent_len).to_string();
+
+        match delta.cmp(&0) {
+            std::cmp::Ordering::Less => match self.file_info.indentation {
+                Indentation::Tab(_) => {
+                    let l = indent_len.saturating_sub(-delta as usize);
+                    "\t".repeat(l)
+                }
+                Indentation::Space(x) => {
+                    let l = indent_len.saturating_sub(-delta as usize * x);
+                    " ".repeat(l)
+                }
+            },
+            std::cmp::Ordering::Equal => indent,
+            std::cmp::Ordering::Greater => match self.file_info.indentation {
+                Indentation::Tab(_) => format!("{}{}", indent, "\t".repeat(delta as usize)),
+                Indentation::Space(x) => format!("{}{}", indent, " ".repeat(delta as usize * x)),
+            },
+        }
+    }
+
+    /// Increase the indentation of the selected lines
+    /// Insert a tab character at selections if only one line is selected or 'always' is false
     pub fn indent(&mut self, always: bool) {
         self.begin_batch_edit(Action::Tab);
         let main_sel = self.selections.first().unwrap();
@@ -849,6 +888,7 @@ impl Document {
         self.end_batch_edit();
     }
 
+    /// decrease the indentation of the selected lines
     pub fn deindent(&mut self) {
         self.begin_batch_edit(Action::Text(String::new()));
         for s in self.selections.clone() {
@@ -868,6 +908,8 @@ impl Document {
         self.end_batch_edit();
     }
 
+    /// Move all the [selections](Self::selections) in the given direction.
+    /// If expand is true, only the head of the selection is moved (the cursor part)
     pub fn move_selections(&mut self, dir: MoveDirection, expand: bool) {
         self.selections = self
             .selections
@@ -908,6 +950,8 @@ impl Document {
         self.merge_selections();
     }
 
+    /// Move all the [selections](Self::selections) to the next/prev word.
+    /// If expand is true, only the head of the selection is moved (the cursor part)
     pub fn move_selections_word(&mut self, dir: MoveDirection, expand: bool) {
         self.selections = self
             .selections
@@ -927,6 +971,7 @@ impl Document {
         self.merge_selections();
     }
 
+    /// Return the start [position](Position) of the next word
     pub fn next_word_boundary(&self, position: Position) -> Position {
         let slice = &self.rope.slice(..);
         char_to_position(
@@ -935,6 +980,7 @@ impl Document {
         )
     }
 
+    /// Return the end [position](Position) of the previous word
     pub fn prev_word_boundary(&self, position: Position) -> Position {
         let slice = &self.rope.slice(..);
         char_to_position(
@@ -943,26 +989,31 @@ impl Document {
         )
     }
 
+    /// Return the [position](Position) of the prev grapheme boundary
     pub fn prev_position(&self, position: Position) -> Position {
         let char_idx = self.position_to_char(position);
         self.char_to_position(prev_grapheme_boundary(&self.rope.slice(..), char_idx))
     }
 
+    /// Return the [position](Position) of the next grapheme boundary
     pub fn next_position(&self, position: Position) -> Position {
         let char_idx = self.position_to_char(position);
         self.char_to_position(next_grapheme_boundary(&self.rope.slice(..), char_idx))
     }
 
+    /// Return the start [position](Position) of the word pointed by the given [position](Position) 
     pub fn word_start(&self, position: Position) -> Position {
         let slice = &self.rope.slice(..);
         char_to_position(slice, word_start(slice, position_to_char(slice, position)))
     }
 
+    /// Return the end [position](Position) of the word pointed by the given [position](Position)
     pub fn word_end(&self, position: Position) -> Position {
         let slice = &self.rope.slice(..);
         char_to_position(slice, word_end(slice, position_to_char(slice, position)))
     }
 
+    /// Select the word pointed by the given [position](Position)
     pub fn select_word(&mut self, position: Position) {
         let tail = self.word_start(position);
         let head = self.word_end(position);
@@ -974,6 +1025,7 @@ impl Document {
         }]
     }
 
+    /// Expand the selections to the word bondary pointed by the given [position](Position)
     pub fn expand_selection_by_word(&mut self, position: Position) {
         match position {
             p if p < self.selections[0].tail => {
@@ -990,6 +1042,7 @@ impl Document {
         }
     }
 
+    /// Expand the selections to the line pointed by the given [position](Position)
     pub fn expand_selection_by_line(&mut self, position: Position) {
         match position {
             p if p < self.selections[0].tail => {
@@ -1006,14 +1059,18 @@ impl Document {
         }
     }
 
+    /// return the start [position](Position) of the line pointed by the given [position](Position)
+    /// (stupid? it could be just Position.line)
     pub fn line_start(&mut self, line: usize) -> Position {
         char_to_position(&self.rope.slice(..), self.rope.line_to_char(line))
     }
 
+    /// return the line indentation length in char 
     pub fn line_indent_len(&self, line: usize) -> usize {
         get_line_start_boundary(&self.rope.slice(..), line)
     }
 
+    /// return the end position of the line 
     pub fn line_end(&mut self, line: usize) -> Position {
         char_to_position(
             &self.rope.slice(..),
@@ -1021,6 +1078,7 @@ impl Document {
         )
     }
 
+    /// return the end position of the line including end of line characters
     pub fn line_end_full(&mut self, line: usize) -> Position {
         self.line_start(line + 1)
     }
@@ -1047,6 +1105,7 @@ impl Document {
         }]
     }
 
+    /// Specify the main selection. Also cancel multi-cursor
     pub fn set_main_selection(&mut self, head: Position, tail: Position) {
         self.selections = vec![Selection {
             head,
@@ -1065,6 +1124,7 @@ impl Document {
             .collect();
     }
 
+    /// duplicate the selection in the given direction
     pub fn duplicate_selection(&mut self, direction: MoveDirection) {
         match direction {
             MoveDirection::Down => {
@@ -1101,6 +1161,7 @@ impl Document {
         self.merge_selections();
     }
 
+    /// ducplicate the selection based on the currently selected text
     pub fn duplicate_selection_for_selected_text(&mut self) {
         let start = self.position_to_char(self.selections[0].start());
         let end = self.position_to_char(self.selections[0].end());
@@ -1203,6 +1264,8 @@ impl Document {
         false
     }
 
+    /// return the content of the line taking into account the tab character.
+    /// The Tab character is replaced by the number of space corresponding to the tab size, according to the elastic tab stop behavior
     pub fn get_visible_line(&self, line_idx: usize) -> Cow<'_, str> {
         if self.line_has_tab(line_idx) {
             let indent_len = self.file_info.indentation.size();
@@ -1231,6 +1294,7 @@ impl Document {
         }
     }
 
+    /// convert the column index to a column index into a visible line
     pub fn col_to_vcol(&self, line_idx: usize, col_idx: usize) -> usize {
         let slice = self.rope.line(line_idx);
         let tabl_len = self.file_info.indentation.size();
@@ -1248,6 +1312,7 @@ impl Document {
         vcol
     }
 
+    /// Convert the visible column index to a real column index
     pub fn vcol_to_col(&self, line_idx: usize, vcol_idx: usize) -> usize {
         let slice = self.rope.line(line_idx);
         let tabl_len = self.file_info.indentation.size();
@@ -1266,6 +1331,7 @@ impl Document {
         col
     }
 
+    /// return the byte index of the visible column index
     pub fn vcol_to_byte(&self, line_idx: usize, vcol_idx: usize) -> usize {
         let rope = Rope::from_str(&self.get_visible_line(line_idx));
         let char_idx = rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
@@ -1274,6 +1340,7 @@ impl Document {
         rope.char_to_byte(char_idx)
     }
 
+    /// return the visible column index of the byte index
     pub fn byte_to_vcol(&self, line_idx: usize, byte_idx: usize) -> usize {
         let rope = Rope::from_str(&self.get_visible_line(line_idx));
         let char_idx = rope.byte_to_char(byte_idx);
