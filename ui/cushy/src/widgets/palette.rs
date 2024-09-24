@@ -23,11 +23,11 @@ use super::filtered_list::{Filter, FilteredList};
 use super::scroll::{ContextScroller, MyScroll};
 use super::text_editor::TextEditor;
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone)]
 pub struct Palette {
     description: Dynamic<String>,
     child: WidgetRef,
-    action: Dynamic<PaletteAction>,
+    action: PaletteAction,
     input: Dynamic<Document>,
     items: Option<Vec<String>>,
     filter: Dynamic<Filter>,
@@ -39,10 +39,15 @@ impl Palette {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| d.rope.to_string());
         let selected_idx = PALETTE_STATE.get().selected_idx;
-        let action = Dynamic::new(PALETTE_STATE.get().action.clone());
+        let action = PALETTE_STATE.get().action.clone();
         let (filter_tag, filter_id) = WidgetTag::new();
         let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
-            FilteredList::new(items.clone(), str_input.clone(), selected_idx, action.clone())
+            FilteredList::new(
+                items.clone(),
+                str_input.clone(),
+                selected_idx,
+                action.clone(),
+            )
         } else {
             FilteredList::new(Vec::new(), str_input.clone(), selected_idx, action.clone())
         };
@@ -57,7 +62,11 @@ impl Palette {
                     Custom::new(MyScroll::horizontal(TextEditor::as_input(input.clone())))
                         .on_mounted(move |c| c.focus()),
                 )
-                .and(MyScroll::vertical(filtered_list.make_with_tag(filter_tag)).with_scrollbars_visible().expand())
+                .and(
+                    MyScroll::vertical(filtered_list.make_with_tag(filter_tag))
+                        .with_scrollbars_visible()
+                        .expand(),
+                )
                 .into_rows()
                 .width(Lp::new(550))
                 .height(Lp::ZERO..Lp::new(250)),
@@ -160,7 +169,7 @@ impl WrapperWidget for Palette {
                     if self.items.is_some() {
                         let item = self.filter.get().selected_item.get();
                         if let Some(idx) = item {
-                            self.action.get()(
+                            (self.action)(
                                 &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                                 idx.index,
                                 idx.text,
@@ -192,20 +201,19 @@ impl WrapperWidget for Palette {
                 if self.items.is_some() {
                     let item = self.filter.get().selected_item.get();
                     if let Some(idx) = item {
-                        self.action.get()(
+                        (self.action)(
                             &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                             idx.index,
                             idx.text,
                         );
                     }
                 } else {
-                    self.action.get()(
+                    (self.action)(
                         &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                         0,
                         self.input.get().rope.to_string(),
                     );
                 }
-                
 
                 HANDLED
             }
@@ -247,7 +255,8 @@ impl WrapperWidget for Palette {
     }
 }
 
-pub(super) type PaletteAction = Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
+pub(super) type PaletteAction =
+    Arc<dyn Fn(&mut EventContext, usize, String) + 'static + Send + Sync>;
 
 #[derive(Clone)]
 pub struct PaletteState {
@@ -327,9 +336,10 @@ impl PaletteState {
     }
 }
 
-pub (super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> = Lazy::new(|| Dynamic::new(PaletteState::new()));
+pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
+    Lazy::new(|| Dynamic::new(PaletteState::new()));
 
-pub (super) fn close_palette() {
+pub(super) fn close_palette() {
     PALETTE_STATE.lock().active = false;
 }
 

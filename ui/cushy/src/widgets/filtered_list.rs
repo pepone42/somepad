@@ -146,7 +146,7 @@ impl Filter {
 pub struct FilteredList {
     pub filter: Dynamic<Filter>,
     pub hovered_idx: Dynamic<Option<usize>>,
-    action: Dynamic<PaletteAction>,
+    action: PaletteAction,
 }
 
 impl Debug for FilteredList {
@@ -164,7 +164,7 @@ impl FilteredList {
         items: Vec<String>,
         filter: Dynamic<String>,
         selected_idx: usize,
-        action: Dynamic<PaletteAction>,
+        action: PaletteAction,
     ) -> Self {
         let filter = Dynamic::new(Filter::new(items, filter, selected_idx));
         FilteredList {
@@ -321,7 +321,7 @@ impl Widget for FilteredList {
         *self.filter.get().selected_idx.lock() = Some(idx as usize);
         if let Some(item) = self.filter.get().selected_item.get() {
             close_palette();
-            self.action.get()(
+            (self.action)(
                 &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
                 idx as usize,
                 item.text.clone(),
