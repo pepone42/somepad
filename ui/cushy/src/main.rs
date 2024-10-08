@@ -6,28 +6,27 @@ mod settings;
 mod widgets;
 
 use cushy::context::EventContext;
-use cushy::figures::Zero;
-use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
+use cushy::figures::{Size, Zero};
+//use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use cushy::widgets::layers::Modal;
 use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::{palette, PaletteExt};
+use widgets::palette::PaletteState;
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::{CodeEditor, TextEditor};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use cushy::figures::units::{Lp, Px};
+use cushy::figures::units::{Lp, Px, UPx};
 
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components::{self};
-use cushy::styles::{
-    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair,
-};
+use cushy::styles::{ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair};
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
 
@@ -67,7 +66,7 @@ const GOTO_LINE: ViewCommand = ViewCommand {
     id: "editor.goto_line",
     action: |_id, v, c| {
         let doc = v.doc.clone();
-        c.palette("Got to line")
+        v.palette().description("Got to line")
             .accept(move |c, _, s| {
                 if let Ok(line) = s.parse::<usize>() {
                     if line == 0 || line > doc.get().rope.len_lines() {
@@ -214,7 +213,7 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .unwrap()
         .clone();
     let current_doc = w.current_doc.clone();
-    c.palette("select a document")
+    w.palette().description("select a document")
         .items(items)
         .next_key(next_key)
         .prev_key(prev_key)
@@ -241,7 +240,7 @@ const SELECT_DOC: WindowCommand = WindowCommand {
     action: |_id, w, c| {
         let items = w.documents.get().iter().map(|d| d.get().title()).collect();
         let current_doc = w.current_doc.clone();
-        c.palette("Select a document")
+        w.palette().description("Select a document")
             .items(items)
             .accept(move |_, i, _| {
                 *current_doc.lock() = i;
@@ -288,7 +287,7 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
     action: |_id, w, c| {
         let items: Vec<String> = ThemeSetRegistry::get().themes.keys().cloned().collect();
         let documents = w.documents.clone();
-        c.palette("Choose theme")
+        w.palette().description("Choose theme")
             .items(items)
             .accept(move |_, _, val| {
                 for doc in documents.get() {
@@ -323,7 +322,7 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
 
         let cmd_reg = w.cmd_reg.clone();
 
-        c.palette("All Commands")
+        w.palette().description("All Commands")
             .items(i)
             .accept(move |c, index, _| {
                 if items[index].0.starts_with("editor.") {
@@ -412,10 +411,8 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let settings = get_settings(); // force load settings
-    let theme = ThemePair::from_scheme(
-        &ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5))
-            .build(),
-    );
+    let theme =
+        ThemePair::from_scheme(&ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5)).build());
 
     let mut cmd_reg = CommandsRegistry::new();
 
@@ -464,6 +461,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let cmd_reg = Dynamic::new(cmd_reg);
+    let modal = Modal::new();
 
     ndoc::Document::init_highlighter();
     let doc = Dynamic::new(if let Some(path) = std::env::args().nth(1) {
@@ -473,7 +471,7 @@ fn main() -> anyhow::Result<()> {
     });
 
     let (editor_tag, editor_id) = WidgetTag::new();
-    let editor = EditorWindow::new(doc.clone(), cmd_reg.clone());
+    let editor = EditorWindow::new(doc.clone(), cmd_reg.clone(), modal.clone());
 
     let docs = editor.documents.clone();
     let cur_doc = editor.current_doc.clone();
@@ -488,6 +486,8 @@ fn main() -> anyhow::Result<()> {
         )
         .into_rows()
         .gutter(Px::ZERO)
+        .and(modal)
+        .into_layers()
         .themed(theme)
         .with(&components::TextSize, Lp::points(10))
         .with(
@@ -500,22 +500,24 @@ fn main() -> anyhow::Result<()> {
             if !docs.get().iter().any(|d| d.get().is_dirty()) {
                 return true;
             }
-            palette("Unsaved changes, are you sure you want to close?")
-                .owner(editor_id)
-                .items(vec!["Yes".to_string(), "No".to_string()])
-                .accept(|c, _, r| {
-                    if let "Yes" = r.as_str() {
-                        c.window_mut().close()
-                    }
-                })
-                .show();
+            // modal.present(
+            // PaletteState::new().description("Unsaved changes, are you sure you want to close?")
+            //     .owner(editor_id)
+            //     .items(vec!["Yes".to_string(), "No".to_string()])
+            //     .accept(|c, _, r| {
+            //         if let "Yes" = r.as_str() {
+            //             c.window_mut().close()
+            //         }
+            //     })
+            //     .show();
+            return true;
             false
         });
 
     win.title = Value::Constant("SomePad".to_string());
-    win.attributes.min_inner_size = Some(Size::Logical(LogicalSize::new(800., 600.)));
+    let inner_size = Dynamic::new(Size::new(UPx::new(800), UPx::new(600)));
 
-    win.run()?;
+    win.inner_size(inner_size).run()?;
 
     // TODO: Save settings
 

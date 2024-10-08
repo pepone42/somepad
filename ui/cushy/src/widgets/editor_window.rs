@@ -8,9 +8,11 @@ use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget,
+    HANDLED, IGNORED,
 };
 
+use cushy::widgets::layers::Modal;
 use cushy::window::KeyEvent;
 
 use ndoc::Document;
@@ -20,7 +22,7 @@ use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
-use super::palette::Palette;
+use super::palette::{Palette, PaletteState};
 use super::scroll::MyScroll;
 use super::side_bar::SideBar;
 
@@ -33,11 +35,17 @@ pub struct EditorWindow {
     pub mru_documents: Dynamic<HashMap<usize, SystemTime>>,
     focused: Dynamic<bool>,
     pub editor_switcher_id: WidgetId,
+    modal: Modal,
+    id: Option<WidgetId>,
 }
 
 impl EditorWindow {
     #[must_use]
-    pub fn new(document: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
+    pub fn new(
+        document: Dynamic<Document>,
+        cmd_reg: Dynamic<CommandsRegistry>,
+        modal: Modal,
+    ) -> Self {
         let documents = Dynamic::new(vec![document]);
         let current_doc = Dynamic::new(0);
         let lru = Dynamic::new(HashMap::new());
@@ -60,24 +68,26 @@ impl EditorWindow {
             .expand_vertically()
             .and(ResizeHandle::new(width))
             .and(
-                EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone())
+                EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone(), modal.clone())
                     .make_with_tag(editor_tag),
             )
             .into_columns()
             .gutter(Px::ZERO)
             .make_widget();
 
-        let w = child
-            .and(Palette::new().with_next_focus(editor_id))
-            .into_layers();
+        // let w = child
+        //     .and(Palette::new().with_next_focus(editor_id))
+        //     .into_layers();
         EditorWindow {
-            child: w.widget_ref(),
+            child: child.widget_ref(),
             documents: documents.clone(),
             mru_documents: lru,
             current_doc: current_doc.clone(),
             cmd_reg,
             focused: Dynamic::new(false),
             editor_switcher_id: editor_id,
+            modal,
+            id: None,
         }
     }
 
@@ -89,11 +99,16 @@ impl EditorWindow {
     pub fn current_doc(&self) -> Dynamic<Document> {
         self.documents.get()[self.current_doc.get()].clone()
     }
+
+    pub fn palette(&self) -> PaletteState {
+        PaletteState::new(self.modal.clone()).owner(self.id.unwrap())
+    }
 }
 
 impl WrapperWidget for EditorWindow {
     fn mounted(&mut self, context: &mut cushy::context::EventContext<'_>) {
         self.focused = context.window().focused().clone();
+        self.id = Some(context.widget().id());
     }
 
     fn child_mut(&mut self) -> &mut WidgetRef {
@@ -110,6 +125,7 @@ impl WrapperWidget for EditorWindow {
         if !self.focused.get() {
             return HANDLED;
         }
+        self.palette();
         if input.state == ElementState::Pressed
             && context
                 .modifiers()

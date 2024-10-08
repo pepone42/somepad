@@ -4,6 +4,7 @@ use cushy::context::LayoutContext;
 use cushy::figures::Size;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{MakeWidget, WidgetRef, WrapperWidget};
+use cushy::widgets::layers::Modal;
 use cushy::ConstraintLimit;
 use ndoc::Document;
 
@@ -19,6 +20,7 @@ pub struct EditorSwitcher {
     last_doc: usize,
     pub editors: HashMap<usize, WidgetRef>,
     cmd_reg: Dynamic<CommandsRegistry>,
+    modal: Modal,
 }
 
 impl EditorSwitcher {
@@ -26,12 +28,13 @@ impl EditorSwitcher {
         documents: Dynamic<Vec<Dynamic<Document>>>,
         current_doc: Dynamic<usize>,
         cmd_reg: Dynamic<CommandsRegistry>,
+        modal: Modal
     ) -> Self {
         let editors = documents
             .get()
             .iter()
             .map(|d| {
-                let editor = CodeEditor::new(d.clone(), cmd_reg.clone())
+                let editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone())
                     .make_widget()
                     .widget_ref();
                 (d.get().id(), editor)
@@ -44,6 +47,7 @@ impl EditorSwitcher {
             current_doc,
             last_doc: 0,
             cmd_reg,
+            modal,
         }
     }
 }
@@ -56,7 +60,7 @@ impl WrapperWidget for EditorSwitcher {
         if let std::collections::hash_map::Entry::Vacant(e) = self.editors.entry(id) {
             e.insert(CodeEditor::new(
                     self.documents.get()[self.current_doc.get()].clone(),
-                    self.cmd_reg.clone(),
+                    self.cmd_reg.clone(),self.modal.clone()
                 )
                 .make_widget()
                 .widget_ref());

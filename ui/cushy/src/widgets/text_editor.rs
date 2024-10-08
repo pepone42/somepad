@@ -23,7 +23,9 @@ use cushy::widget::{
     EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
     HANDLED, IGNORED,
 };
+use cushy::widgets::layers::Modal;
 
+use super::palette::PaletteState;
 use super::scroll::ScrollController;
 use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
@@ -208,6 +210,8 @@ pub struct TextEditor {
     should_refocus: Dynamic<bool>,
     page_len: usize,
     search_panel_closed: Dynamic<bool>,
+    modal: Modal,
+    id: Option<WidgetId>,
 }
 
 impl TextEditor {
@@ -216,8 +220,9 @@ impl TextEditor {
         cmd_reg: Dynamic<CommandsRegistry>,
         click_info: Dynamic<ClickInfo>,
         search_term: Dynamic<Document>,
+        modal: Modal,
     ) -> Self {
-        let mut editor = TextEditor::create(doc.clone());
+        let mut editor = TextEditor::create(doc.clone(), modal);
 
         doc.lock().update_theme(&get_settings().theme);
 
@@ -281,12 +286,12 @@ impl TextEditor {
     }
 
     pub fn as_input(doc: Dynamic<ndoc::Document>) -> Self {
-        let mut editor = TextEditor::create(doc);
+        let mut editor = TextEditor::create(doc, Modal::new());
         editor.kind = TextEditorKind::Input;
         editor
     }
 
-    fn create(doc: Dynamic<Document>) -> Self {
+    fn create(doc: Dynamic<Document>, modal: Modal) -> Self {
         Self {
             doc,
             viewport: Dynamic::new(Rect::default()),
@@ -311,12 +316,16 @@ impl TextEditor {
             should_refocus: Dynamic::new(false),
             page_len: 0,
             search_panel_closed: Dynamic::new(false),
+            modal,
+            id: None,
         }
     }
 
     fn get_editor_default_attr(&self) -> Attrs {
         if self.kind == TextEditorKind::Code {
-            get_editor_default_attr(self.family_name.as_deref()).weight(self.font_weight).stretch(self.font_stretch)
+            get_editor_default_attr(self.family_name.as_deref())
+                .weight(self.font_weight)
+                .stretch(self.font_stretch)
         } else {
             Attrs::new()
         }
@@ -327,8 +336,8 @@ impl TextEditor {
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
-            10000.,
-            self.font_metrics.line_height,
+            None, //10000.,
+            None, //self.font_metrics.line_height,
         );
         buffer.set_text(
             &mut FONT_SYSTEM.lock().unwrap(),
@@ -348,8 +357,8 @@ impl TextEditor {
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
-            10000.,
-            self.font_metrics.line_height,
+            None, //10000.,
+            None, //self.font_metrics.line_height,
         );
         buffer.set_text(
             &mut FONT_SYSTEM.lock().unwrap(),
@@ -401,8 +410,8 @@ impl TextEditor {
         );
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
-            10000.,
-            self.font_metrics.line_height,
+            None, //10000.,
+            None, //self.font_metrics.line_height,
         );
         buffer
     }
@@ -571,8 +580,8 @@ impl TextEditor {
         );
         buffer.set_size(
             &mut FONT_SYSTEM.lock().unwrap(),
-            10000.,
-            self.font_metrics.line_height,
+            None, //10000.,
+            None, //self.font_metrics.line_height,
         );
         buffer
     }
@@ -675,12 +684,18 @@ impl TextEditor {
         context.window_mut().winit().unwrap().set_enable(true);
         context.window_mut().winit().unwrap().focus_window();
     }
+
+    pub fn palette(&self) -> PaletteState {
+        PaletteState::new(self.modal.clone()).owner(self.id.unwrap())
+    }
 }
 
 impl Widget for TextEditor {
     fn mounted(&mut self, context: &mut context::EventContext<'_>) {
         self.focused = context.widget.window_mut().focused().clone();
-        (self.family_name, self.font_weight, self.font_stretch) = get_editor_family_name(context.kludgine.font_system());
+        (self.family_name, self.font_weight, self.font_stretch) =
+            get_editor_family_name(context.kludgine.font_system());
+        self.id = Some(context.widget().id());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let colors = CodeEditorColors::get(self.kind, context);
@@ -1180,7 +1195,8 @@ impl Gutter {
 
 impl Widget for Gutter {
     fn mounted(&mut self, context: &mut EventContext<'_>) {
-        (self.family_name,self.font_weight,self.font_stretch) = get_editor_family_name(context.kludgine.font_system());
+        (self.family_name, self.font_weight, self.font_stretch) =
+            get_editor_family_name(context.kludgine.font_system());
         if let Some(family_name) = &self.family_name {
             tracing::trace!("Using font family: {}", family_name);
         } else {
@@ -1217,13 +1233,16 @@ impl Widget for Gutter {
                 colors.fg_gutter.alpha(),
             );
 
-            let attrs = get_editor_default_attr(self.family_name.as_deref()).color(col).weight(self.font_weight).stretch(self.font_stretch);
+            let attrs = get_editor_default_attr(self.family_name.as_deref())
+                .color(col)
+                .weight(self.font_weight)
+                .stretch(self.font_stretch);
 
             let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
             buffer.set_size(
                 &mut FONT_SYSTEM.lock().unwrap(),
-                10000.,
-                self.font_metrics.line_height,
+                None, //10000.,
+                None, //self.font_metrics.line_height,
             );
             buffer.set_text(
                 &mut FONT_SYSTEM.lock().unwrap(),
@@ -1267,7 +1286,9 @@ impl Widget for Gutter {
         context
             .gfx
             .set_font_size(Px::new(self.font_metrics.font_size.ceil() as _));
-        let attrs = get_editor_default_attr(self.family_name.as_deref()).weight(self.font_weight).stretch(self.font_stretch);
+        let attrs = get_editor_default_attr(self.family_name.as_deref())
+            .weight(self.font_weight)
+            .stretch(self.font_stretch);
 
         context.gfx.set_text_attributes(attrs);
 
@@ -1358,7 +1379,7 @@ pub struct CodeEditor {
 }
 
 impl CodeEditor {
-    pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>) -> Self {
+    pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>, modal: Modal) -> Self {
         let search_term = Dynamic::new(Document::default());
         let show_search_panel: Dynamic<bool> = Dynamic::new(true);
         let (editor_tag, editor_id) = WidgetTag::new();
@@ -1366,7 +1387,7 @@ impl CodeEditor {
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
         let mut text_editor =
-            TextEditor::new(doc.clone(), cmd_reg, click_info, search_term.clone());
+            TextEditor::new(doc.clone(), cmd_reg, click_info, search_term.clone(), modal);
         text_editor.search_panel_closed = show_search_panel.clone();
         let nb_searched_item = (
             &search_term,
@@ -1612,7 +1633,7 @@ fn get_editor_default_attr(family_name: Option<&str>) -> Attrs {
     })
 }
 
-fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>,Weight,Stretch) {
+fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>, Weight, Stretch) {
     let font_names = {
         let mut font_names = HashMap::new();
         let attrs = Attrs::new().family(Family::Monospace);
@@ -1646,13 +1667,15 @@ fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>,Weigh
                     Stretch::ExtraExpanded => "ExtraExpanded",
                     Stretch::UltraExpanded => "UltraExpanded",
                 };
-                let full_font_name = match (font_weight,font_strech) {
-                    ("Regular","Normal") => font_name.clone(),
-                    ("Regular",_) => format!("{} {}",font_name,font_strech),
-                    (_,"Normal") => format!("{} {}",font_name,font_weight),
-                    (weight,stretch) => format!("{} {} {}",font_name,stretch,weight)
+                let full_font_name = match (font_weight, font_strech) {
+                    ("Regular", "Normal") => font_name.clone(),
+                    ("Regular", _) => format!("{} {}", font_name, font_strech),
+                    (_, "Normal") => format!("{} {}", font_name, font_weight),
+                    (weight, stretch) => format!("{} {} {}", font_name, stretch, weight),
                 };
-                font_names.entry(full_font_name).or_insert((font_name, face.weight,face.stretch));
+                font_names
+                    .entry(full_font_name)
+                    .or_insert((font_name, face.weight, face.stretch));
             }
         }
         font_names
@@ -1660,11 +1683,11 @@ fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>,Weigh
     //dbg!(&font_names);
 
     for font in get_settings().editor_font.iter() {
-        if let Some((name, weight,stretch)) = font_names.get(font) {
-            return (Some(name.to_string()),*weight,*stretch);
+        if let Some((name, weight, stretch)) = font_names.get(font) {
+            return (Some(name.to_string()), *weight, *stretch);
         }
     }
-    (None,Weight::NORMAL,Stretch::Normal)
+    (None, Weight::NORMAL, Stretch::Normal)
 
     // let font_id = font_system
     //     .db()

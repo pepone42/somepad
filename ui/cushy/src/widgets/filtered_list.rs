@@ -4,18 +4,11 @@ use cushy::{
     figures::{
         units::{Px, UPx},
         IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero,
-    },
-    kludgine::{shapes::Shape, text::Text, DrawableExt},
-    styles::components,
-    value::{Dynamic, DynamicReader, Source},
-    widget::{Widget, HANDLED},
-    ConstraintLimit, WithClone,
+    }, kludgine::{shapes::Shape, text::Text, DrawableExt}, styles::components, value::{Dynamic, DynamicReader, Source}, widget::{Widget, WidgetId, HANDLED}, widgets::layers::Modal, ConstraintLimit, WithClone
 };
 use sublime_fuzzy::best_match;
 
 use crate::widgets::palette::PaletteAction;
-
-use super::palette::{close_palette, PALETTE_STATE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterItem {
@@ -147,6 +140,8 @@ pub struct FilteredList {
     pub filter: Dynamic<Filter>,
     pub hovered_idx: Dynamic<Option<usize>>,
     action: PaletteAction,
+    owner_id: WidgetId,
+    modal: Modal,
 }
 
 impl Debug for FilteredList {
@@ -165,12 +160,16 @@ impl FilteredList {
         filter: Dynamic<String>,
         selected_idx: usize,
         action: PaletteAction,
+        owner_id: WidgetId,
+        modal: Modal,
     ) -> Self {
         let filter = Dynamic::new(Filter::new(items, filter, selected_idx));
         FilteredList {
             filter,
             hovered_idx: Dynamic::new(None),
             action,
+            owner_id,
+            modal,
         }
     }
 }
@@ -320,9 +319,9 @@ impl Widget for FilteredList {
         let idx = (location.y / line_height).floor().get();
         *self.filter.get().selected_idx.lock() = Some(idx as usize);
         if let Some(item) = self.filter.get().selected_item.get() {
-            close_palette();
+            self.modal.dismiss();
             (self.action)(
-                &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                &mut context.for_other(&self.owner_id).unwrap(),
                 idx as usize,
                 item.text.clone(),
             );

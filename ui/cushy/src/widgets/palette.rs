@@ -12,6 +12,7 @@ use cushy::widget::{
     WrapperWidget, HANDLED, IGNORED,
 };
 
+use cushy::widgets::layers::Modal;
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 use cushy::{context, Lazy};
@@ -25,37 +26,49 @@ use super::text_editor::TextEditor;
 
 #[derive(Clone)]
 pub struct Palette {
-    description: Dynamic<String>,
     child: WidgetRef,
     action: PaletteAction,
     input: Dynamic<Document>,
-    items: Option<Vec<String>>,
+    has_items: bool,
     filter: Dynamic<Filter>,
     filter_id: WidgetId,
+    next_key: Option<Shortcut>,
+    prev_key: Option<Shortcut>,
+    owner_id: WidgetId,
+    modal: Modal,
 }
 
 impl Palette {
-    fn create() -> Self {
+    fn new(state: PaletteState) -> Self {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| d.rope.to_string());
-        let selected_idx = PALETTE_STATE.get().selected_idx;
-        let action = PALETTE_STATE.get().action.clone();
+        let selected_idx = state.selected_idx;
+        let action = state.action.clone();
         let (filter_tag, filter_id) = WidgetTag::new();
-        let filtered_list = if let Some(items) = PALETTE_STATE.get().items {
+        let has_items = state.items.is_some();
+        let filtered_list = if let Some(items) = state.items {
             FilteredList::new(
                 items.clone(),
                 str_input.clone(),
                 selected_idx,
                 action.clone(),
+                state.owner,
+                state.modal.clone(),
             )
         } else {
-            FilteredList::new(Vec::new(), str_input.clone(), selected_idx, action.clone())
+            FilteredList::new(
+                Vec::new(),
+                str_input.clone(),
+                selected_idx,
+                action.clone(),
+                state.owner,
+                state.modal.clone(),
+            )
         };
 
         let filter = filtered_list.filter.clone();
         let pal: cushy::widgets::Align = Custom::new(
-            PALETTE_STATE
-                .get()
+            state
                 .description
                 .clone()
                 .and(
@@ -69,7 +82,8 @@ impl Palette {
                 )
                 .into_rows()
                 .width(Lp::new(550))
-                .height(Lp::ZERO..Lp::new(250)),
+                .height(Lp::new(250) )//Lp::ZERO..)
+                ,
         )
         .on_redraw(|c| {
             c.apply_current_font_settings();
@@ -85,26 +99,29 @@ impl Palette {
         .align_top();
 
         Palette {
-            description: PALETTE_STATE.get().description.into(),
             child: pal.make_widget().widget_ref(),
             action,
             input,
-            items: PALETTE_STATE.get().items,
+            has_items,
             filter,
             filter_id,
+            next_key: state.next_key,
+            prev_key: state.prev_key,
+            owner_id: state.owner,
+            modal: state.modal,
         }
     }
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> impl Widget {
-        let palette = PALETTE_STATE.map_each(|p| p.active());
-        palette.switcher(move |current, _active| {
-            if *current {
-                Palette::create().make_widget()
-            } else {
-                Custom::empty().make_widget()
-            }
-        })
-    }
+    // #[allow(clippy::new_ret_no_self)]
+    // pub fn new() -> impl Widget {
+    //     let palette = PALETTE_STATE.map_each(|p| p.active());
+    //     palette.switcher(move |current, _active| {
+    //         if *current {
+    //             Palette::create().make_widget()
+    //         } else {
+    //             Custom::empty().make_widget()
+    //         }
+    //     })
+    // }
 
     fn scroll_to(&mut self, context: &mut EventContext) {
         if let Some(idx) = self.filter.get().selected_idx.get() {
@@ -121,6 +138,11 @@ impl Palette {
                     Size::new(Px::ZERO, line_height * 4),
                 ));
         }
+    }
+
+    fn close_palette(&self, context: &mut EventContext) {
+        self.modal.dismiss();
+        context.for_other(&self.owner_id).unwrap().focus();
     }
 }
 
@@ -161,16 +183,16 @@ impl WrapperWidget for Palette {
         context: &mut context::EventContext<'_>,
     ) -> EventHandling {
         if input.state == ElementState::Released {
-            if let Some(s) = PALETTE_STATE.get().next_key {
+            if let Some(s) = &self.next_key {
                 if matches!(input.logical_key, Key::Named(NamedKey::Control))
                     && s.modifiers.control_key()
                 {
-                    close_palette();
-                    if self.items.is_some() {
+                    self.close_palette(context);
+                    if self.has_items {
                         let item = self.filter.get().selected_item.get();
                         if let Some(idx) = item {
                             (self.action)(
-                                &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                                &mut context.for_other(&self.owner_id).unwrap(),
                                 idx.index,
                                 idx.text,
                             );
@@ -181,15 +203,15 @@ impl WrapperWidget for Palette {
             return IGNORED;
         }
 
-        if let Some(s) = PALETTE_STATE.get().next_key {
-            if event_match(&input, context.modifiers(), s) {
+        if let Some(s) = &self.next_key {
+            if event_match(&input, context.modifiers(), s.clone()) {
                 self.filter.lock().next();
                 self.scroll_to(context);
                 return HANDLED;
             }
         }
-        if let Some(s) = PALETTE_STATE.get().prev_key {
-            if event_match(&input, context.modifiers(), s) {
+        if let Some(s) = &self.prev_key {
+            if event_match(&input, context.modifiers(), s.clone()) {
                 self.filter.lock().prev();
                 self.scroll_to(context);
                 return HANDLED;
@@ -197,19 +219,19 @@ impl WrapperWidget for Palette {
         }
         match input.logical_key {
             Key::Named(NamedKey::Enter) => {
-                close_palette();
-                if self.items.is_some() {
+                self.close_palette(context);
+                if self.has_items {
                     let item = self.filter.get().selected_item.get();
                     if let Some(idx) = item {
                         (self.action)(
-                            &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                            &mut context.for_other(&self.owner_id).unwrap(),
                             idx.index,
                             idx.text,
                         );
                     }
                 } else {
                     (self.action)(
-                        &mut context.for_other(&PALETTE_STATE.get().owner).unwrap(),
+                        &mut context.for_other(&self.owner_id).unwrap(),
                         0,
                         self.input.get().rope.to_string(),
                     );
@@ -218,7 +240,7 @@ impl WrapperWidget for Palette {
                 HANDLED
             }
             Key::Named(NamedKey::Escape) => {
-                close_palette();
+                self.close_palette(context);
                 HANDLED
             }
             Key::Named(NamedKey::ArrowDown) => {
@@ -250,7 +272,7 @@ impl WrapperWidget for Palette {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut EventContext<'_>,
     ) -> EventHandling {
-        PALETTE_STATE.lock().active = false;
+        self.close_palette(_context);
         HANDLED
     }
 }
@@ -268,6 +290,7 @@ pub struct PaletteState {
     prev_key: Option<Shortcut>,
     selected_idx: usize,
     items: Option<Vec<String>>,
+    modal: Modal,
 }
 
 impl std::fmt::Debug for PaletteState {
@@ -282,7 +305,7 @@ impl std::fmt::Debug for PaletteState {
 }
 
 impl PaletteState {
-    fn new() -> Self {
+    pub fn new(modal: Modal) -> Self {
         PaletteState {
             description: String::default(),
             action: Arc::new(|_, _, _| ()),
@@ -292,10 +315,15 @@ impl PaletteState {
             next_key: None,
             selected_idx: 0,
             items: None,
+            modal,
         }
     }
     pub fn active(&self) -> bool {
         self.active
+    }
+    pub fn description(mut self, description: &'static str) -> Self {
+        self.description = description.into();
+        self
     }
 
     pub fn accept<F: Fn(&mut EventContext, usize, String) + 'static + Send + Sync>(
@@ -326,9 +354,9 @@ impl PaletteState {
         self
     }
 
-    pub fn show(mut self) {
-        self.active = true;
-        *PALETTE_STATE.lock() = self;
+    pub fn show(self) {
+        let modal = self.modal.clone();
+        modal.present(Palette::new(self));
     }
     pub fn owner(mut self, owner: WidgetId) -> Self {
         self.owner = owner;
@@ -336,26 +364,26 @@ impl PaletteState {
     }
 }
 
-pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
-    Lazy::new(|| Dynamic::new(PaletteState::new()));
+// pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
+//     Lazy::new(|| Dynamic::new(PaletteState::new()));
 
-pub(super) fn close_palette() {
-    PALETTE_STATE.lock().active = false;
-}
+// pub(super) fn close_palette() {
+//     PALETTE_STATE.lock().active = false;
+// }
 
-pub fn palette(description: &str) -> PaletteState {
-    PaletteState {
-        description: description.to_string(),
-        ..PaletteState::new()
-    }
-}
+// pub fn palette(description: &str) -> PaletteState {
+//     PaletteState {
+//         description: description.to_string(),
+//         ..PaletteState::new()
+//     }
+// }
 
-pub trait PaletteExt {
-    fn palette(&self, description: &str) -> PaletteState;
-}
+// pub trait PaletteExt {
+//     fn palette(&self, modal: Modal) -> PaletteState;
+// }
 
-impl<'a> PaletteExt for EventContext<'a> {
-    fn palette(&self, description: &str) -> PaletteState {
-        palette(description).owner(self.widget().id())
-    }
-}
+// impl<'a> PaletteExt for EventContext<'a> {
+//     fn palette(&self, modal: Modal) -> PaletteState {
+//         PaletteState::new(modal).owner(self.widget().id())
+//     }
+// }
