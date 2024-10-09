@@ -6,16 +6,16 @@ use cushy::figures::{Point, Rect, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
 
-use cushy::value::{Dynamic, Source, Switchable};
+use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetRef, WidgetTag,
-    WrapperWidget, HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget,
+    HANDLED, IGNORED,
 };
 
+use cushy::context;
 use cushy::widgets::layers::Modal;
 use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
-use cushy::{context, Lazy};
 use ndoc::Document;
 
 use crate::shortcut::{event_match, Shortcut};
@@ -39,7 +39,7 @@ pub struct Palette {
 }
 
 impl Palette {
-    fn new(state: PaletteState) -> Self {
+    pub fn new(state: PaletteState) -> Self {
         let input = Dynamic::new(Document::default());
         let str_input = input.map_each(|d| d.rope.to_string());
         let selected_idx = state.selected_idx;
@@ -82,8 +82,7 @@ impl Palette {
                 )
                 .into_rows()
                 .width(Lp::new(550))
-                .height(Lp::new(250) )//Lp::ZERO..)
-                ,
+                .height(Lp::new(250)), //Lp::ZERO..)
         )
         .on_redraw(|c| {
             c.apply_current_font_settings();
@@ -111,17 +110,6 @@ impl Palette {
             modal: state.modal,
         }
     }
-    // #[allow(clippy::new_ret_no_self)]
-    // pub fn new() -> impl Widget {
-    //     let palette = PALETTE_STATE.map_each(|p| p.active());
-    //     palette.switcher(move |current, _active| {
-    //         if *current {
-    //             Palette::create().make_widget()
-    //         } else {
-    //             Custom::empty().make_widget()
-    //         }
-    //     })
-    // }
 
     fn scroll_to(&mut self, context: &mut EventContext) {
         if let Some(idx) = self.filter.get().selected_idx.get() {
@@ -363,27 +351,3 @@ impl PaletteState {
         self
     }
 }
-
-// pub(super) static PALETTE_STATE: Lazy<Dynamic<PaletteState>> =
-//     Lazy::new(|| Dynamic::new(PaletteState::new()));
-
-// pub(super) fn close_palette() {
-//     PALETTE_STATE.lock().active = false;
-// }
-
-// pub fn palette(description: &str) -> PaletteState {
-//     PaletteState {
-//         description: description.to_string(),
-//         ..PaletteState::new()
-//     }
-// }
-
-// pub trait PaletteExt {
-//     fn palette(&self, modal: Modal) -> PaletteState;
-// }
-
-// impl<'a> PaletteExt for EventContext<'a> {
-//     fn palette(&self, modal: Modal) -> PaletteState {
-//         PaletteState::new(modal).owner(self.widget().id())
-//     }
-// }

@@ -7,7 +7,6 @@ mod widgets;
 
 use cushy::context::EventContext;
 use cushy::figures::{Size, Zero};
-//use cushy::kludgine::app::winit::dpi::{LogicalSize, Size};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::widgets::layers::Modal;
@@ -15,7 +14,7 @@ use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
-use widgets::palette::PaletteState;
+use widgets::palette::{Palette, PaletteState};
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::{CodeEditor, TextEditor};
 
@@ -64,9 +63,10 @@ const NEW_DOC: WindowCommand = WindowCommand {
 const GOTO_LINE: ViewCommand = ViewCommand {
     name: "Go to Line",
     id: "editor.goto_line",
-    action: |_id, v, c| {
+    action: |_id, v, _c| {
         let doc = v.doc.clone();
-        v.palette().description("Got to line")
+        v.palette()
+            .description("Got to line")
             .accept(move |c, _, s| {
                 if let Ok(line) = s.parse::<usize>() {
                     if line == 0 || line > doc.get().rope.len_lines() {
@@ -185,7 +185,7 @@ const CLOSE_DOC: WindowCommand = WindowCommand {
     },
 };
 
-const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id, w, c| {
+const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id, w, _c| {
     let items = w
         .documents
         .get()
@@ -213,7 +213,8 @@ const PREVNEXT_DOC_ACTION: fn(WidgetId, &EditorWindow, &mut EventContext) = |_id
         .unwrap()
         .clone();
     let current_doc = w.current_doc.clone();
-    w.palette().description("select a document")
+    w.palette()
+        .description("select a document")
         .items(items)
         .next_key(next_key)
         .prev_key(prev_key)
@@ -237,10 +238,11 @@ const PREV_DOC: WindowCommand = WindowCommand {
 const SELECT_DOC: WindowCommand = WindowCommand {
     name: "Select Document",
     id: "window.select_doc",
-    action: |_id, w, c| {
+    action: |_id, w, _c| {
         let items = w.documents.get().iter().map(|d| d.get().title()).collect();
         let current_doc = w.current_doc.clone();
-        w.palette().description("Select a document")
+        w.palette()
+            .description("Select a document")
             .items(items)
             .accept(move |_, i, _| {
                 *current_doc.lock() = i;
@@ -284,10 +286,11 @@ const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
 const CHANGE_THEME: WindowCommand = WindowCommand {
     name: "Change Theme",
     id: "window.change_theme",
-    action: |_id, w, c| {
+    action: |_id, w, _c| {
         let items: Vec<String> = ThemeSetRegistry::get().themes.keys().cloned().collect();
         let documents = w.documents.clone();
-        w.palette().description("Choose theme")
+        w.palette()
+            .description("Choose theme")
             .items(items)
             .accept(move |_, _, val| {
                 for doc in documents.get() {
@@ -302,7 +305,7 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
 const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
     name: "Show All Commands",
     id: "window.show_all_commands",
-    action: |_id, w, c| {
+    action: |_id, w, _c| {
         let mut items = w
             .cmd_reg
             .get()
@@ -322,7 +325,8 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
 
         let cmd_reg = w.cmd_reg.clone();
 
-        w.palette().description("All Commands")
+        w.palette()
+            .description("All Commands")
             .items(i)
             .accept(move |c, index, _| {
                 if items[index].0.starts_with("editor.") {
@@ -486,7 +490,7 @@ fn main() -> anyhow::Result<()> {
         )
         .into_rows()
         .gutter(Px::ZERO)
-        .and(modal)
+        .and(modal.clone())
         .into_layers()
         .themed(theme)
         .with(&components::TextSize, Lp::points(10))
@@ -500,17 +504,18 @@ fn main() -> anyhow::Result<()> {
             if !docs.get().iter().any(|d| d.get().is_dirty()) {
                 return true;
             }
-            // modal.present(
-            // PaletteState::new().description("Unsaved changes, are you sure you want to close?")
-            //     .owner(editor_id)
-            //     .items(vec!["Yes".to_string(), "No".to_string()])
-            //     .accept(|c, _, r| {
-            //         if let "Yes" = r.as_str() {
-            //             c.window_mut().close()
-            //         }
-            //     })
-            //     .show();
-            return true;
+            let m = modal.clone();
+            modal.present(Palette::new(
+                PaletteState::new(m)
+                    .description("Unsaved changes, are you sure you want to close?")
+                    .owner(editor_id)
+                    .items(vec!["Yes".to_string(), "No".to_string()])
+                    .accept(|c, _, r| {
+                        if let "Yes" = r.as_str() {
+                            c.window_mut().close()
+                        }
+                    }),
+            ));
             false
         });
 

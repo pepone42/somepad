@@ -4,7 +4,13 @@ use cushy::{
     figures::{
         units::{Px, UPx},
         IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero,
-    }, kludgine::{shapes::Shape, text::Text, DrawableExt}, styles::components, value::{Dynamic, DynamicReader, Source}, widget::{Widget, WidgetId, HANDLED}, widgets::layers::Modal, ConstraintLimit, WithClone
+    },
+    kludgine::{shapes::Shape, text::Text, DrawableExt},
+    styles::components,
+    value::{Dynamic, DynamicReader, Source},
+    widget::{Widget, WidgetId, HANDLED},
+    widgets::layers::Modal,
+    ConstraintLimit, WithClone,
 };
 use sublime_fuzzy::best_match;
 
@@ -176,6 +182,7 @@ impl FilteredList {
 
 impl Widget for FilteredList {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.redraw_when_changed(&self.hovered_idx);
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.gfx.scale())
@@ -341,6 +348,7 @@ impl Widget for FilteredList {
             .round();
         let location = location - padding;
         context.redraw_when_changed(&self.hovered_idx);
+
         let scale = context.kludgine.scale();
         let line_height = context.kludgine.line_height().into_px(scale);
 
