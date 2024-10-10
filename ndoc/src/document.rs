@@ -732,12 +732,10 @@ impl Document {
                 input,
                 selection.is_empty(),
                 self.rope.chars_at(char_idx_start).prev(),
-                self.rope.chars_at(char_idx_end).next()
+                self.rope.chars_at(char_idx_end).next(),
             ) {
                 // insert { and do nothing because } is allready there
-                ("{", true, _, Some('}')) => {
-                    (input.to_string(), None)
-                }
+                ("{", true, _, Some('}')) => (input.to_string(), None),
                 // } is allready there, insert nothing, just move the cursor to the right
                 ("}", true, _, Some('}')) => {
                     let mut selection = selection;
@@ -753,24 +751,25 @@ impl Document {
                     ("{}".to_string(), Some(selection))
                 }
                 // insert new line between { and } insert two line with the correct indentation and place the cursor in between
-                ("\r" | "\n" | "\r\n",_, Some('{'), Some('}')) => {
-                    let indent1 = self.compute_indentation(selection.head.line, 1);
-                    let indent2 = self.compute_indentation(selection.head.line, 0);
+                ("\r" | "\n" | "\r\n", _, Some('{'), Some('}')) => {
+                    let indent1 = self.compute_indentation(selection.head, 1);
+                    let indent2 = self.compute_indentation(selection.head, 0);
                     let first_part = format!("{}{}", self.file_info.linefeed, indent1);
 
                     let mut selection = selection;
-                    selection.head = Position::new(selection.head.line + 1, indent1.chars().count());
+                    selection.head =
+                        Position::new(selection.head.line + 1, indent1.chars().count());
                     selection.tail = selection.head;
                     let second_part = format!("{}{}", self.file_info.linefeed, indent2);
                     let input = format!("{}{}", first_part, second_part);
                     (input, Some(selection))
                 }
                 // insert new line after a { should increment the indentation
-                ("\r" | "\n" | "\r\n",_, Some('{'), _) => (
+                ("\r" | "\n" | "\r\n", _, Some('{'), _) => (
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
-                        self.compute_indentation(selection.head.line, 1),
+                        self.compute_indentation(selection.head, 1),
                     ),
                     None,
                 ),
@@ -779,7 +778,7 @@ impl Document {
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
-                        self.compute_indentation(selection.head.line, -1),
+                        self.compute_indentation(selection.head, -1),
                     ),
                     None,
                 ),
@@ -788,7 +787,7 @@ impl Document {
                     format!(
                         "{}{}",
                         self.file_info.linefeed,
-                        self.compute_indentation(selection.head.line, 0),
+                        self.compute_indentation(selection.head, 0),
                     ),
                     None,
                 ),
@@ -835,8 +834,10 @@ impl Document {
         self.end_batch_edit();
     }
 
-    fn compute_indentation(&self, line: usize, delta: isize) -> String {
-        let indent_len = self.line_indent_len(line);
+    fn compute_indentation(&self, position: Position, delta: isize) -> String {
+        let line = position.line;
+        let col = position.column;
+        let indent_len = self.line_indent_len(line).min(col);
         let indent = self.rope.line(line).slice(..indent_len).to_string();
 
         match delta.cmp(&0) {
@@ -1001,7 +1002,7 @@ impl Document {
         self.char_to_position(next_grapheme_boundary(&self.rope.slice(..), char_idx))
     }
 
-    /// Return the start [position](Position) of the word pointed by the given [position](Position) 
+    /// Return the start [position](Position) of the word pointed by the given [position](Position)
     pub fn word_start(&self, position: Position) -> Position {
         let slice = &self.rope.slice(..);
         char_to_position(slice, word_start(slice, position_to_char(slice, position)))
@@ -1065,12 +1066,12 @@ impl Document {
         char_to_position(&self.rope.slice(..), self.rope.line_to_char(line))
     }
 
-    /// return the line indentation length in char 
+    /// return the line indentation length in char
     pub fn line_indent_len(&self, line: usize) -> usize {
         get_line_start_boundary(&self.rope.slice(..), line)
     }
 
-    /// return the end position of the line 
+    /// return the end position of the line
     pub fn line_end(&mut self, line: usize) -> Position {
         char_to_position(
             &self.rope.slice(..),

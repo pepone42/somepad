@@ -13,12 +13,16 @@ pub struct FileInfo {
     pub bom: Option<Vec<u8>>,
     pub linefeed: LineFeed,
     pub indentation: Indentation,
-    pub syntax: &'static SyntaxReference
+    pub syntax: &'static SyntaxReference,
 }
 
 impl PartialEq for FileInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.encoding == other.encoding && self.bom == other.bom && self.linefeed == other.linefeed && self.indentation == other.indentation && self.syntax.name == other.syntax.name
+        self.encoding == other.encoding
+            && self.bom == other.bom
+            && self.linefeed == other.linefeed
+            && self.indentation == other.indentation
+            && self.syntax.name == other.syntax.name
     }
 }
 
@@ -28,7 +32,7 @@ impl Default for FileInfo {
             encoding: encoding_rs::UTF_8,
             bom: None,
             linefeed: Default::default(),
-            indentation: Indentation::Tab(4),
+            indentation: Indentation::Space(4),
             syntax: SYNTAXSET.find_syntax_plain_text(),
         }
     }
