@@ -16,9 +16,7 @@ use cushy::animation::{AnimationHandle, AnimationTarget, IntoAnimate, Spawn, Zer
 use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Dynamic, Source};
-use cushy::widget::{
-    EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, HANDLED, IGNORED
-};
+use cushy::widget::{EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, HANDLED, IGNORED};
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::window::DeviceId;
 use cushy::{ConstraintLimit, Lazy};
@@ -30,7 +28,8 @@ pub struct ScrollController {
     max_scroll: Point<Px>,
 }
 
-static SCROLLED_IDS : Lazy<Dynamic<HashMap<WidgetId,Dynamic<ScrollController>>>> = Lazy::new(|| Dynamic::new(HashMap::new()));
+static SCROLLED_IDS: Lazy<Dynamic<HashMap<WidgetId, Dynamic<ScrollController>>>> =
+    Lazy::new(|| Dynamic::new(HashMap::new()));
 
 #[allow(dead_code)]
 impl ScrollController {
@@ -207,7 +206,9 @@ impl MyScroll {
 
 impl Widget for MyScroll {
     fn mounted(&mut self, context: &mut EventContext<'_>) {
-        SCROLLED_IDS.lock().insert(context.widget().id(),self.controller.clone());
+        SCROLLED_IDS
+            .lock()
+            .insert(context.widget().id(), self.controller.clone());
     }
     fn unmounted(&mut self, context: &mut EventContext<'_>) {
         self.contents.unmount_in(context);
@@ -336,16 +337,16 @@ impl Widget for MyScroll {
             || self.controller.get().control_size.width != control_size.width
         {
             self.content_size.width = new_content_size.width;
-            let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
-            scroll.x = max_scroll_x * scroll_pct;
+            // let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
+            // scroll.x = max_scroll_x * scroll_pct;
         }
 
         if self.content_size.height != new_content_size.height
             || self.controller.get().control_size.height != control_size.height
         {
             self.content_size.height = new_content_size.height;
-            let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
-            scroll.y = max_scroll_y * scroll_pct;
+            // let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
+            // scroll.y = max_scroll_y * scroll_pct;
         }
         // Set the current scroll, but prevent immediately triggering
         // invalidate.
@@ -791,7 +792,7 @@ fn get_parent_scroller(context: &EventContext<'_>) -> Option<Dynamic<ScrollContr
         if SCROLLED_IDS.get().contains_key(&widget.id()) {
             return Some(SCROLLED_IDS.get()[&widget.id()].clone());
         }
-        
+
         parent = widget.parent();
     }
     None
