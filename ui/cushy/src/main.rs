@@ -231,7 +231,7 @@ const NEXT_DOC: WindowCommand = WindowCommand {
     action: PREVNEXT_DOC_ACTION,
 };
 const PREV_DOC: WindowCommand = WindowCommand {
-    name: "Next Document",
+    name: "Prev Document",
     id: "window.prevdoc",
     action: PREVNEXT_DOC_ACTION,
 };

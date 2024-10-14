@@ -73,89 +73,100 @@ impl<'de> Deserialize<'de> for Shortcut {
     }
 }
 
+macro_rules! keykind {
+    ($_:ident Tab) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::Tab,
+        )
+    };
+    ($_:ident ArrowDown) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::ArrowDown,
+        )
+    };
+    ($_:ident ArrowUp) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::ArrowUp,
+        )
+    };
+    ($_:ident ArrowLeft) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::ArrowLeft,
+        )
+    };
+    ($_:ident ArrowRight) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::ArrowRight,
+        )
+    };
+    ($_:ident Backspace) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::Backspace,
+        )
+    };
+    ($_:ident Delete) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::Delete,
+        )
+    };
+    ($_:ident End) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::End,
+        )
+    };
+    ($_:ident Enter) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::Enter,
+        )
+    };
+    ($_:ident Escape) => {
+        cushy::kludgine::app::winit::keyboard::Key::Named(
+            cushy::kludgine::app::winit::keyboard::NamedKey::Escape,
+        )
+    };
+    (Upper $k:ident) => {
+        cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
+            stringify!($k).to_uppercase(),
+        ))
+    };
+    (Lower $k:ident) => {
+        cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(stringify!(
+            $k
+        )))
+    };
+}
+
 #[macro_export]
 macro_rules! shortcut {
-    (Ctrl+Tab) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
-                
-        }
-    };
-    (Ctrl+Shift+Tab) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::Tab),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
-            | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
-        }
-    };
-    (Ctrl+ArrowDown) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowDown),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
-                
-        }
-    };
-    (Ctrl+Alt+ArrowDown) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowDown),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
-            | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
-        }
-    };
-    (Ctrl+ArrowUp) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowUp),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
-                
-        }
-    };
-    (Ctrl+Alt+ArrowUp) => {
-        $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Named(cushy::kludgine::app::winit::keyboard::NamedKey::ArrowUp),
-            modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
-            | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
-        }
-    };
     (Ctrl+$c:ident) => {
         $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
-                stringify!($c),
-            )),
+            key: keykind!(Lower $c),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL,
         }
     };
     (Ctrl+Shift+$c:ident) => {
         $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
-                stringify!($c).to_uppercase(),
-            )),
+            key: keykind!(Upper $c),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
                 | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
         }
     };
     (Ctrl+Alt+$c:ident) => {
         $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
-                stringify!($c),
-            )),
+            key: keykind!(Lower $c),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::CONTROL
                 | cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
         }
     };
     (Alt+$c:ident) => {
         $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
-                stringify!($c),
-            )),
+            key: keykind!(Lower $c),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::ALT,
         }
     };
     (Shift+Alt+$c:ident) => {
         $crate::shortcut::Shortcut {
-            key: cushy::kludgine::app::winit::keyboard::Key::Character(smol_str::SmolStr::new(
-                stringify!($c).to_uppercase(),
-            )),
+            key: keykind!(Upper $c),
             modifiers: cushy::kludgine::app::winit::keyboard::ModifiersState::ALT
                 | cushy::kludgine::app::winit::keyboard::ModifiersState::SHIFT,
         }
@@ -167,7 +178,9 @@ pub fn event_match(
     modifiers: Modifiers,
     shortcut: Shortcut,
 ) -> bool {
-    input.logical_key == shortcut.key && modifiers.state() == shortcut.modifiers && input.state == ElementState::Pressed
+    input.logical_key == shortcut.key
+        && modifiers.state() == shortcut.modifiers
+        && input.state == ElementState::Pressed
 }
 
 fn modifier_state_from_str(s: &str) -> Result<ModifiersState, ParseError> {
@@ -230,14 +243,12 @@ impl Display for Shortcut {
 
         match &self.key {
             Key::Character(c) => write!(f, "{}+{}", mods.join("+"), c),
-            Key::Named(NamedKey::ArrowUp) => write!(f, "{}+Up", mods.join("+") ),
-            Key::Named(NamedKey::ArrowDown) => write!(f, "{}+Down", mods.join("+") ),
-            Key::Named(NamedKey::Tab) => write!(f, "{}+Tab", mods.join("+") ),
+            Key::Named(NamedKey::ArrowUp) => write!(f, "{}+Up", mods.join("+")),
+            Key::Named(NamedKey::ArrowDown) => write!(f, "{}+Down", mods.join("+")),
+            Key::Named(NamedKey::Tab) => write!(f, "{}+Tab", mods.join("+")),
             _ => Err(std::fmt::Error),
         }
-
     }
-
 }
 
 #[allow(dead_code)]
@@ -269,15 +280,18 @@ impl ModifiersCustomExt for Modifiers {
     }
 
     fn ctrl_alt(&self) -> bool {
-        self.state().contains(ModifiersState::CONTROL | ModifiersState::ALT)
+        self.state()
+            .contains(ModifiersState::CONTROL | ModifiersState::ALT)
     }
 
     fn ctrl_shift(&self) -> bool {
-        self.state().contains(ModifiersState::CONTROL | ModifiersState::SHIFT)
+        self.state()
+            .contains(ModifiersState::CONTROL | ModifiersState::SHIFT)
     }
 
     fn ctrl_shift_alt(&self) -> bool {
-        self.state().contains(ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT)
+        self.state()
+            .contains(ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT)
     }
 }
 
@@ -285,7 +299,7 @@ impl ModifiersCustomExt for Modifiers {
 mod test {
     use std::str::FromStr;
 
-    use cushy::kludgine::app::winit::keyboard::{Key, ModifiersState};
+    use cushy::kludgine::app::winit::keyboard::{Key, ModifiersState, NamedKey};
     use smol_str::SmolStr;
 
     use crate::shortcut::{ParseError, Shortcut};
@@ -341,6 +355,13 @@ mod test {
             Shortcut {
                 key: Key::Character(SmolStr::new("s")),
                 modifiers: ModifiersState::CONTROL | ModifiersState::ALT
+            }
+        );
+        assert_eq!(
+            shortcut!(Ctrl + Shift + Tab),
+            Shortcut {
+                key: Key::Named(NamedKey::Tab),
+                modifiers: ModifiersState::CONTROL | ModifiersState::SHIFT
             }
         );
     }

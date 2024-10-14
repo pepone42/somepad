@@ -17,7 +17,7 @@ use cushy::window::KeyEvent;
 
 use ndoc::Document;
 
-use crate::shortcut::event_match;
+use crate::shortcut::{event_match, Shortcut};
 use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
@@ -68,8 +68,13 @@ impl EditorWindow {
             .expand_vertically()
             .and(ResizeHandle::new(width))
             .and(
-                EditorSwitcher::new(documents.clone(), current_doc.clone(), cmd_reg.clone(), modal.clone())
-                    .make_with_tag(editor_tag),
+                EditorSwitcher::new(
+                    documents.clone(),
+                    current_doc.clone(),
+                    cmd_reg.clone(),
+                    modal.clone(),
+                )
+                .make_with_tag(editor_tag),
             )
             .into_columns()
             .gutter(Px::ZERO)
@@ -125,7 +130,6 @@ impl WrapperWidget for EditorWindow {
         if !self.focused.get() {
             return HANDLED;
         }
-        self.palette();
         if input.state == ElementState::Pressed
             && context
                 .modifiers()
@@ -134,6 +138,7 @@ impl WrapperWidget for EditorWindow {
         {
             let v = self.cmd_reg.get().window_shortcut;
             let id = context.widget.widget().id();
+
             for (shortcut, cmd) in v.iter() {
                 if event_match(&input, context.modifiers(), shortcut.clone()) {
                     (cmd.action)(id, self, context);

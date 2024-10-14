@@ -989,6 +989,13 @@ impl Widget for TextEditor {
                     return HANDLED;
                 }
             }
+            // ignore window shortcuts
+            let v = self.cmd_reg.get().window_shortcut;
+            for (shortcut, _) in v.iter() {
+                if event_match(&input, context.modifiers(), shortcut.clone()) {
+                    return IGNORED;
+                }
+            }
         }
 
         if event_match(&input, context.modifiers(), shortcut!(Ctrl + c)) {
