@@ -266,16 +266,14 @@ impl TextEditor {
         editor.foreach_handles.push(
             (&editor.doc, &editor.items_matches, &editor.should_refocus).with_clone(
                 |(doc, items_found, should_refocus)| {
-                    editor
-                        .selected_match
-                        .for_each_cloned(move |seach_idx| {
-                            if items_found.get().is_empty() {
-                                return;
-                            }
-                            let (head, tail) = items_found.get()[seach_idx];
-                            doc.lock().set_main_selection(head, tail);
-                            should_refocus.replace(true);
-                        })
+                    editor.selected_match.for_each_cloned(move |seach_idx| {
+                        if items_found.get().is_empty() {
+                            return;
+                        }
+                        let (head, tail) = items_found.get()[seach_idx];
+                        doc.lock().set_main_selection(head, tail);
+                        should_refocus.replace(true);
+                    })
                 },
             ),
         );
@@ -1386,16 +1384,15 @@ pub struct CodeEditor {
 impl CodeEditor {
     pub fn new(doc: Dynamic<Document>, cmd_reg: Dynamic<CommandsRegistry>, modal: Modal) -> Self {
         let (editor_tag, editor_id) = WidgetTag::new();
-        
+
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
-        let text_editor =
-            TextEditor::new(doc.clone(), cmd_reg, click_info, modal);
-        
+        let text_editor = TextEditor::new(doc.clone(), cmd_reg, click_info, modal);
+
         let search_panel_closed = text_editor.search_panel_closed.clone();
-        
+
         let (search_bar_id, search_bar) = search_bar(&text_editor);
-                
+
         let child =
             (PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone())
                 .and(
@@ -1406,9 +1403,7 @@ impl CodeEditor {
                 .into_columns()
                 .gutter(Px::new(1)))
             .expand_vertically()
-            .and(
-                search_bar,
-            )
+            .and(search_bar)
             .into_rows();
         Self {
             child: child.widget_ref(),
@@ -1420,7 +1415,6 @@ impl CodeEditor {
 }
 
 fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) {
-    
     let (search_tag, search_bar_id) = WidgetTag::new();
     let match_count = (
         &text_editor.search_term,
@@ -1439,11 +1433,8 @@ fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) 
 
     let search_match = text_editor.items_matches.map_each(|s| !s.is_empty());
 
-    let action_up = (
-        &text_editor.selected_match,
-        &text_editor.items_matches,
-    )
-        .with_clone(|(idx, items)| {
+    let action_up =
+        (&text_editor.selected_match, &text_editor.items_matches).with_clone(|(idx, items)| {
             move || {
                 if items.get().is_empty() {
                     return;
@@ -1451,11 +1442,8 @@ fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) 
                 *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
             }
         });
-    let action_down = (
-        &text_editor.selected_match,
-        &text_editor.items_matches,
-    )
-        .with_clone(|(idx, items)| {
+    let action_down =
+        (&text_editor.selected_match, &text_editor.items_matches).with_clone(|(idx, items)| {
             move || {
                 if items.get().is_empty() {
                     return;
@@ -1466,41 +1454,40 @@ fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) 
     let action_enter = action_down.clone();
 
     let search_bar = "Search: "
-                .and(MyScroll::horizontal(
-                    Custom::new(
-                        TextEditor::as_input(text_editor.search_term.clone())
-                            .make_with_tag(search_tag)
-                            .width(Lp::cm(5)),
-                    )
-                    .on_keyboard_input(move |_, k, _, _| {
-                        if k.state == ElementState::Pressed
-                            && k.logical_key == Key::Named(NamedKey::Enter)
-                        {
-                            action_enter();
-                            HANDLED
-                        } else {
-                            IGNORED
-                        }
-                    }),
-                ))
-                .and(match_count)
-                .and(
-                    "↑"
-                        .into_button()
-                        .on_click(move |_| action_up())
-                        .with_enabled(search_match.clone()),
-                )
-                .and(
-                    "↓"
-                        .into_button()
-                        .on_click(move |_| {
-                            action_down()
-                            // TODO: refocus
-                        })
-                        .with_enabled(search_match.clone()),
-                )
-                .into_columns()
-                .collapse_vertically(text_editor.search_panel_closed.clone());
+        .and(MyScroll::horizontal(
+            Custom::new(
+                TextEditor::as_input(text_editor.search_term.clone())
+                    .make_with_tag(search_tag)
+                    .width(Lp::cm(5)),
+            )
+            .on_keyboard_input(move |_, k, _, _| {
+                if k.state == ElementState::Pressed && k.logical_key == Key::Named(NamedKey::Enter)
+                {
+                    action_enter();
+                    HANDLED
+                } else {
+                    IGNORED
+                }
+            }),
+        ))
+        .and(match_count)
+        .and(
+            "↑"
+                .into_button()
+                .on_click(move |_| action_up())
+                .with_enabled(search_match.clone()),
+        )
+        .and(
+            "↓"
+                .into_button()
+                .on_click(move |_| {
+                    action_down()
+                    // TODO: refocus
+                })
+                .with_enabled(search_match.clone()),
+        )
+        .into_columns()
+        .collapse_vertically(text_editor.search_panel_closed.clone());
     (search_bar_id, search_bar)
 }
 

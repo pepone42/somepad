@@ -1,5 +1,9 @@
 use cushy::{
-    context::{AsEventContext, LayoutContext}, figures::{units::Px, IntoUnsigned, Size}, value::{Dynamic, Source}, widget::{MakeWidget, WidgetRef, WrappedLayout, WrapperWidget}, ConstraintLimit
+    context::{AsEventContext, LayoutContext},
+    figures::{units::Px, IntoUnsigned, Size},
+    value::{Dynamic, Source},
+    widget::{MakeWidget, WidgetRef, WrappedLayout, WrapperWidget},
+    ConstraintLimit,
 };
 
 #[derive(Debug)]
@@ -37,10 +41,6 @@ impl WrapperWidget for SideBar {
 
         let size = context.for_other(&child).layout(available_space);
 
-        Size::new(
-            self.width.get().into_unsigned(),
-            size.height,
-        )
-        .into()
+        Size::new(self.width.get().into_unsigned(), size.height).into()
     }
 }
