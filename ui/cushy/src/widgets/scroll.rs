@@ -15,26 +15,68 @@ use cushy::kludgine::Color;
 use cushy::animation::{AnimationHandle, AnimationTarget, IntoAnimate, Spawn, ZeroToOne};
 use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
-use cushy::value::{Dynamic, Source};
-use cushy::widget::{EventHandling, MakeWidget, Widget, WidgetId, WidgetRef, HANDLED, IGNORED};
+use cushy::value::{Destination, Dynamic, DynamicReader, Source};
+use cushy::widget::{
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetRef,
+    WidgetTag, HANDLED, IGNORED,
+};
 use cushy::widgets::scroll::ScrollBarThickness;
+use cushy::widgets::{Custom, Scroll};
 use cushy::window::DeviceId;
 use cushy::{ConstraintLimit, Lazy};
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ScrollController {
-    scroll: Point<Px>,
-    control_size: Size<Px>,
-    max_scroll: Point<Px>,
-}
-
-static SCROLLED_IDS: Lazy<Dynamic<HashMap<WidgetId, Dynamic<ScrollController>>>> =
+static SCROLLED_IDS: Lazy<Dynamic<HashMap<WidgetId, ScrollController>>> =
     Lazy::new(|| Dynamic::new(HashMap::new()));
 
+pub trait WidgetScrollableExt {
+    fn scrollable(self) -> Self;
+}
+
+impl WidgetScrollableExt for WidgetInstance {
+    fn scrollable(self) -> Self {
+        let (tag, id) = WidgetTag::new();
+        let s = Scroll::new(self);
+        let scroller = ScrollController::new(
+            s.scroll.clone(),
+            s.control_size().clone(),
+            s.max_scroll().clone(),
+        );
+        SCROLLED_IDS.lock().insert(id, scroller);
+        s.make_with_tag(tag)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScrollController {
+    scroll: Dynamic<Point<UPx>>,
+    control_size: DynamicReader<Size<UPx>>,
+    max_scroll: DynamicReader<Point<UPx>>,
+}
 #[allow(dead_code)]
 impl ScrollController {
+    pub fn new(
+        scroll: Dynamic<Point<UPx>>,
+        control_size: DynamicReader<Size<UPx>>,
+        max_scroll: DynamicReader<Point<UPx>>,
+    ) -> Self {
+        Self {
+            scroll: scroll.clone(),
+            control_size: control_size.clone(),
+            max_scroll: max_scroll.clone(),
+        }
+    }
+    pub fn from(widget: &Scroll) -> Self {
+        Self {
+            scroll: widget.scroll.clone(),
+            control_size: widget.control_size().clone(),
+            max_scroll: widget.max_scroll().clone(),
+        }
+    }
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
-        let viewport = Rect::new(-self.scroll, self.control_size);
+        let viewport = Rect::new(
+            -self.scroll.get().into_signed(),
+            self.control_size.get().into_signed(),
+        );
         if viewport.contains(region.origin) && viewport.contains(region.origin + region.size) {
             return;
         }
@@ -44,60 +86,63 @@ impl ScrollController {
         } else if region.origin.x + region.size.width >= viewport.origin.x + viewport.size.width {
             viewport.size.width - (region.origin.x + region.size.width)
         } else {
-            self.scroll.x
-        };
+            self.scroll.get().x.into_signed()
+        }
+        .into_unsigned();
 
         let y = if region.origin.y <= viewport.origin.y {
             -region.origin.y
         } else if region.origin.y + region.size.height >= viewport.origin.y + viewport.size.height {
             viewport.size.height - (region.origin.y + region.size.height)
         } else {
-            self.scroll.y
-        };
+            self.scroll.get().y.into_signed()
+        }
+        .into_unsigned();
 
-        self.scroll = Point::new(x, y);
+        self.scroll.replace(Point::new(x, y));
     }
 
-    pub fn scroll_to(&mut self, scroll: Point<Px>) {
-        self.scroll = scroll;
+    pub fn scroll_to(&mut self, scroll: Point<UPx>) {
+        self.scroll.replace(scroll);
     }
 
-    pub fn scroll(&self) -> Point<Px> {
-        self.scroll
+    pub fn scroll(&self) -> Dynamic<Point<UPx>> {
+        self.scroll.clone()
     }
 
-    fn constrained_scroll(scroll: Point<Px>, max_scroll: Point<Px>) -> Point<Px> {
+    fn constrained_scroll(scroll: Point<UPx>, max_scroll: Point<UPx>) -> Point<UPx> {
         scroll.max(max_scroll).min(Point::default())
     }
 
-    fn constrain_scroll(&mut self) -> (Point<Px>, Point<Px>) {
-        let scroll = self.scroll;
-        let max_scroll = self.max_scroll;
+    fn constrain_scroll(&mut self) -> (Point<UPx>, Point<UPx>) {
+        let scroll = self.scroll.get();
+        let max_scroll = self.max_scroll.get();
         let clamped = Self::constrained_scroll(scroll, max_scroll);
+        dbg!(scroll, max_scroll, clamped);
         if clamped != scroll {
-            self.scroll = clamped;
+            self.scroll.replace(clamped);
         }
         (clamped, max_scroll)
     }
 }
 
-/// A widget that supports scrolling its contents.
-#[derive(Debug)]
-pub struct MyScroll {
-    contents: WidgetRef,
-    content_size: Size<Px>,
-    controller: Dynamic<ScrollController>,
-    enabled: Point<bool>,
+// /// A widget that supports scrolling its contents.
+// #[derive(Debug)]
+// pub struct MyScroll {
+//     contents: WidgetRef,
+//     content_size: Size<Px>,
+//     controller: Dynamic<ScrollController>,
+//     enabled: Point<bool>,
 
-    scrollbar_opacity: Dynamic<ZeroToOne>,
-    scrollbar_opacity_animation: OpacityAnimationState,
-    horizontal_bar: ScrollbarInfo,
-    vertical_bar: ScrollbarInfo,
-    bar_width: Px,
-    line_height: Px,
-    drag: DragInfo,
-    show_scrollbars: bool,
-}
+//     scrollbar_opacity: Dynamic<ZeroToOne>,
+//     scrollbar_opacity_animation: OpacityAnimationState,
+//     horizontal_bar: ScrollbarInfo,
+//     vertical_bar: ScrollbarInfo,
+//     bar_width: Px,
+//     line_height: Px,
+//     drag: DragInfo,
+//     show_scrollbars: bool,
+// }
 
 #[derive(Debug)]
 struct OpacityAnimationState {
@@ -106,468 +151,501 @@ struct OpacityAnimationState {
     handle: AnimationHandle,
 }
 
-impl MyScroll {
-    /// Returns a new scroll widget containing `contents`.
-    fn construct(contents: impl MakeWidget, enabled: Point<bool>) -> Self {
-        Self {
-            contents: WidgetRef::new(contents),
-            enabled,
-            content_size: Size::default(),
-            controller: Dynamic::new(ScrollController::default()),
-            scrollbar_opacity: Dynamic::default(),
-            scrollbar_opacity_animation: OpacityAnimationState {
-                handle: AnimationHandle::new(),
-                started_at: Instant::now(),
-                will_hide: true,
-            },
-            horizontal_bar: ScrollbarInfo::default(),
-            vertical_bar: ScrollbarInfo::default(),
-            bar_width: Px::default(),
-            line_height: Px::default(),
-            drag: DragInfo::default(),
-            show_scrollbars: false,
-        }
-    }
+// impl MyScroll {
+//     /// Returns a new scroll widget containing `contents`.
+//     fn construct(contents: impl MakeWidget, enabled: Point<bool>) -> Self {
+//         Self {
+//             contents: WidgetRef::new(contents),
+//             enabled,
+//             content_size: Size::default(),
+//             controller: Dynamic::new(ScrollController::default()),
+//             scrollbar_opacity: Dynamic::default(),
+//             scrollbar_opacity_animation: OpacityAnimationState {
+//                 handle: AnimationHandle::new(),
+//                 started_at: Instant::now(),
+//                 will_hide: true,
+//             },
+//             horizontal_bar: ScrollbarInfo::default(),
+//             vertical_bar: ScrollbarInfo::default(),
+//             bar_width: Px::default(),
+//             line_height: Px::default(),
+//             drag: DragInfo::default(),
+//             show_scrollbars: false,
+//         }
+//     }
 
-    /// Returns a new scroll widget containing `contents` that allows scrolling
-    /// vertically or horizontally.
-    pub fn new(contents: impl MakeWidget) -> Self {
-        Self::construct(contents, Point::new(true, true))
-    }
+//     /// Returns a new scroll widget containing `contents` that allows scrolling
+//     /// vertically or horizontally.
+//     pub fn new(contents: impl MakeWidget) -> Self {
+//         Self::construct(contents, Point::new(true, true))
+//     }
 
-    /// Returns a new scroll widget that allows scrolling `contents`
-    /// horizontally.
-    #[allow(dead_code)]
-    pub fn horizontal(contents: impl MakeWidget) -> Self {
-        Self::construct(contents, Point::new(true, false))
-    }
+//     /// Returns a new scroll widget that allows scrolling `contents`
+//     /// horizontally.
+//     #[allow(dead_code)]
+//     pub fn horizontal(contents: impl MakeWidget) -> Self {
+//         Self::construct(contents, Point::new(true, false))
+//     }
 
-    /// Returns a new scroll widget that allows scrolling `contents` vertically.
-    #[allow(dead_code)]
-    pub fn vertical(contents: impl MakeWidget) -> Self {
-        Self::construct(contents, Point::new(false, true))
-    }
+//     /// Returns a new scroll widget that allows scrolling `contents` vertically.
+//     #[allow(dead_code)]
+//     pub fn vertical(contents: impl MakeWidget) -> Self {
+//         Self::construct(contents, Point::new(false, true))
+//     }
 
-    pub fn with_controller(mut self, controller: Dynamic<ScrollController>) -> Self {
-        self.controller = controller;
-        self
-    }
+//     pub fn with_controller(mut self, controller: Dynamic<ScrollController>) -> Self {
+//         self.controller = controller;
+//         self
+//     }
 
-    pub fn with_scrollbars_visible(mut self) -> Self {
-        self.show_scrollbars = true;
-        self
-    }
+//     pub fn with_scrollbars_visible(mut self) -> Self {
+//         self.show_scrollbars = true;
+//         self
+//     }
 
-    fn show_scrollbars(&mut self, context: &mut EventContext<'_>) {
-        let should_hide = self.drag.mouse_buttons_down == 0;
-        if should_hide != self.scrollbar_opacity_animation.will_hide
-            || self.scrollbar_opacity_animation.handle.is_complete()
-            // Prevent respawning the same animation multiple times if we get a
-            // lot of events.
-            || self.scrollbar_opacity_animation.started_at.elapsed() > Duration::from_millis(500)
-        {
-            let current_opacity = self.scrollbar_opacity.get();
-            let transition_time = *current_opacity.one_minus() / 4.;
-            let animation = self
-                .scrollbar_opacity
-                .transition_to(ZeroToOne::ONE)
-                .over(Duration::from_secs_f32(transition_time))
-                .with_easing(context.get(&EasingIn));
+//     fn show_scrollbars(&mut self, context: &mut EventContext<'_>) {
+//         let should_hide = self.drag.mouse_buttons_down == 0;
+//         if should_hide != self.scrollbar_opacity_animation.will_hide
+//             || self.scrollbar_opacity_animation.handle.is_complete()
+//             // Prevent respawning the same animation multiple times if we get a
+//             // lot of events.
+//             || self.scrollbar_opacity_animation.started_at.elapsed() > Duration::from_millis(500)
+//         {
+//             let current_opacity = self.scrollbar_opacity.get();
+//             let transition_time = *current_opacity.one_minus() / 4.;
+//             let animation = self
+//                 .scrollbar_opacity
+//                 .transition_to(ZeroToOne::ONE)
+//                 .over(Duration::from_secs_f32(transition_time))
+//                 .with_easing(context.get(&EasingIn));
 
-            self.scrollbar_opacity_animation.will_hide = should_hide;
-            self.scrollbar_opacity_animation.handle = if should_hide {
-                animation
-                    .and_then(Duration::from_secs(1))
-                    .and_then(
-                        self.scrollbar_opacity
-                            .transition_to(ZeroToOne::ZERO)
-                            .over(Duration::from_millis(300))
-                            .with_easing(context.get(&EasingOut)),
-                    )
-                    .spawn()
-            } else {
-                animation.spawn()
-            };
-        }
-    }
+//             self.scrollbar_opacity_animation.will_hide = should_hide;
+//             self.scrollbar_opacity_animation.handle = if should_hide {
+//                 animation
+//                     .and_then(Duration::from_secs(1))
+//                     .and_then(
+//                         self.scrollbar_opacity
+//                             .transition_to(ZeroToOne::ZERO)
+//                             .over(Duration::from_millis(300))
+//                             .with_easing(context.get(&EasingOut)),
+//                     )
+//                     .spawn()
+//             } else {
+//                 animation.spawn()
+//             };
+//         }
+//     }
 
-    fn hide_scrollbars(&mut self, context: &mut EventContext<'_>) {
-        if self.drag.mouse_buttons_down == 0 && !self.scrollbar_opacity_animation.will_hide {
-            self.scrollbar_opacity_animation.will_hide = true;
-            self.scrollbar_opacity_animation.handle = self
-                .scrollbar_opacity
-                .transition_to(ZeroToOne::ZERO)
-                .over(Duration::from_millis(300))
-                .with_easing(context.get(&EasingOut))
-                .spawn();
-        }
-    }
-}
+//     fn hide_scrollbars(&mut self, context: &mut EventContext<'_>) {
+//         if self.drag.mouse_buttons_down == 0 && !self.scrollbar_opacity_animation.will_hide {
+//             self.scrollbar_opacity_animation.will_hide = true;
+//             self.scrollbar_opacity_animation.handle = self
+//                 .scrollbar_opacity
+//                 .transition_to(ZeroToOne::ZERO)
+//                 .over(Duration::from_millis(300))
+//                 .with_easing(context.get(&EasingOut))
+//                 .spawn();
+//         }
+//     }
+// }
 
-impl Widget for MyScroll {
-    fn mounted(&mut self, context: &mut EventContext<'_>) {
-        SCROLLED_IDS
-            .lock()
-            .insert(context.widget().id(), self.controller.clone());
-    }
-    fn unmounted(&mut self, context: &mut EventContext<'_>) {
-        self.contents.unmount_in(context);
-    }
+// impl Widget for MyScroll {
+//     fn mounted(&mut self, context: &mut EventContext<'_>) {
+//         SCROLLED_IDS
+//             .lock()
+//             .insert(context.widget().id(), self.controller.clone());
+//     }
+//     fn unmounted(&mut self, context: &mut EventContext<'_>) {
+//         self.contents.unmount_in(context);
+//     }
 
-    fn hit_test(&mut self, _location: Point<Px>, _context: &mut EventContext<'_>) -> bool {
-        self.show_scrollbars
-    }
+//     fn hit_test(&mut self, _location: Point<Px>, _context: &mut EventContext<'_>) -> bool {
+//         self.show_scrollbars
+//     }
 
-    fn hover(
-        &mut self,
-        _location: Point<Px>,
-        context: &mut EventContext<'_>,
-    ) -> Option<CursorIcon> {
-        if self.show_scrollbars {
-            self.show_scrollbars(context);
-        }
-        None
-    }
+//     fn hover(
+//         &mut self,
+//         _location: Point<Px>,
+//         context: &mut EventContext<'_>,
+//     ) -> Option<CursorIcon> {
+//         if self.show_scrollbars {
+//             self.show_scrollbars(context);
+//         }
+//         None
+//     }
 
-    fn unhover(&mut self, context: &mut EventContext<'_>) {
-        if self.show_scrollbars {
-            self.hide_scrollbars(context);
-        }
-    }
+//     fn unhover(&mut self, context: &mut EventContext<'_>) {
+//         if self.show_scrollbars {
+//             self.hide_scrollbars(context);
+//         }
+//     }
 
-    fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        context.redraw_when_changed(&self.scrollbar_opacity);
+//     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+//         context.redraw_when_changed(&self.scrollbar_opacity);
 
-        let managed = self.contents.mounted(&mut context.as_event_context());
+//         let managed = self.contents.mounted(&mut context.as_event_context());
 
-        context.for_other(&managed).redraw();
+//         context.for_other(&managed).redraw();
 
-        let size = context.gfx.region().size;
+//         let size = context.gfx.region().size;
 
-        if self.show_scrollbars {
-            if self.horizontal_bar.amount_hidden > 0 {
-                context.gfx.draw_shape(&Shape::filled_rect(
-                    Rect::new(
-                        Point::new(self.horizontal_bar.offset, size.height - self.bar_width),
-                        Size::new(self.horizontal_bar.size, self.bar_width),
-                    ),
-                    Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
-                ));
-            }
+//         if self.show_scrollbars {
+//             if self.horizontal_bar.amount_hidden > 0 {
+//                 context.gfx.draw_shape(&Shape::filled_rect(
+//                     Rect::new(
+//                         Point::new(self.horizontal_bar.offset, size.height - self.bar_width),
+//                         Size::new(self.horizontal_bar.size, self.bar_width),
+//                     ),
+//                     Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
+//                 ));
+//             }
 
-            if self.vertical_bar.amount_hidden > 0 {
-                context.gfx.draw_shape(&Shape::filled_rect(
-                    Rect::new(
-                        Point::new(size.width - self.bar_width, self.vertical_bar.offset),
-                        Size::new(self.bar_width, self.vertical_bar.size),
-                    ),
-                    Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
-                ));
-            }
-        }
-    }
+//             if self.vertical_bar.amount_hidden > 0 {
+//                 context.gfx.draw_shape(&Shape::filled_rect(
+//                     Rect::new(
+//                         Point::new(size.width - self.bar_width, self.vertical_bar.offset),
+//                         Size::new(self.bar_width, self.vertical_bar.size),
+//                     ),
+//                     Color::new_f32(1.0, 1.0, 1.0, *self.scrollbar_opacity.get()),
+//                 ));
+//             }
+//         }
+//     }
 
-    fn layout(
-        &mut self,
-        available_space: Size<ConstraintLimit>,
-        context: &mut LayoutContext<'_, '_, '_, '_>,
-    ) -> Size<UPx> {
-        self.bar_width = context
-            .get(&ScrollBarThickness)
-            .into_px(context.gfx.scale());
-        self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
+//     fn layout(
+//         &mut self,
+//         available_space: Size<ConstraintLimit>,
+//         context: &mut LayoutContext<'_, '_, '_, '_>,
+//     ) -> Size<UPx> {
+//         self.bar_width = context
+//             .get(&ScrollBarThickness)
+//             .into_px(context.gfx.scale());
+//         self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
 
-        let (mut scroll, current_max_scroll) = self.controller.get().constrain_scroll();
+//         let (mut scroll, current_max_scroll) = self.controller.get().constrain_scroll();
 
-        let max_extents = Size::new(
-            if self.enabled.x {
-                ConstraintLimit::SizeToFit(UPx::MAX)
-            } else {
-                available_space.width
-            },
-            if self.enabled.y {
-                ConstraintLimit::SizeToFit(UPx::MAX)
-            } else {
-                available_space.height
-            },
-        );
-        let managed = self.contents.mounted(&mut context.as_event_context());
-        let new_content_size = context
-            .for_other(&managed)
-            .layout(max_extents)
-            .into_signed();
+//         let max_extents = Size::new(
+//             if self.enabled.x {
+//                 ConstraintLimit::SizeToFit(UPx::MAX)
+//             } else {
+//                 available_space.width
+//             },
+//             if self.enabled.y {
+//                 ConstraintLimit::SizeToFit(UPx::MAX)
+//             } else {
+//                 available_space.height
+//             },
+//         );
+//         let managed = self.contents.mounted(&mut context.as_event_context());
+//         let new_content_size = context
+//             .for_other(&managed)
+//             .layout(max_extents)
+//             .into_signed();
 
-        let layout_size = Size::new(
-            if self.enabled.x {
-                constrain_child(available_space.width, new_content_size.width)
-            } else {
-                new_content_size.width.into_unsigned()
-            },
-            if self.enabled.y {
-                constrain_child(available_space.height, new_content_size.height)
-            } else {
-                new_content_size.height.into_unsigned()
-            },
-        );
-        let control_size = layout_size.into_signed();
+//         let layout_size = Size::new(
+//             if self.enabled.x {
+//                 constrain_child(available_space.width, new_content_size.width)
+//             } else {
+//                 new_content_size.width.into_unsigned()
+//             },
+//             if self.enabled.y {
+//                 constrain_child(available_space.height, new_content_size.height)
+//             } else {
+//                 new_content_size.height.into_unsigned()
+//             },
+//         );
+//         let control_size = layout_size.into_signed();
 
-        self.horizontal_bar =
-            scrollbar_region(scroll.x, new_content_size.width, control_size.width);
-        let max_scroll_x = if self.enabled.x {
-            -self.horizontal_bar.amount_hidden
-        } else {
-            Px::ZERO
-        };
+//         self.horizontal_bar =
+//             scrollbar_region(scroll.x, new_content_size.width, control_size.width);
+//         let max_scroll_x = if self.enabled.x {
+//             -self.horizontal_bar.amount_hidden
+//         } else {
+//             Px::ZERO
+//         };
 
-        self.vertical_bar =
-            scrollbar_region(scroll.y, new_content_size.height, control_size.height);
-        let max_scroll_y = if self.enabled.y {
-            -self.vertical_bar.amount_hidden
-        } else {
-            Px::ZERO
-        };
-        let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
-        if current_max_scroll != new_max_scroll {
-            self.controller.lock().max_scroll = new_max_scroll;
-            scroll = scroll.max(new_max_scroll);
-        }
+//         self.vertical_bar =
+//             scrollbar_region(scroll.y, new_content_size.height, control_size.height);
+//         let max_scroll_y = if self.enabled.y {
+//             -self.vertical_bar.amount_hidden
+//         } else {
+//             Px::ZERO
+//         };
+//         let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
+//         if current_max_scroll != new_max_scroll {
+//             self.controller.lock().max_scroll = new_max_scroll;
+//             scroll = scroll.max(new_max_scroll);
+//         }
 
-        // Preserve the current scroll if the widget has resized
-        if self.content_size.width != new_content_size.width
-            || self.controller.get().control_size.width != control_size.width
-        {
-            self.content_size.width = new_content_size.width;
-            // let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
-            // scroll.x = max_scroll_x * scroll_pct;
-        }
+//         // Preserve the current scroll if the widget has resized
+//         if self.content_size.width != new_content_size.width
+//             || self.controller.get().control_size.width != control_size.width
+//         {
+//             self.content_size.width = new_content_size.width;
+//             // let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
+//             // scroll.x = max_scroll_x * scroll_pct;
+//         }
 
-        if self.content_size.height != new_content_size.height
-            || self.controller.get().control_size.height != control_size.height
-        {
-            self.content_size.height = new_content_size.height;
-            // let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
-            // scroll.y = max_scroll_y * scroll_pct;
-        }
-        // Set the current scroll, but prevent immediately triggering
-        // invalidate.
-        {
-            let mut controller = self.controller.lock();
-            controller.prevent_notifications();
-            controller.scroll = scroll;
-            controller.control_size = control_size;
-        }
-        context.invalidate_when_changed(&self.controller);
+//         if self.content_size.height != new_content_size.height
+//             || self.controller.get().control_size.height != control_size.height
+//         {
+//             self.content_size.height = new_content_size.height;
+//             // let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
+//             // scroll.y = max_scroll_y * scroll_pct;
+//         }
+//         // Set the current scroll, but prevent immediately triggering
+//         // invalidate.
+//         {
+//             let mut controller = self.controller.lock();
+//             controller.prevent_notifications();
+//             controller.scroll = scroll;
+//             controller.control_size = control_size;
+//         }
+//         context.invalidate_when_changed(&self.controller);
 
-        self.content_size = new_content_size;
+//         self.content_size = new_content_size;
 
-        // Round the scroll to the nearest pixel to prevent text artefacts
-        scroll.y = scroll.y.ceil();
-        scroll.x = scroll.x.ceil();
+//         // Round the scroll to the nearest pixel to prevent text artefacts
+//         scroll.y = scroll.y.ceil();
+//         scroll.x = scroll.x.ceil();
 
-        let region = Rect::new(
-            scroll,
-            self.content_size
-                .min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
-        );
-        context.set_child_layout(&managed, region);
+//         let region = Rect::new(
+//             scroll,
+//             self.content_size
+//                 .min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
+//         );
+//         context.set_child_layout(&managed, region);
 
-        layout_size
-    }
+//         layout_size
+//     }
 
-    fn mouse_wheel(
-        &mut self,
-        _device_id: DeviceId,
-        delta: MouseScrollDelta,
-        _phase: TouchPhase,
-        context: &mut EventContext<'_>,
-    ) -> EventHandling {
-        let amount = match delta {
-            MouseScrollDelta::LineDelta(x, y) => Point::new(x, y) * self.line_height.into_float(),
-            MouseScrollDelta::PixelDelta(px) => Point::new(px.x.cast(), px.y.cast()),
-        };
-        let mut controller = self.controller.lock();
-        let old_scroll = controller.scroll;
-        let new_scroll = ScrollController::constrained_scroll(
-            controller.scroll + amount.cast::<Px>(),
-            controller.max_scroll,
-        );
-        if old_scroll == new_scroll {
-            IGNORED
-        } else {
-            controller.scroll = new_scroll;
-            drop(controller);
+//     fn mouse_wheel(
+//         &mut self,
+//         _device_id: DeviceId,
+//         delta: MouseScrollDelta,
+//         _phase: TouchPhase,
+//         context: &mut EventContext<'_>,
+//     ) -> EventHandling {
+//         let amount = match delta {
+//             MouseScrollDelta::LineDelta(x, y) => Point::new(x, y) * self.line_height.into_float(),
+//             MouseScrollDelta::PixelDelta(px) => Point::new(px.x.cast(), px.y.cast()),
+//         };
+//         let mut controller = self.controller.lock();
+//         let old_scroll = controller.scroll;
+//         let new_scroll = ScrollController::constrained_scroll(
+//             controller.scroll + amount.cast::<Px>(),
+//             controller.max_scroll,
+//         );
+//         if old_scroll == new_scroll {
+//             IGNORED
+//         } else {
+//             controller.scroll = new_scroll;
+//             drop(controller);
 
-            self.show_scrollbars(context);
-            context.set_needs_redraw();
+//             self.show_scrollbars(context);
+//             context.set_needs_redraw();
 
-            HANDLED
-        }
-    }
+//             HANDLED
+//         }
+//     }
 
-    fn mouse_down(
-        &mut self,
-        location: Point<Px>,
-        _device_id: DeviceId,
-        _button: cushy::kludgine::app::winit::event::MouseButton,
-        context: &mut EventContext<'_>,
-    ) -> EventHandling {
-        if !self.show_scrollbars {
-            return IGNORED;
-        }
-        let relative_x = (self.controller.get().control_size.width - location.x).max(Px::ZERO);
-        let in_vertical_area = self.enabled.y && relative_x <= self.bar_width;
+//     fn mouse_down(
+//         &mut self,
+//         location: Point<Px>,
+//         _device_id: DeviceId,
+//         _button: cushy::kludgine::app::winit::event::MouseButton,
+//         context: &mut EventContext<'_>,
+//     ) -> EventHandling {
+//         if !self.show_scrollbars {
+//             return IGNORED;
+//         }
+//         let relative_x = (self.controller.get().control_size.width - location.x).max(Px::ZERO);
+//         let in_vertical_area = self.enabled.y && relative_x <= self.bar_width;
 
-        let relative_y = (self.controller.get().control_size.height - location.y).max(Px::ZERO);
-        let in_horizontal_area = self.enabled.x && relative_y <= self.bar_width;
+//         let relative_y = (self.controller.get().control_size.height - location.y).max(Px::ZERO);
+//         let in_horizontal_area = self.enabled.x && relative_y <= self.bar_width;
 
-        if matches!(
-            (in_horizontal_area, in_vertical_area),
-            (true, true) | (false, false)
-        ) {
-            return IGNORED;
-        }
+//         if matches!(
+//             (in_horizontal_area, in_vertical_area),
+//             (true, true) | (false, false)
+//         ) {
+//             return IGNORED;
+//         }
 
-        self.drag.start = location;
-        self.drag.start_scroll = self.controller.get().scroll;
-        self.drag.horizontal = in_horizontal_area;
-        self.drag.in_bar = if in_horizontal_area {
-            let relative = location.x - self.horizontal_bar.offset;
-            relative >= 0 && relative < self.horizontal_bar.size
-        } else {
-            let relative = location.y - self.vertical_bar.offset;
-            relative >= 0 && relative < self.vertical_bar.size
-        };
+//         self.drag.start = location;
+//         self.drag.start_scroll = self.controller.get().scroll;
+//         self.drag.horizontal = in_horizontal_area;
+//         self.drag.in_bar = if in_horizontal_area {
+//             let relative = location.x - self.horizontal_bar.offset;
+//             relative >= 0 && relative < self.horizontal_bar.size
+//         } else {
+//             let relative = location.y - self.vertical_bar.offset;
+//             relative >= 0 && relative < self.vertical_bar.size
+//         };
 
-        // If we clicked in the open area, we need to jump to the new location
-        // immediately.
-        if !self.drag.in_bar {
-            self.drag.update(
-                location,
-                &self.controller,
-                &self.horizontal_bar,
-                &self.vertical_bar,
-            );
-        }
+//         // If we clicked in the open area, we need to jump to the new location
+//         // immediately.
+//         if !self.drag.in_bar {
+//             self.drag.update(
+//                 location,
+//                 &self.controller,
+//                 &self.horizontal_bar,
+//                 &self.vertical_bar,
+//             );
+//         }
 
-        self.drag.mouse_buttons_down += 1;
-        self.show_scrollbars(context);
+//         self.drag.mouse_buttons_down += 1;
+//         self.show_scrollbars(context);
 
-        HANDLED
-    }
+//         HANDLED
+//     }
 
-    fn mouse_drag(
-        &mut self,
-        location: Point<Px>,
-        _device_id: DeviceId,
-        _button: cushy::kludgine::app::winit::event::MouseButton,
-        _context: &mut EventContext<'_>,
-    ) {
-        self.drag.update(
-            location,
-            &self.controller,
-            &self.horizontal_bar,
-            &self.vertical_bar,
-        );
-    }
+//     fn mouse_drag(
+//         &mut self,
+//         location: Point<Px>,
+//         _device_id: DeviceId,
+//         _button: cushy::kludgine::app::winit::event::MouseButton,
+//         _context: &mut EventContext<'_>,
+//     ) {
+//         self.drag.update(
+//             location,
+//             &self.controller,
+//             &self.horizontal_bar,
+//             &self.vertical_bar,
+//         );
+//     }
 
-    fn mouse_up(
-        &mut self,
-        location: Option<Point<Px>>,
-        _device_id: DeviceId,
-        _button: cushy::kludgine::app::winit::event::MouseButton,
-        context: &mut EventContext<'_>,
-    ) {
-        self.drag.mouse_buttons_down -= 1;
+//     fn mouse_up(
+//         &mut self,
+//         location: Option<Point<Px>>,
+//         _device_id: DeviceId,
+//         _button: cushy::kludgine::app::winit::event::MouseButton,
+//         context: &mut EventContext<'_>,
+//     ) {
+//         self.drag.mouse_buttons_down -= 1;
 
-        if self.drag.mouse_buttons_down == 0 {
-            if location.map_or(false, |location| {
-                Rect::from(self.controller.get().control_size).contains(location)
-            }) {
-                self.scrollbar_opacity_animation.handle.clear();
-                self.show_scrollbars(context);
-            } else {
-                self.hide_scrollbars(context);
-            }
-        }
-    }
+//         if self.drag.mouse_buttons_down == 0 {
+//             if location.map_or(false, |location| {
+//                 Rect::from(self.controller.get().control_size).contains(location)
+//             }) {
+//                 self.scrollbar_opacity_animation.handle.clear();
+//                 self.show_scrollbars(context);
+//             } else {
+//                 self.hide_scrollbars(context);
+//             }
+//         }
+//     }
 
-    fn summarize(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("MyScroll")
-            .field("enabled", &self.enabled)
-            .field("contents", &self.contents)
-            .finish()
-    }
-}
+//     fn summarize(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         fmt.debug_struct("MyScroll")
+//             .field("enabled", &self.enabled)
+//             .field("contents", &self.contents)
+//             .finish()
+//     }
+// }
 
-#[derive(Default, Debug)]
-struct DragInfo {
-    mouse_buttons_down: usize,
-    start: Point<Px>,
-    start_scroll: Point<Px>,
-    horizontal: bool,
-    in_bar: bool,
-}
+// #[derive(Default, Debug)]
+// struct DragInfo {
+//     mouse_buttons_down: usize,
+//     start: Point<Px>,
+//     start_scroll: Point<Px>,
+//     horizontal: bool,
+//     in_bar: bool,
+// }
 
-impl DragInfo {
-    fn update(
-        &self,
-        location: Point<Px>,
-        controller: &Dynamic<ScrollController>,
-        horizontal_bar: &ScrollbarInfo,
-        vertical_bar: &ScrollbarInfo,
-    ) {
-        let mut controller = controller.lock();
-        if self.horizontal {
-            controller.scroll.x = self.update_bar(
-                location.x,
-                self.start.x,
-                controller.max_scroll.x,
-                self.start_scroll.x,
-                horizontal_bar,
-                controller.control_size.width,
-            );
-        } else {
-            controller.scroll.y = self.update_bar(
-                location.y,
-                self.start.y,
-                controller.max_scroll.y,
-                self.start_scroll.y,
-                vertical_bar,
-                controller.control_size.height,
-            );
-        }
-    }
+// impl DragInfo {
+//     fn update(
+//         &self,
+//         location: Point<Px>,
+//         controller: &Dynamic<ScrollController>,
+//         horizontal_bar: &ScrollbarInfo,
+//         vertical_bar: &ScrollbarInfo,
+//     ) {
+//         let mut controller = controller.lock();
+//         if self.horizontal {
+//             controller.scroll.x = self.update_bar(
+//                 location.x,
+//                 self.start.x,
+//                 controller.max_scroll.x,
+//                 self.start_scroll.x,
+//                 horizontal_bar,
+//                 controller.control_size.width,
+//             );
+//         } else {
+//             controller.scroll.y = self.update_bar(
+//                 location.y,
+//                 self.start.y,
+//                 controller.max_scroll.y,
+//                 self.start_scroll.y,
+//                 vertical_bar,
+//                 controller.control_size.height,
+//             );
+//         }
+//     }
 
-    fn update_bar(
-        &self,
-        location: Px,
-        start: Px,
-        max_scroll: Px,
-        start_scroll: Px,
-        bar: &ScrollbarInfo,
-        control_size: Px,
-    ) -> Px {
-        if self.in_bar {
-            let dy = location - start;
-            if dy == 0 {
-                start_scroll
-            } else {
-                (start_scroll
-                    - Px::from(
-                        dy.into_float() / (control_size - bar.size).into_float()
-                            * bar.amount_hidden.into_float(),
-                    ))
-                .clamp(max_scroll, Px::ZERO)
-            }
-        } else {
-            max_scroll
-                * ((location - bar.size / 2).max(Px::ZERO).into_float()
-                    / (control_size - bar.size).into_float())
-        }
-    }
-}
+//     fn update_bar(
+//         &self,
+//         location: Px,
+//         start: Px,
+//         max_scroll: Px,
+//         start_scroll: Px,
+//         bar: &ScrollbarInfo,
+//         control_size: Px,
+//     ) -> Px {
+//         if self.in_bar {
+//             let dy = location - start;
+//             if dy == 0 {
+//                 start_scroll
+//             } else {
+//                 (start_scroll
+//                     - Px::from(
+//                         dy.into_float() / (control_size - bar.size).into_float()
+//                             * bar.amount_hidden.into_float(),
+//                     ))
+//                 .clamp(max_scroll, Px::ZERO)
+//             }
+//         } else {
+//             max_scroll
+//                 * ((location - bar.size / 2).max(Px::ZERO).into_float()
+//                     / (control_size - bar.size).into_float())
+//         }
+//     }
+// }
 
-fn constrain_child(constraint: ConstraintLimit, measured: Px) -> UPx {
+// fn constrain_child(constraint: ConstraintLimit, measured: Px) -> UPx {
+//     let measured = measured.into_unsigned();
+//     match constraint {
+//         ConstraintLimit::Fill(size) => size.min(measured),
+//         ConstraintLimit::SizeToFit(_) => measured,
+//     }
+// }
+
+// #[derive(Debug, Default)]
+// struct ScrollbarInfo {
+//     offset: Px,
+//     amount_hidden: Px,
+//     size: Px,
+// }
+
+// fn scrollbar_region(scroll: Px, content_size: Px, control_size: Px) -> ScrollbarInfo {
+//     if content_size > control_size {
+//         let amount_hidden = content_size - control_size;
+//         let ratio_visible = control_size.into_float() / content_size.into_float();
+//         let bar_size = control_size * ratio_visible;
+//         let remaining_area = control_size - bar_size;
+//         let amount_scrolled = -scroll.into_float() / amount_hidden.into_float();
+//         let bar_offset = remaining_area * amount_scrolled;
+//         ScrollbarInfo {
+//             offset: bar_offset,
+//             amount_hidden,
+//             size: bar_size,
+//         }
+//     } else {
+//         ScrollbarInfo::default()
+//     }
+// }
+
+fn constrain_child(constraint: ConstraintLimit, measured: UPx) -> UPx {
     let measured = measured.into_unsigned();
     match constraint {
         ConstraintLimit::Fill(size) => size.min(measured),
@@ -575,41 +653,16 @@ fn constrain_child(constraint: ConstraintLimit, measured: Px) -> UPx {
     }
 }
 
-#[derive(Debug, Default)]
-struct ScrollbarInfo {
-    offset: Px,
-    amount_hidden: Px,
-    size: Px,
-}
-
-fn scrollbar_region(scroll: Px, content_size: Px, control_size: Px) -> ScrollbarInfo {
-    if content_size > control_size {
-        let amount_hidden = content_size - control_size;
-        let ratio_visible = control_size.into_float() / content_size.into_float();
-        let bar_size = control_size * ratio_visible;
-        let remaining_area = control_size - bar_size;
-        let amount_scrolled = -scroll.into_float() / amount_hidden.into_float();
-        let bar_offset = remaining_area * amount_scrolled;
-        ScrollbarInfo {
-            offset: bar_offset,
-            amount_hidden,
-            size: bar_size,
-        }
-    } else {
-        ScrollbarInfo::default()
-    }
-}
-
 #[derive(Debug)]
 pub struct PassiveScroll {
     child: WidgetRef,
-    controller: Dynamic<ScrollController>,
+    controller: ScrollController,
     enabled: Point<bool>,
     line_height: Px,
 }
 #[allow(dead_code)]
 impl PassiveScroll {
-    pub fn new(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+    pub fn new(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
             child: child.make_widget().widget_ref(),
             controller,
@@ -617,7 +670,7 @@ impl PassiveScroll {
             line_height: Px::default(),
         }
     }
-    pub fn vertical(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+    pub fn vertical(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
             child: child.make_widget().widget_ref(),
             controller,
@@ -625,7 +678,7 @@ impl PassiveScroll {
             line_height: Px::default(),
         }
     }
-    pub fn horizontal(child: impl MakeWidget, controller: Dynamic<ScrollController>) -> Self {
+    pub fn horizontal(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
             child: child.make_widget().widget_ref(),
             controller,
@@ -641,112 +694,76 @@ impl Widget for PassiveScroll {
 
         context.for_other(&managed).redraw();
     }
-    fn layout(
-        &mut self,
-        available_space: Size<ConstraintLimit>,
-        context: &mut LayoutContext<'_, '_, '_, '_>,
-    ) -> Size<UPx> {
-        self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
-        let (mut scroll, _) = self.controller.get().constrain_scroll();
 
-        let max_extents = Size::new(
-            if self.enabled.x {
-                ConstraintLimit::SizeToFit(UPx::MAX)
-            } else {
-                available_space.width
-            },
-            if self.enabled.y {
-                ConstraintLimit::SizeToFit(UPx::MAX)
-            } else {
-                available_space.height
-            },
-        );
-        let managed = self.child.mounted(&mut context.as_event_context());
-        let new_content_size = context
-            .for_other(&managed)
-            .layout(max_extents)
-            .into_signed();
 
-        let layout_size = Size::new(
-            if self.enabled.x {
-                constrain_child(available_space.width, new_content_size.width)
-            } else {
-                new_content_size.width.into_unsigned()
-            },
-            if self.enabled.y {
-                constrain_child(available_space.height, new_content_size.height)
-            } else {
-                new_content_size.height.into_unsigned()
-            },
-        );
-        let control_size = layout_size.into_signed();
+    // fn layout(
+    //     &mut self,
+    //     available_space: Size<ConstraintLimit>,
+    //     context: &mut LayoutContext<'_, '_, '_, '_>,
+    // ) -> Size<UPx> {
+    //     self.line_height = context.get(&LineHeight).into_px(context.gfx.scale());
+    //     let (mut scroll, _) = self.controller.constrain_scroll();
 
-        // self.horizontal_bar =
-        //     scrollbar_region(scroll.x, new_content_size.width, control_size.width);
-        // let max_scroll_x = if self.enabled.x {
-        //     -self.horizontal_bar.amount_hidden
-        // } else {
-        //     Px::ZERO
-        // };
+    //     let max_extents = Size::new(
+    //         if self.enabled.x {
+    //             ConstraintLimit::SizeToFit(UPx::MAX)
+    //         } else {
+    //             available_space.width
+    //         },
+    //         if self.enabled.y {
+    //             ConstraintLimit::SizeToFit(UPx::MAX)
+    //         } else {
+    //             available_space.height
+    //         },
+    //     );
+    //     let managed = self.child.mounted(&mut context.as_event_context());
+    //     let new_content_size = context.for_other(&managed).layout(max_extents);
 
-        // self.vertical_bar =
-        //     scrollbar_region(scroll.y, new_content_size.height, control_size.height);
-        // let max_scroll_y = if self.enabled.y {
-        //     -self.vertical_bar.amount_hidden
-        // } else {
-        //     Px::ZERO
-        // };
-        // let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
-        // if current_max_scroll != new_max_scroll {
-        //     self.controller.lock().max_scroll = new_max_scroll;
-        //     scroll = scroll.max(new_max_scroll);
-        // }
+    //     let layout_size = Size::new(
+    //         if self.enabled.x {
+    //             constrain_child(available_space.width, new_content_size.width)
+    //         } else {
+    //             new_content_size.width.into_unsigned()
+    //         },
+    //         if self.enabled.y {
+    //             constrain_child(available_space.height, new_content_size.height)
+    //         } else {
+    //             new_content_size.height.into_unsigned()
+    //         },
+    //     );
+    //     let control_size = layout_size;
 
-        // // Preserve the current scroll if the widget has resized
-        // if self.content_size.width != new_content_size.width
-        //     || self.controller.get().control_size.width != control_size.width
-        // {
-        //     self.content_size.width = new_content_size.width;
-        //     let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
-        //     scroll.x = max_scroll_x * scroll_pct;
-        // }
+    //     // Round the scroll to the nearest pixel to prevent text artefacts
+    //     scroll.y = scroll.y.ceil();
+    //     scroll.x = scroll.x.ceil();
 
-        // if self.content_size.height != new_content_size.height
-        //     || self.controller.get().control_size.height != control_size.height
-        // {
-        //     self.content_size.height = new_content_size.height;
-        //     let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
-        //     scroll.y = max_scroll_y * scroll_pct;
-        // }
-        // Set the current scroll, but prevent immediately triggering
-        // invalidate.
-        {
-            let mut controller = self.controller.lock();
-            controller.prevent_notifications();
-            controller.scroll = scroll;
-            controller.control_size = control_size;
-        }
-        context.invalidate_when_changed(&self.controller);
+    //     {
+    //         let mut s = self.controller.scroll.lock();
+    //         s.prevent_notifications();
+    //         *s = scroll;
+    //         dbg!("Passive set scroll to", scroll);
+    //     }
+    //     // let mut sc = self.controller.control_size.lock();
+    //     // sc.prevent_notifications();
+    //     // *sc = control_size;
 
-        // self.content_size = new_content_size;
+    //     context.invalidate_when_changed(&self.controller.scroll);
 
-        // Round the scroll to the nearest pixel to prevent text artefacts
-        scroll.y = scroll.y.ceil();
-        scroll.x = scroll.x.ceil();
+    //     // self.content_size = new_content_size;
 
-        if self.enabled.y {
-            scroll.x = Px::ZERO;
-        } else if self.enabled.x {
-            scroll.y = Px::ZERO;
-        }
-        let region = Rect::new(
-            scroll,
-            new_content_size.min(Size::new(Px::MAX, Px::MAX) - scroll.max(Point::default())),
-        );
-        context.set_child_layout(&managed, region);
+    //     if self.enabled.y {
+    //         scroll.x = UPx::ZERO;
+    //     } else if self.enabled.x {
+    //         scroll.y = UPx::ZERO;
+    //     }
+    //     let region = Rect::new(
+    //         scroll,
+    //         new_content_size.min(Size::new(UPx::MAX, UPx::MAX) - scroll.max(Point::default())),
+    //     );
+    //     context.set_child_layout(&managed, region.into_signed());
 
-        layout_size
-    }
+    //     layout_size
+    // }
 
     fn mouse_wheel(
         &mut self,
@@ -759,17 +776,16 @@ impl Widget for PassiveScroll {
             MouseScrollDelta::LineDelta(x, y) => Point::new(x, y) * self.line_height.into_float(),
             MouseScrollDelta::PixelDelta(px) => Point::new(px.x.cast(), px.y.cast()),
         };
-        let mut controller = self.controller.lock();
-        let old_scroll = controller.scroll;
+        //let mut controller = self.controller.lock();
+        let old_scroll = self.controller.scroll.get();
         let new_scroll = ScrollController::constrained_scroll(
-            controller.scroll + amount.cast::<Px>(),
-            controller.max_scroll,
+            self.controller.scroll.get() + amount.cast::<UPx>(),
+            self.controller.max_scroll.get(),
         );
         if old_scroll == new_scroll {
             IGNORED
         } else {
-            controller.scroll = new_scroll;
-            drop(controller);
+            self.controller.scroll.replace(new_scroll);
 
             context.set_needs_redraw();
 
@@ -780,13 +796,13 @@ impl Widget for PassiveScroll {
 
 #[allow(dead_code)]
 pub trait ContextScroller {
-    fn scroll_to(&self, scroll: Point<Px>);
-    fn scroll(&self) -> Point<Px>;
+    fn scroll_to(&self, scroll: Point<UPx>);
+    fn scroll(&self) -> Dynamic<Point<UPx>>;
     fn make_region_visible(&self, region: Rect<Px>);
-    fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>>;
+    //fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>>;
 }
 
-fn get_parent_scroller(context: &EventContext<'_>) -> Option<Dynamic<ScrollController>> {
+fn get_parent_scroller(context: &EventContext<'_>) -> Option<ScrollController> {
     let mut parent = context.widget().parent();
     while let Some(widget) = parent {
         if SCROLLED_IDS.get().contains_key(&widget.id()) {
@@ -799,27 +815,23 @@ fn get_parent_scroller(context: &EventContext<'_>) -> Option<Dynamic<ScrollContr
 }
 
 impl ContextScroller for EventContext<'_> {
-    fn scroll_to(&self, scroll: Point<Px>) {
+    fn scroll_to(&self, scroll: Point<UPx>) {
         if let Some(controller) = get_parent_scroller(self) {
-            controller.lock().scroll_to(scroll);
+            controller.scroll.replace(scroll);
         }
     }
 
-    fn scroll(&self) -> Point<Px> {
+    fn scroll(&self) -> Dynamic<Point<UPx>> {
         if let Some(controller) = get_parent_scroller(self) {
-            controller.lock().scroll
+            controller.scroll.clone()
         } else {
-            Point::default()
+            Dynamic::new(Point::default())
         }
     }
 
     fn make_region_visible(&self, region: Rect<Px>) {
-        if let Some(controller) = get_parent_scroller(self) {
-            controller.lock().make_region_visible(region);
+        if let Some(mut controller) = get_parent_scroller(self) {
+            controller.make_region_visible(region);
         }
-    }
-
-    fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>> {
-        get_parent_scroller(self)
     }
 }

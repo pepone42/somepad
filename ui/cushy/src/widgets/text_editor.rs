@@ -26,8 +26,8 @@ use cushy::widget::{
 use cushy::widgets::layers::Modal;
 
 use super::palette::PaletteState;
-use super::scroll::ScrollController;
-use cushy::widgets::Custom;
+use super::scroll::{ScrollController, WidgetScrollableExt};
+use cushy::widgets::{Custom, Scroll};
 use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
@@ -36,7 +36,7 @@ use rfd::FileDialog;
 use crate::shortcut::{event_match, ModifiersCustomExt};
 use crate::{get_settings, CommandsRegistry, FONT_SYSTEM};
 
-use super::scroll::{ContextScroller, MyScroll, PassiveScroll};
+use super::scroll::ContextScroller;
 
 pub struct CodeEditorColors {
     bg: Color,
@@ -1391,7 +1391,7 @@ impl CodeEditor {
         let show_search_panel: Dynamic<bool> = Dynamic::new(true);
         let (editor_tag, editor_id) = WidgetTag::new();
         let (search_tag, search_id) = WidgetTag::new();
-        let scroller = Dynamic::new(ScrollController::default());
+        //let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
         let mut text_editor =
             TextEditor::new(doc.clone(), cmd_reg, click_info, search_term.clone(), modal);
@@ -1439,19 +1439,23 @@ impl CodeEditor {
             });
         let action_enter = action_down.clone();
 
+        let editor = Scroll::new(text_editor.make_with_tag(editor_tag));
+        editor.scroll.for_each(|s| {
+            dbg!(s);
+        }).persist();
+        let scroller = ScrollController::from(&editor);
+
         let child =
-            (PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone())
+            Gutter::new(doc.clone(), editor_id)
                 .and(
-                    MyScroll::new(text_editor.make_with_tag(editor_tag))
-                        .with_controller(scroller.clone())
-                        .expand(),
+                    editor.expand(),
                 )
                 .into_columns()
-                .gutter(Px::new(1)))
+                .gutter(Px::new(1))
             .expand_vertically()
             .and(
                 "Search: "
-                    .and(MyScroll::horizontal(
+                    .and(Scroll::horizontal(
                         Custom::new(
                             TextEditor::as_input(search_term.clone())
                                 .make_with_tag(search_tag)

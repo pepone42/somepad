@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cushy::context::EventContext;
-use cushy::figures::units::{Lp, Px};
+use cushy::figures::units::{Lp, Px, UPx};
 use cushy::figures::{Point, Rect, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};
@@ -14,14 +14,14 @@ use cushy::widget::{
 
 use cushy::context;
 use cushy::widgets::layers::Modal;
-use cushy::widgets::Custom;
+use cushy::widgets::{Custom, Scroll};
 use cushy::window::KeyEvent;
 use ndoc::Document;
 
 use crate::shortcut::{event_match, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
-use super::scroll::{ContextScroller, MyScroll};
+use super::scroll::ContextScroller;
 use super::text_editor::TextEditor;
 
 #[derive(Clone)]
@@ -72,12 +72,12 @@ impl Palette {
                 .description
                 .clone()
                 .and(
-                    Custom::new(MyScroll::horizontal(TextEditor::as_input(input.clone())))
+                    Custom::new(Scroll::horizontal(TextEditor::as_input(input.clone())))
                         .on_mounted(move |c| c.focus()),
                 )
                 .and(
-                    MyScroll::vertical(filtered_list.make_with_tag(filter_tag))
-                        .with_scrollbars_visible()
+                    Scroll::vertical(filtered_list.make_with_tag(filter_tag))
+                        //TODO .with_scrollbars_visible()
                         .expand(),
                 )
                 .into_rows()

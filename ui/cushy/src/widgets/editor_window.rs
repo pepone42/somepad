@@ -13,6 +13,7 @@ use cushy::widget::{
 };
 
 use cushy::widgets::layers::Modal;
+use cushy::widgets::Scroll;
 use cushy::window::KeyEvent;
 
 use ndoc::Document;
@@ -23,7 +24,6 @@ use crate::CommandsRegistry;
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
 use super::palette::{Palette, PaletteState};
-use super::scroll::MyScroll;
 use super::side_bar::SideBar;
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl EditorWindow {
             width.clone(),
         );
 
-        let child = MyScroll::vertical(opened_editor)
+        let child = Scroll::vertical(opened_editor)
             .expand_vertically()
             .and(ResizeHandle::new(width))
             .and(
