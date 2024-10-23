@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use std::time::{Duration, Instant};
 
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
@@ -212,6 +211,7 @@ pub struct TextEditor {
     search_panel_closed: Dynamic<bool>,
     modal: Modal,
     id: Option<WidgetId>,
+    search_bar_id: Option<WidgetId>,
 }
 
 impl TextEditor {
@@ -314,6 +314,7 @@ impl TextEditor {
             search_panel_closed: Dynamic::new(true),
             modal,
             id: None,
+            search_bar_id: None,
         }
     }
 
@@ -393,6 +394,24 @@ impl TextEditor {
             ));
         }
     }
+
+    pub fn toggle_search_panel(&self, context: &mut EventContext) {
+        self.search_panel_closed.toggle();
+        if self.search_panel_closed.get() {
+            context.for_other(&self.id.unwrap()).unwrap().focus();
+        } else {
+            context
+                .for_other(&self.search_bar_id.unwrap())
+                .unwrap()
+                .focus();
+        }
+    }
+
+    pub fn close_search_panel(&self, context: &mut EventContext) {
+        self.search_panel_closed.replace(true);
+        context.for_other(&self.id.unwrap()).unwrap().focus();
+    }
+
     fn layout_line_simple(&self, line_idx: usize) -> Buffer {
         let raw_text = self.doc.get().get_visible_line(line_idx).to_string();
 
@@ -1022,16 +1041,20 @@ impl Widget for TextEditor {
             match input.logical_key {
                 Key::Named(NamedKey::Escape) => {
                     if self.kind == TextEditorKind::Code {
-                        // TODO: clear selections
+                        if !self.search_panel_closed.get() {
+                            self.close_search_panel(context);
+                            return HANDLED;
+                        }
                         if self.doc.get().selections.len() > 1 {
                             self.doc.lock().cancel_multi_cursor();
-                        } else if self.doc.get().selections[0].head
-                            != self.doc.get().selections[0].tail
-                        {
+                            return HANDLED;
+                        }
+                        if self.doc.get().selections[0].head != self.doc.get().selections[0].tail {
                             let mut d = self.doc.lock();
                             d.selections[0].tail = d.selections[0].head;
+                            return HANDLED;
                         }
-                        return HANDLED;
+                        return IGNORED;
                     } else {
                         return IGNORED;
                     }
@@ -1376,9 +1399,7 @@ impl Widget for Gutter {
 #[derive(Debug)]
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
-    search_id: WidgetId,
     pub editor_id: WidgetId,
-    search_panel_closed: Dynamic<bool>,
 }
 
 impl CodeEditor {
@@ -1387,11 +1408,9 @@ impl CodeEditor {
 
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
-        let text_editor = TextEditor::new(doc.clone(), cmd_reg, click_info, modal);
+        let mut text_editor = TextEditor::new(doc.clone(), cmd_reg.clone(), click_info, modal);
 
-        let search_panel_closed = text_editor.search_panel_closed.clone();
-
-        let (search_bar_id, search_bar) = search_bar(&text_editor);
+        let search_bar = search_bar(&mut text_editor);
 
         let child =
             (PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone())
@@ -1408,14 +1427,13 @@ impl CodeEditor {
         Self {
             child: child.widget_ref(),
             editor_id,
-            search_id: search_bar_id,
-            search_panel_closed,
         }
     }
 }
 
-fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) {
+fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
     let (search_tag, search_bar_id) = WidgetTag::new();
+    text_editor.search_bar_id = Some(search_bar_id);
     let match_count = (
         &text_editor.search_term,
         &text_editor.selected_match,
@@ -1488,7 +1506,7 @@ fn search_bar(text_editor: &TextEditor) -> (WidgetId, cushy::widgets::Collapse) 
         )
         .into_columns()
         .collapse_vertically(text_editor.search_panel_closed.clone());
-    (search_bar_id, search_bar)
+    search_bar
 }
 
 impl WrapperWidget for CodeEditor {
@@ -1505,23 +1523,17 @@ impl WrapperWidget for CodeEditor {
 
     fn keyboard_input(
         &mut self,
-        _device_id: cushy::window::DeviceId,
+        device_id: cushy::window::DeviceId,
         input: cushy::window::KeyEvent,
-        _is_synthetic: bool,
+        is_synthetic: bool,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
-        if input.state == ElementState::Pressed
-            && event_match(&input, context.modifiers(), shortcut!(Ctrl + f))
-        {
-            self.search_panel_closed.toggle();
-            if self.search_panel_closed.get() {
-                context.for_other(&self.editor_id).unwrap().focus();
-            } else {
-                context.for_other(&self.search_id).unwrap().focus();
-            }
-            return HANDLED;
-        }
-        IGNORED
+        // redirect all event to the editor
+        return context.for_other(&self.editor_id).unwrap().keyboard_input(
+            device_id,
+            input,
+            is_synthetic,
+        );
     }
 }
 
@@ -1681,7 +1693,6 @@ fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>, Weig
         }
         font_names
     };
-    //dbg!(&font_names);
 
     for font in get_settings().editor_font.iter() {
         if let Some((name, weight, stretch)) = font_names.get(font) {
@@ -1689,18 +1700,4 @@ fn get_editor_family_name(font_system: &mut FontSystem) -> (Option<String>, Weig
         }
     }
     (None, Weight::NORMAL, Stretch::Normal)
-
-    // let font_id = font_system
-    //     .db()
-    //     .query(&cushy::kludgine::cosmic_text::fontdb::Query {
-    //         weight: cushy::kludgine::cosmic_text::fontdb::Weight::NORMAL,
-    //         style: cushy::kludgine::cosmic_text::fontdb::Style::Normal,
-    //         families: &get_settings()
-    //             .editor_font
-    //             .iter()
-    //             .map(|f| Family::Name(f))
-    //             .collect::<Vec<Family>>(),
-    //         stretch: cushy::kludgine::cosmic_text::fontdb::Stretch::Normal,
-    //     });
-    // (font_id.map(|id| font_system.db().face(id).unwrap().families[0].0.clone())
 }

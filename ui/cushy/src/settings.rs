@@ -39,6 +39,7 @@ impl Default for Settings {
             crate::DUPLICATE_SELECTION.id.to_string(),
             shortcut!(Ctrl + d),
         );
+        shortcuts.insert(crate::TOGGLE_SEARCH_PANEL.id.to_string(),shortcut!(Ctrl + f));
         // shortcuts.insert(crate::COPY_SELECTION_CMD.id.to_string(), shortcut!(Ctrl+c));
         // shortcuts.insert(crate::PASTE_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + v));
         // shortcuts.insert(crate::CUT_SELECTION_CMD.id.to_string(),shortcut!(Ctrl + x));

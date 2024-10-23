@@ -283,6 +283,14 @@ const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
     },
 };
 
+const TOGGLE_SEARCH_PANEL: ViewCommand = ViewCommand {
+    name: "Show Search Panel",
+    id: "editor.show_search_panel",
+    action: |_id, v, c| {
+        v.toggle_search_panel(c);
+    },
+};
+
 const CHANGE_THEME: WindowCommand = WindowCommand {
     name: "Change Theme",
     id: "window.change_theme",
@@ -441,6 +449,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg
         .view
         .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
+    cmd_reg.view.insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
