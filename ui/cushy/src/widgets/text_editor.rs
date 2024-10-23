@@ -1409,18 +1409,14 @@ impl CodeEditor {
         let scroller = Dynamic::new(ScrollController::default());
         let click_info = Dynamic::new(ClickInfo::default());
         let mut text_editor = TextEditor::new(doc.clone(), cmd_reg.clone(), click_info, modal);
-
         let search_bar = search_bar(&mut text_editor);
 
-        let child =
-            (PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone())
-                .and(
-                    MyScroll::new(text_editor.make_with_tag(editor_tag))
-                        .with_controller(scroller.clone())
-                        .expand(),
-                )
-                .into_columns()
-                .gutter(Px::new(1)))
+        let text_editor = MyScroll::new(text_editor.make_with_tag(editor_tag))
+            .with_controller(scroller.clone())
+            .expand();
+        let gutter = PassiveScroll::vertical(Gutter::new(doc.clone(), editor_id), scroller.clone());
+
+        let child = (gutter.and(text_editor).into_columns().gutter(Px::new(1)))
             .expand_vertically()
             .and(search_bar)
             .into_rows();
