@@ -681,45 +681,6 @@ impl Widget for PassiveScroll {
         );
         let control_size = layout_size.into_signed();
 
-        // self.horizontal_bar =
-        //     scrollbar_region(scroll.x, new_content_size.width, control_size.width);
-        // let max_scroll_x = if self.enabled.x {
-        //     -self.horizontal_bar.amount_hidden
-        // } else {
-        //     Px::ZERO
-        // };
-
-        // self.vertical_bar =
-        //     scrollbar_region(scroll.y, new_content_size.height, control_size.height);
-        // let max_scroll_y = if self.enabled.y {
-        //     -self.vertical_bar.amount_hidden
-        // } else {
-        //     Px::ZERO
-        // };
-        // let new_max_scroll = Point::new(max_scroll_x, max_scroll_y);
-        // if current_max_scroll != new_max_scroll {
-        //     self.controller.lock().max_scroll = new_max_scroll;
-        //     scroll = scroll.max(new_max_scroll);
-        // }
-
-        // // Preserve the current scroll if the widget has resized
-        // if self.content_size.width != new_content_size.width
-        //     || self.controller.get().control_size.width != control_size.width
-        // {
-        //     self.content_size.width = new_content_size.width;
-        //     let scroll_pct = scroll.x.into_float() / current_max_scroll.x.into_float();
-        //     scroll.x = max_scroll_x * scroll_pct;
-        // }
-
-        // if self.content_size.height != new_content_size.height
-        //     || self.controller.get().control_size.height != control_size.height
-        // {
-        //     self.content_size.height = new_content_size.height;
-        //     let scroll_pct = scroll.y.into_float() / current_max_scroll.y.into_float();
-        //     scroll.y = max_scroll_y * scroll_pct;
-        // }
-        // Set the current scroll, but prevent immediately triggering
-        // invalidate.
         {
             let mut controller = self.controller.lock();
             controller.prevent_notifications();
@@ -727,8 +688,6 @@ impl Widget for PassiveScroll {
             controller.control_size = control_size;
         }
         context.invalidate_when_changed(&self.controller);
-
-        // self.content_size = new_content_size;
 
         // Round the scroll to the nearest pixel to prevent text artefacts
         scroll.y = scroll.y.ceil();
@@ -761,13 +720,16 @@ impl Widget for PassiveScroll {
         };
         let mut controller = self.controller.lock();
         let old_scroll = controller.scroll;
-        let new_scroll = ScrollController::constrained_scroll(
+        let mut new_scroll = ScrollController::constrained_scroll(
             controller.scroll + amount.cast::<Px>(),
             controller.max_scroll,
         );
         if old_scroll == new_scroll {
             IGNORED
         } else {
+            // Round the scroll to the nearest pixel to prevent text artefacts
+            new_scroll.y = new_scroll.y.ceil();
+            new_scroll.x = new_scroll.x.ceil();
             controller.scroll = new_scroll;
             drop(controller);
 
