@@ -178,7 +178,7 @@ const CLOSE_DOC: WindowCommand = WindowCommand {
         let docs_len = w.documents.get().len();
         if docs_len > 1 {
             w.documents.lock().remove(current_doc);
-            *w.current_doc.lock() -= 1;
+            *w.current_doc.lock() = w.current_doc.get().saturating_sub(1);
         }
         // TODO: close the window if there is only one doc
         // TODO: warn if the doc is dirty
