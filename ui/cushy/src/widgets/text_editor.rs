@@ -698,6 +698,11 @@ impl Widget for TextEditor {
         self.id = Some(context.widget().id());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        if context.gfx.clip_rect().size == Size::ZERO {
+            return;
+        }
+
+
         let colors = CodeEditorColors::get(self.kind, context);
 
         // So we can refocus easily from about anywere
@@ -1166,6 +1171,7 @@ impl Widget for TextEditor {
             _ => IGNORED,
         }
     }
+
     fn full_control_redraw(&self) -> bool {
         true
     }
@@ -1379,6 +1385,16 @@ impl Widget for Gutter {
                 .expand_selection_by_line(Position::new(line, 0));
             editor.refocus_main_selection(&c);
         }
+    }
+
+    fn mouse_wheel(
+            &mut self,
+            device_id: cushy::window::DeviceId,
+            delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
+            phase: cushy::kludgine::app::winit::event::TouchPhase,
+            context: &mut EventContext<'_>,
+        ) -> EventHandling {
+            context.for_other(&self.scroller.scroll_id).unwrap().mouse_wheel(device_id, delta, phase)
     }
 }
 

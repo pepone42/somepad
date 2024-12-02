@@ -17,7 +17,8 @@ use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Destination, Dynamic, DynamicReader, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetRef,
+    WidgetTag, WrapperWidget, HANDLED, IGNORED,
 };
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::widgets::{Custom, Scroll};
@@ -60,6 +61,7 @@ impl WidgetScrollableExt for WidgetInstance {
             s.scroll.clone(),
             s.control_size().clone(),
             s.max_scroll().clone(),
+            id,
         );
         SCROLLED_IDS.lock().insert(id, scroller.clone());
         Scrollable::new(s.make_with_tag(tag), scroller)
@@ -71,6 +73,7 @@ pub struct ScrollController {
     scroll: Dynamic<Point<UPx>>,
     control_size: DynamicReader<Size<UPx>>,
     max_scroll: DynamicReader<Point<UPx>>,
+    pub scroll_id: WidgetId,
 }
 #[allow(dead_code)]
 impl ScrollController {
@@ -78,18 +81,13 @@ impl ScrollController {
         scroll: Dynamic<Point<UPx>>,
         control_size: DynamicReader<Size<UPx>>,
         max_scroll: DynamicReader<Point<UPx>>,
+        scroll_id: WidgetId,
     ) -> Self {
         Self {
             scroll: scroll.clone(),
             control_size: control_size.clone(),
             max_scroll: max_scroll.clone(),
-        }
-    }
-    pub fn from(widget: &Scroll) -> Self {
-        Self {
-            scroll: widget.scroll.clone(),
-            control_size: widget.control_size().clone(),
-            max_scroll: widget.max_scroll().clone(),
+            scroll_id,
         }
     }
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
@@ -108,7 +106,8 @@ impl ScrollController {
             region.extent().x - viewport.size.width
         } else {
             self.scroll.get().x.into_signed()
-        }.clamp(Px::ZERO, self.max_scroll.get().x.into_signed())
+        }
+        .clamp(Px::ZERO, self.max_scroll.get().x.into_signed())
         .into_unsigned();
 
         let y = if region.origin.y <= viewport.origin.y {
@@ -117,7 +116,8 @@ impl ScrollController {
             region.extent().y - viewport.size.height
         } else {
             self.scroll.get().y.into_signed()
-        }.clamp(Px::ZERO, self.max_scroll.get().y.into_signed())
+        }
+        .clamp(Px::ZERO, self.max_scroll.get().y.into_signed())
         .into_unsigned();
 
         self.scroll.replace(Point::new(x, y));
@@ -714,7 +714,6 @@ impl Widget for PassiveScroll {
 
         context.for_other(&managed).redraw();
     }
-
 
     // fn layout(
     //     &mut self,
