@@ -11,11 +11,11 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=xncode",
+                    "--bin=somepad",
                     "--package=somepad-cushy"
                 ],
                 "filter": {
-                    "name": "xncode",
+                    "name": "somepad",
                     "kind": "bin"
                 }
             },
@@ -30,7 +30,7 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=xncode",
+                    "--bin=somepad",
                     "--package=ncode-floem"
                 ],
                 "filter": {

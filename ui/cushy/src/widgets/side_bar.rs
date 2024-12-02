@@ -11,7 +11,7 @@ pub struct SideBar {
 impl SideBar {
     pub fn new(child: impl MakeWidget, width: Dynamic<Px>) -> Self {
         Self {
-            child: child.make_widget().widget_ref(),
+            child: child.make_widget().into_ref(),
             width,
         }
     }

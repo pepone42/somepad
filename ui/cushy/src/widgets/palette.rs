@@ -98,7 +98,7 @@ impl Palette {
         .align_top();
 
         Palette {
-            child: pal.make_widget().widget_ref(),
+            child: pal.make_widget().into_ref(),
             action,
             input,
             has_items,

@@ -1182,6 +1182,7 @@ pub struct Gutter {
     line_height: Px,
     scale: Fraction,
     editor_id: WidgetId,
+    scroll: Dynamic<Point<UPx>>,
 }
 
 impl Gutter {
@@ -1196,6 +1197,7 @@ impl Gutter {
             font_stretch: Stretch::Normal,
             scale: Fraction::ZERO,
             editor_id,
+            scroll: Dynamic::new(Point::ZERO),
         }
     }
 }
@@ -1439,11 +1441,9 @@ impl CodeEditor {
             });
         let action_enter = action_down.clone();
 
-        let editor = Scroll::new(text_editor.make_with_tag(editor_tag));
-        editor.scroll.for_each(|s| {
-            dbg!(s);
-        }).persist();
-        let scroller = ScrollController::from(&editor);
+        let editor = text_editor.make_with_tag(editor_tag).scrollable();
+        
+        //let scroller = ScrollController::from(&editor);
 
         let child =
             Gutter::new(doc.clone(), editor_id)
@@ -1452,7 +1452,7 @@ impl CodeEditor {
                 )
                 .into_columns()
                 .gutter(Px::new(1))
-            .expand_vertically()
+            .expand()
             .and(
                 "Search: "
                     .and(Scroll::horizontal(
@@ -1493,7 +1493,7 @@ impl CodeEditor {
             )
             .into_rows();
         Self {
-            child: child.widget_ref(),
+            child: child.into_ref(),
             editor_id,
             search_id,
             collapse_search_panel: show_search_panel,

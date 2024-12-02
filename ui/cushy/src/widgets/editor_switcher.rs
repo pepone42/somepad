@@ -35,8 +35,7 @@ impl EditorSwitcher {
             .iter()
             .map(|d| {
                 let editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone())
-                    .make_widget()
-                    .widget_ref();
+                    .make_widget().into_ref();
                 (d.get().id(), editor)
             })
             .collect();
@@ -63,7 +62,7 @@ impl WrapperWidget for EditorSwitcher {
                     self.cmd_reg.clone(),self.modal.clone()
                 )
                 .make_widget()
-                .widget_ref());
+                .into_ref());
         }
         let e = self.editors.get_mut(&id).unwrap();
         e

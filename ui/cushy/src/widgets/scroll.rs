@@ -74,29 +74,30 @@ impl ScrollController {
     }
     pub fn make_region_visible(&mut self, region: Rect<Px>) {
         let viewport = Rect::new(
-            -self.scroll.get().into_signed(),
+            self.scroll.get().into_signed(),
             self.control_size.get().into_signed(),
         );
+
         if viewport.contains(region.origin) && viewport.contains(region.origin + region.size) {
             return;
         }
 
         let x = if region.origin.x <= viewport.origin.x {
-            -region.origin.x
-        } else if region.origin.x + region.size.width >= viewport.origin.x + viewport.size.width {
-            viewport.size.width - (region.origin.x + region.size.width)
+            region.origin.x
+        } else if region.extent().x >= viewport.extent().x {
+            region.extent().x - viewport.size.width
         } else {
             self.scroll.get().x.into_signed()
-        }
+        }.clamp(Px::ZERO, self.max_scroll.get().x.into_signed())
         .into_unsigned();
 
         let y = if region.origin.y <= viewport.origin.y {
-            -region.origin.y
-        } else if region.origin.y + region.size.height >= viewport.origin.y + viewport.size.height {
-            viewport.size.height - (region.origin.y + region.size.height)
+            region.origin.y
+        } else if region.extent().y >= viewport.extent().y {
+            region.extent().y - viewport.size.height
         } else {
             self.scroll.get().y.into_signed()
-        }
+        }.clamp(Px::ZERO, self.max_scroll.get().y.into_signed())
         .into_unsigned();
 
         self.scroll.replace(Point::new(x, y));
@@ -118,7 +119,6 @@ impl ScrollController {
         let scroll = self.scroll.get();
         let max_scroll = self.max_scroll.get();
         let clamped = Self::constrained_scroll(scroll, max_scroll);
-        dbg!(scroll, max_scroll, clamped);
         if clamped != scroll {
             self.scroll.replace(clamped);
         }
@@ -664,7 +664,7 @@ pub struct PassiveScroll {
 impl PassiveScroll {
     pub fn new(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
-            child: child.make_widget().widget_ref(),
+            child: child.make_widget().into_ref(),
             controller,
             enabled: Point::new(true, true),
             line_height: Px::default(),
@@ -672,7 +672,7 @@ impl PassiveScroll {
     }
     pub fn vertical(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
-            child: child.make_widget().widget_ref(),
+            child: child.make_widget().into_ref(),
             controller,
             enabled: Point::new(false, true),
             line_height: Px::default(),
@@ -680,7 +680,7 @@ impl PassiveScroll {
     }
     pub fn horizontal(child: impl MakeWidget, controller: ScrollController) -> Self {
         Self {
-            child: child.make_widget().widget_ref(),
+            child: child.make_widget().into_ref(),
             controller,
             enabled: Point::new(true, false),
             line_height: Px::default(),

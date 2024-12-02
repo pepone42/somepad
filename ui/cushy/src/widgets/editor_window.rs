@@ -84,7 +84,7 @@ impl EditorWindow {
         //     .and(Palette::new().with_next_focus(editor_id))
         //     .into_layers();
         EditorWindow {
-            child: child.widget_ref(),
+            child: child.into_ref(),
             documents: documents.clone(),
             mru_documents: lru,
             current_doc: current_doc.clone(),
