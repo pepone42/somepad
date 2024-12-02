@@ -1434,11 +1434,11 @@ impl CodeEditor {
         let mut text_editor = TextEditor::new(doc.clone(), cmd_reg.clone(), click_info, modal);
         let search_bar = search_bar(&mut text_editor);
 
-        let text_editor = text_editor.make_with_tag(editor_tag).scrollable().expand();
+        let text_editor = text_editor.make_with_tag(editor_tag).scrollable();
         let scroller = text_editor.controller.clone();
         let gutter = Gutter::new(doc.clone(), editor_id, scroller);
 
-        let child = (gutter.and(text_editor).into_columns().gutter(Px::new(1)))
+        let child = (gutter.and(text_editor.expand()).into_columns().gutter(Px::new(1)))
             .expand_vertically()
             .and(search_bar)
             .into_rows();
@@ -1490,7 +1490,7 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
     let action_enter = action_down.clone();
 
     let search_bar = "Search: "
-        .and(MyScroll::horizontal(
+        .and(
             Custom::new(
                 TextEditor::as_input(text_editor.search_term.clone())
                     .make_with_tag(search_tag)
@@ -1505,7 +1505,7 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
                     IGNORED
                 }
             }),
-        ))
+        )
         .and(match_count)
         .and(
             "↑"
