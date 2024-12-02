@@ -28,7 +28,7 @@ impl EditorSwitcher {
         documents: Dynamic<Vec<Dynamic<Document>>>,
         current_doc: Dynamic<usize>,
         cmd_reg: Dynamic<CommandsRegistry>,
-        modal: Modal
+        modal: Modal,
     ) -> Self {
         let editors = documents
             .get()
@@ -53,13 +53,14 @@ impl EditorSwitcher {
 
 impl WrapperWidget for EditorSwitcher {
     fn child_mut(&mut self) -> &mut cushy::widget::WidgetRef {
-
         let id = self.documents.get()[self.current_doc.get()].get().id();
 
         if let std::collections::hash_map::Entry::Vacant(e) = self.editors.entry(id) {
-            e.insert(CodeEditor::new(
+            e.insert(
+                CodeEditor::new(
                     self.documents.get()[self.current_doc.get()].clone(),
-                    self.cmd_reg.clone(),self.modal.clone()
+                    self.cmd_reg.clone(),
+                    self.modal.clone(),
                 )
                 .make_widget()
                 .into_ref());

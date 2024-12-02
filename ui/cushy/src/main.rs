@@ -178,7 +178,7 @@ const CLOSE_DOC: WindowCommand = WindowCommand {
         let docs_len = w.documents.get().len();
         if docs_len > 1 {
             w.documents.lock().remove(current_doc);
-            *w.current_doc.lock() -= 1;
+            *w.current_doc.lock() = w.current_doc.get().saturating_sub(1);
         }
         // TODO: close the window if there is only one doc
         // TODO: warn if the doc is dirty
@@ -280,6 +280,14 @@ const DUPLICATE_SELECTION: ViewCommand = ViewCommand {
             v.doc.lock().duplicate_selection_for_selected_text();
         }
         v.refocus_main_selection(c);
+    },
+};
+
+const TOGGLE_SEARCH_PANEL: ViewCommand = ViewCommand {
+    name: "Show Search Panel",
+    id: "editor.show_search_panel",
+    action: |_id, v, c| {
+        v.toggle_search_panel(c);
     },
 };
 
@@ -441,6 +449,7 @@ fn main() -> anyhow::Result<()> {
     cmd_reg
         .view
         .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
+    cmd_reg.view.insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 

@@ -36,10 +36,11 @@ impl Widget for StatusBar {
         let border_color = context.get(&components::OutlineColor);
         let width = context.gfx.clip_rect().size.width.into_signed();
         context.gfx.draw_shape(
-            PathBuilder::new(Point::ZERO).line_to(
-                Point::new(width, Px::ZERO))
-                    .build()
-                    .stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color)).translate_by(Point::ZERO)
+            PathBuilder::new(Point::ZERO)
+                .line_to(Point::new(width, Px::ZERO))
+                .build()
+                .stroke(StrokeOptions::px_wide(Px::new(1)).colored(border_color))
+                .translate_by(Point::ZERO),
         );
 
         let font_familly = context.get(&FontFamily);

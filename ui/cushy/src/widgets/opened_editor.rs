@@ -1,7 +1,8 @@
 use cushy::{
     context::EventContext,
     figures::{
-        units::{Px, UPx}, IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero
+        units::{Px, UPx},
+        IntoSigned, Point, Rect, Round, ScreenScale, Size, Zero,
     },
     kludgine::{app::winit::event::MouseButton, shapes::Shape, text::Text, DrawableExt},
     styles::components,
@@ -32,11 +33,11 @@ impl OpenedEditor {
 impl Widget for OpenedEditor {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         let padding = context
-        .get(&components::IntrinsicPadding)
-        .into_px(context.gfx.scale())
-        .round();
+            .get(&components::IntrinsicPadding)
+            .into_px(context.gfx.scale())
+            .round();
         let padding = Point::new(padding, padding);
-    
+
         context.redraw_when_changed(&self.hovered_idx);
         let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
         let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
@@ -50,7 +51,7 @@ impl Widget for OpenedEditor {
         let current_doc = self.current_doc.get();
 
         context.apply_current_font_settings();
-        
+
         context.fill(bg_color);
         let mut y = Px::ZERO;
         for (i, doc) in self.documents.get().iter().enumerate() {
@@ -104,9 +105,10 @@ impl Widget for OpenedEditor {
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> cushy::figures::Size<cushy::figures::units::UPx> {
         let padding = context
-        .get(&components::IntrinsicPadding)
-        .into_upx(context.gfx.scale())
-        .round() * 2;
+            .get(&components::IntrinsicPadding)
+            .into_upx(context.gfx.scale())
+            .round()
+            * 2;
 
         let h = UPx::new(self.documents.get().len() as _)
             * context.gfx.line_height().into_upx(context.gfx.scale());
@@ -267,7 +269,6 @@ impl Widget for ResizeHandle {
         _button: cushy::kludgine::app::winit::event::MouseButton,
         _context: &mut EventContext<'_>,
     ) {
-
         *self.width.lock() = self.clip_rect.origin.x.into_signed() + location.x;
     }
 }
