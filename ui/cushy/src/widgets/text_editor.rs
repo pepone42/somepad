@@ -698,6 +698,9 @@ impl Widget for TextEditor {
         self.id = Some(context.widget().id());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        // since at least cushy#bcdd3302275c0a73ac8ed338b68111cacf0993ec 
+        // when we scroll via the mousewheel while the search panel is collapsing 
+        // clip_rect is temporariliy zero 
         if context.gfx.clip_rect().size == Size::ZERO {
             return;
         }
