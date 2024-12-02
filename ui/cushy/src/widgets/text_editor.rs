@@ -1182,11 +1182,11 @@ pub struct Gutter {
     line_height: Px,
     scale: Fraction,
     editor_id: WidgetId,
-    scroll: Dynamic<Point<UPx>>,
+    scroller: ScrollController,
 }
 
 impl Gutter {
-    pub fn new(doc: Dynamic<Document>, editor_id: WidgetId) -> Self {
+    pub fn new(doc: Dynamic<Document>, editor_id: WidgetId, scroller: ScrollController) -> Self {
         Self {
             doc,
             font_metrics: Metrics::new(15., 15.),
@@ -1197,7 +1197,7 @@ impl Gutter {
             font_stretch: Stretch::Normal,
             scale: Fraction::ZERO,
             editor_id,
-            scroll: Dynamic::new(Point::ZERO),
+            scroller,
         }
     }
 }
@@ -1213,13 +1213,14 @@ impl Widget for Gutter {
         }
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        let translation = self.scroller.scroll().get().y.into_signed();
         let colors = CodeEditorColors::get(TextEditorKind::Code, context);
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.gfx.scale())
             .round();
 
-        let first_line = (-context.gfx.translation().y / self.line_height) - 1;
+        let first_line = (translation / self.line_height) - 1;
         let last_line =
             first_line + (context.gfx.clip_rect().size.height.into_signed() / self.line_height) + 2;
 
@@ -1233,7 +1234,7 @@ impl Widget for Gutter {
         context.fill(colors.bg_gutter);
 
         for i in first_line..last_line {
-            let y = units::Px::new(i as _) * self.font_metrics.line_height;
+            let y = units::Px::new(i as _) * self.font_metrics.line_height - translation;
 
             let col = cushy::kludgine::cosmic_text::Color::rgba(
                 colors.fg_gutter.red(),
@@ -1332,6 +1333,7 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) -> EventHandling {
+        let translation = self.scroller.scroll().get().y.into_signed();
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.kludgine.scale())
@@ -1342,7 +1344,7 @@ impl Widget for Gutter {
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
 
-            let line = (location.y / editor.line_height).floor().get();
+            let line = ((location.y + translation)/ editor.line_height).floor().get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor.doc.lock().select_line(line);
@@ -1358,6 +1360,7 @@ impl Widget for Gutter {
         button: MouseButton,
         context: &mut cushy::context::EventContext<'_>,
     ) {
+        let translation = self.scroller.scroll().get().y.into_signed();
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_px(context.kludgine.scale())
@@ -1367,7 +1370,7 @@ impl Widget for Gutter {
             let c = context.for_other(&self.editor_id).unwrap();
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
-            let line = (location.y / editor.line_height).floor().get();
+            let line = ((location.y + translation) / editor.line_height).floor().get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor
@@ -1443,10 +1446,10 @@ impl CodeEditor {
 
         let editor = text_editor.make_with_tag(editor_tag).scrollable();
         
-        //let scroller = ScrollController::from(&editor);
+        let scroller = editor.controller.clone();
 
         let child =
-            Gutter::new(doc.clone(), editor_id)
+            Gutter::new(doc.clone(), editor_id, scroller)
                 .and(
                     editor.expand(),
                 )

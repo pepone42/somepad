@@ -17,8 +17,7 @@ use cushy::context::{AsEventContext, EventContext, LayoutContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Destination, Dynamic, DynamicReader, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetRef,
-    WidgetTag, HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
 };
 use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::widgets::{Custom, Scroll};
@@ -28,12 +27,33 @@ use cushy::{ConstraintLimit, Lazy};
 static SCROLLED_IDS: Lazy<Dynamic<HashMap<WidgetId, ScrollController>>> =
     Lazy::new(|| Dynamic::new(HashMap::new()));
 
+#[derive(Debug)]
+pub struct Scrollable {
+    child: WidgetRef,
+    pub controller: ScrollController,
+}
+
+impl Scrollable {
+    pub fn new(child: impl MakeWidget, controller: ScrollController) -> Self {
+        Self {
+            child: child.make_widget().into_ref(),
+            controller,
+        }
+    }
+}
+
+impl WrapperWidget for Scrollable {
+    fn child_mut(&mut self) -> &mut WidgetRef {
+        &mut self.child
+    }
+}
+
 pub trait WidgetScrollableExt {
-    fn scrollable(self) -> Self;
+    fn scrollable(self) -> Scrollable;
 }
 
 impl WidgetScrollableExt for WidgetInstance {
-    fn scrollable(self) -> Self {
+    fn scrollable(self) -> Scrollable {
         let (tag, id) = WidgetTag::new();
         let s = Scroll::new(self);
         let scroller = ScrollController::new(
@@ -41,8 +61,8 @@ impl WidgetScrollableExt for WidgetInstance {
             s.control_size().clone(),
             s.max_scroll().clone(),
         );
-        SCROLLED_IDS.lock().insert(id, scroller);
-        s.make_with_tag(tag)
+        SCROLLED_IDS.lock().insert(id, scroller.clone());
+        Scrollable::new(s.make_with_tag(tag), scroller)
     }
 }
 
