@@ -713,13 +713,12 @@ impl Widget for TextEditor {
         self.id = Some(context.widget().id());
     }
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
-        // since at least cushy#bcdd3302275c0a73ac8ed338b68111cacf0993ec 
-        // when we scroll via the mousewheel while the search panel is collapsing 
-        // clip_rect is temporariliy zero 
+        // since at least cushy#bcdd3302275c0a73ac8ed338b68111cacf0993ec
+        // when we scroll via the mousewheel while the search panel is collapsing
+        // clip_rect is temporariliy zero
         if context.gfx.clip_rect().size == Size::ZERO {
             return;
         }
-
 
         let colors = CodeEditorColors::get(self.kind, context);
 
@@ -1300,6 +1299,10 @@ impl Widget for Gutter {
                 cushy::kludgine::text::TextOrigin::TopLeft,
             );
         }
+
+        context.gfx.reset_text_attributes();
+        let font_size = context.get(&components::TextSize);
+        context.gfx.set_font_size(font_size);
     }
     fn layout(
         &mut self,
@@ -1372,7 +1375,9 @@ impl Widget for Gutter {
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
 
-            let line = ((location.y + translation)/ editor.line_height).floor().get();
+            let line = ((location.y + translation) / editor.line_height)
+                .floor()
+                .get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor.doc.lock().select_line(line);
@@ -1398,7 +1403,9 @@ impl Widget for Gutter {
             let c = context.for_other(&self.editor_id).unwrap();
             let guard = c.widget().lock();
             let editor = guard.downcast_ref::<TextEditor>().unwrap();
-            let line = ((location.y + translation) / editor.line_height).floor().get();
+            let line = ((location.y + translation) / editor.line_height)
+                .floor()
+                .get();
             let line = (line.max(0) as usize).min(editor.doc.get().rope.len_lines() - 1);
 
             editor
@@ -1410,13 +1417,16 @@ impl Widget for Gutter {
     }
 
     fn mouse_wheel(
-            &mut self,
-            device_id: cushy::window::DeviceId,
-            delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
-            phase: cushy::kludgine::app::winit::event::TouchPhase,
-            context: &mut EventContext<'_>,
-        ) -> EventHandling {
-            context.for_other(&self.scroller.scroll_id).unwrap().mouse_wheel(device_id, delta, phase)
+        &mut self,
+        device_id: cushy::window::DeviceId,
+        delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
+        phase: cushy::kludgine::app::winit::event::TouchPhase,
+        context: &mut EventContext<'_>,
+    ) -> EventHandling {
+        context
+            .for_other(&self.scroller.scroll_id)
+            .unwrap()
+            .mouse_wheel(device_id, delta, phase)
     }
 }
 
@@ -1438,10 +1448,13 @@ impl CodeEditor {
         let scroller = text_editor.controller.clone();
         let gutter = Gutter::new(doc.clone(), editor_id, scroller);
 
-        let child = (gutter.and(text_editor.expand()).into_columns().gutter(Px::new(1)))
-            .expand_vertically()
-            .and(search_bar)
-            .into_rows();
+        let child = (gutter
+            .and(text_editor.expand())
+            .into_columns()
+            .gutter(Px::new(1)))
+        .expand_vertically()
+        .and(search_bar)
+        .into_rows();
         Self {
             child: child.into_ref(),
             editor_id,

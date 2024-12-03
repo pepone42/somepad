@@ -63,6 +63,28 @@ impl WidgetScrollableExt for WidgetInstance {
             s.max_scroll().clone(),
             id,
         );
+
+        // Ugly hack to snap the scroll to the nearest pixel
+        // Whithout that, text can be blurry or have artefacts at 0.25, 0.5 and 0.75
+        let scroll_clamper = Dynamic::new(Point::new(UPx::ZERO, UPx::ZERO));
+        s.scroll
+            .for_each({
+                let scroll_clamper = scroll_clamper.clone();
+                move |s| {
+                    scroll_clamper.replace(s.round());
+                }
+            })
+            .persist();
+
+        scroll_clamper
+            .for_each_cloned({
+                let scroll = s.scroll.clone();
+                move |s| {
+                    scroll.replace(s);
+                }
+            })
+            .persist();
+
         SCROLLED_IDS.lock().insert(id, scroller.clone());
         Scrollable::new(s.make_with_tag(tag), scroller)
     }
