@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
-use cushy::kludgine::cosmic_text::rustybuzz::script::HAN;
 use cushy::value::{CallbackHandle, Dynamic, MapEach};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
@@ -27,7 +26,7 @@ use cushy::widgets::layers::Modal;
 
 use super::palette::PaletteState;
 use super::scroll::{ScrollController, WidgetScrollableExt};
-use cushy::widgets::{Custom, Scroll};
+use cushy::widgets::Custom;
 use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
@@ -1499,7 +1498,8 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
         });
     let action_enter = action_down.clone();
 
-    let search_bar = "Search: "
+    
+    "Search: "
         .and(
             Custom::new(
                 TextEditor::as_input(text_editor.search_term.clone())
@@ -1533,8 +1533,7 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
                 .with_enabled(search_match.clone()),
         )
         .into_columns()
-        .collapse_vertically(text_editor.search_panel_closed.clone());
-    search_bar
+        .collapse_vertically(text_editor.search_panel_closed.clone())
 }
 
 impl WrapperWidget for CodeEditor {

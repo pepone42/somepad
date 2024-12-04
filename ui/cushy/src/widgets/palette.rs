@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cushy::context::EventContext;
-use cushy::figures::units::{Lp, Px, UPx};
+use cushy::figures::units::{Lp, Px};
 use cushy::figures::{Point, Rect, ScreenScale, Size, Zero};
 use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::{Key, NamedKey};

@@ -18,12 +18,12 @@ use cushy::window::KeyEvent;
 
 use ndoc::Document;
 
-use crate::shortcut::{event_match, Shortcut};
+use crate::shortcut::event_match;
 use crate::CommandsRegistry;
 
 use super::editor_switcher::EditorSwitcher;
 use super::opened_editor::{OpenedEditor, ResizeHandle};
-use super::palette::{Palette, PaletteState};
+use super::palette::PaletteState;
 use super::side_bar::SideBar;
 
 #[derive(Debug)]
