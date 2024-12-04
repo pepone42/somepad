@@ -867,9 +867,7 @@ impl Widget for TextEditor {
             //     Size::new(Px::new(35), self.line_height + 20),
             // ),Color::WHITE).translate_by(Point::ZERO));
         }
-        context.gfx.reset_text_attributes();
-        let font_size = context.get(&components::TextSize);
-        context.gfx.set_font_size(font_size);
+        reset_text_attr(context);
     }
 
     fn layout(
@@ -898,9 +896,7 @@ impl Widget for TextEditor {
             context.gfx.size().into_signed(),
         ));
 
-        context.gfx.reset_text_attributes();
-        let font_size = context.get(&components::TextSize);
-        context.gfx.set_font_size(font_size);
+        reset_text_attr(context);
         Size::new(
             UPx::new(10000) + padding,
             UPx::new(height.ceil() as _) + padding,
@@ -1300,9 +1296,7 @@ impl Widget for Gutter {
             );
         }
 
-        context.gfx.reset_text_attributes();
-        let font_size = context.get(&components::TextSize);
-        context.gfx.set_font_size(font_size);
+        reset_text_attr(context);
     }
     fn layout(
         &mut self,
@@ -1338,9 +1332,7 @@ impl Widget for Gutter {
             .measure_text::<UPx>(&format!("{}", self.doc.get().rope.len_lines() + 1));
         let width = mesured_text.size.width;
 
-        context.gfx.reset_text_attributes();
-        let font_size = context.get(&components::TextSize);
-        context.gfx.set_font_size(font_size);
+        reset_text_attr(context);
 
         Size::new(
             width + padding,
@@ -1428,6 +1420,12 @@ impl Widget for Gutter {
             .unwrap()
             .mouse_wheel(device_id, delta, phase)
     }
+}
+
+fn reset_text_attr(context: &mut GraphicsContext<'_, '_, '_, '_>) {
+    context.gfx.reset_text_attributes();
+    let font_size = context.get(&components::TextSize);
+    context.gfx.set_font_size(font_size);
 }
 
 #[derive(Debug)]
