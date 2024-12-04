@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use cushy::context::{AsEventContext, EventContext, GraphicsContext, WidgetContext};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use cushy::kludgine::cosmic_text::rustybuzz::script::HAN;
 use cushy::value::{CallbackHandle, Dynamic, MapEach};
 
 use cushy::figures::units::{self, Lp, Px, UPx};
@@ -1415,10 +1416,8 @@ impl Widget for Gutter {
         phase: cushy::kludgine::app::winit::event::TouchPhase,
         context: &mut EventContext<'_>,
     ) -> EventHandling {
-        context
-            .for_other(&self.scroller.scroll_id)
-            .unwrap()
-            .mouse_wheel(device_id, delta, phase)
+        self.scroller.mouse_wheel(device_id, delta, phase, context);
+        HANDLED
     }
 }
 

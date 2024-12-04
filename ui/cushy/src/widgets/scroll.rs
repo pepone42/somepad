@@ -13,7 +13,7 @@ use cushy::kludgine::shapes::Shape;
 use cushy::kludgine::Color;
 
 use cushy::animation::{AnimationHandle, AnimationTarget, IntoAnimate, Spawn, ZeroToOne};
-use cushy::context::{AsEventContext, EventContext, LayoutContext};
+use cushy::context::{AsEventContext, EventContext, GraphicsContext, LayoutContext, WidgetContext};
 use cushy::styles::components::{EasingIn, EasingOut, LineHeight};
 use cushy::value::{Destination, Dynamic, DynamicReader, Source};
 use cushy::widget::{
@@ -74,7 +74,7 @@ pub struct ScrollController {
     scroll: Dynamic<Point<UPx>>,
     control_size: DynamicReader<Size<UPx>>,
     max_scroll: DynamicReader<Point<UPx>>,
-    pub scroll_id: WidgetId,
+    scroll_id: WidgetId,
 }
 #[allow(dead_code)]
 impl ScrollController {
@@ -144,6 +144,19 @@ impl ScrollController {
             self.scroll.replace(clamped);
         }
         (clamped, max_scroll)
+    }
+
+    pub fn mouse_wheel(
+        &mut self,
+        device_id: cushy::window::DeviceId,
+        delta: cushy::kludgine::app::winit::event::MouseScrollDelta,
+        phase: cushy::kludgine::app::winit::event::TouchPhase,
+        context: &mut EventContext<'_>,
+    ) {
+        context
+            .for_other(&self.scroll_id)
+            .unwrap()
+            .mouse_wheel(device_id, delta, phase);
     }
 }
 
@@ -819,10 +832,9 @@ pub trait ContextScroller {
     fn scroll_to(&self, scroll: Point<UPx>);
     fn scroll(&self) -> Dynamic<Point<UPx>>;
     fn make_region_visible(&self, region: Rect<Px>);
-    //fn get_scroll_controller(&self) -> Option<Dynamic<ScrollController>>;
 }
 
-fn get_parent_scroller(context: &EventContext<'_>) -> Option<ScrollController> {
+fn get_parent_scroller(context: &WidgetContext<'_>) -> Option<ScrollController> {
     let mut parent = context.widget().parent();
     while let Some(widget) = parent {
         if SCROLLED_IDS.get().contains_key(&widget.id()) {
@@ -834,7 +846,7 @@ fn get_parent_scroller(context: &EventContext<'_>) -> Option<ScrollController> {
     None
 }
 
-impl ContextScroller for EventContext<'_> {
+impl ContextScroller for WidgetContext<'_> {
     fn scroll_to(&self, scroll: Point<UPx>) {
         if let Some(controller) = get_parent_scroller(self) {
             controller.scroll.replace(scroll);
