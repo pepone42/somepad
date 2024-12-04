@@ -122,20 +122,6 @@ impl ScrollController {
         self.scroll.clone()
     }
 
-    fn constrained_scroll(scroll: Point<UPx>, max_scroll: Point<UPx>) -> Point<UPx> {
-        scroll.max(max_scroll).min(Point::default())
-    }
-
-    fn constrain_scroll(&mut self) -> (Point<UPx>, Point<UPx>) {
-        let scroll = self.scroll.get();
-        let max_scroll = self.max_scroll.get();
-        let clamped = Self::constrained_scroll(scroll, max_scroll);
-        if clamped != scroll {
-            self.scroll.replace(clamped);
-        }
-        (clamped, max_scroll)
-    }
-
     pub fn mouse_wheel(
         &mut self,
         device_id: cushy::window::DeviceId,
