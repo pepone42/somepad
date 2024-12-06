@@ -1,5 +1,5 @@
 use cushy::{
-    figures::{units::Px, IntoSigned, IntoUnsigned, Point, ScreenScale, Size, Zero},
+    figures::{units::Px, IntoSigned, IntoUnsigned, Point, Round, ScreenScale, Size, Zero},
     kludgine::{
         shapes::{PathBuilder, StrokeOptions},
         text::Text,
@@ -32,7 +32,8 @@ impl StatusBar {
 impl Widget for StatusBar {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
         context.apply_current_font_settings();
-
+        let bg = context.get(&components::WidgetBackground);
+        context.fill(bg);
         let border_color = context.get(&components::OutlineColor);
         let width = context.gfx.clip_rect().size.width.into_signed();
         context.gfx.draw_shape(
@@ -95,7 +96,7 @@ impl Widget for StatusBar {
         let mtext = context.gfx.measure_text(text);
         context
             .gfx
-            .draw_text(text.translate_by(Point::new(s.size.width - mtext.size.width, Px::ZERO)));
+            .draw_text(text.translate_by(Point::new(s.size.width - mtext.size.width, Px::ZERO).round()));
     }
     fn layout(
         &mut self,

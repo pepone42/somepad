@@ -41,12 +41,40 @@ impl WrapperWidget for Scrollable {
 
 pub trait WidgetScrollableExt {
     fn scrollable(self) -> Scrollable;
+    fn scrollable_horizontally(self) -> Scrollable;
+    fn scrollable_vertically(self) -> Scrollable;
 }
 
 impl WidgetScrollableExt for WidgetInstance {
     fn scrollable(self) -> Scrollable {
         let (tag, id) = WidgetTag::new();
         let s = Scroll::new(self);
+        let scroller = ScrollController::new(
+            s.scroll.clone(),
+            s.control_size().clone(),
+            s.max_scroll().clone(),
+            id,
+        );
+
+        SCROLLED_IDS.lock().insert(id, scroller.clone());
+        Scrollable::new(s.make_with_tag(tag), scroller)
+    }
+    fn scrollable_horizontally(self) -> Scrollable {
+        let (tag, id) = WidgetTag::new();
+        let s = Scroll::horizontal(self);
+        let scroller = ScrollController::new(
+            s.scroll.clone(),
+            s.control_size().clone(),
+            s.max_scroll().clone(),
+            id,
+        );
+
+        SCROLLED_IDS.lock().insert(id, scroller.clone());
+        Scrollable::new(s.make_with_tag(tag), scroller)
+    }
+    fn scrollable_vertically(self) -> Scrollable {
+        let (tag, id) = WidgetTag::new();
+        let s = Scroll::vertical(self);
         let scroller = ScrollController::new(
             s.scroll.clone(),
             s.control_size().clone(),

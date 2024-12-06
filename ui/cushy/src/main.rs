@@ -10,6 +10,7 @@ use cushy::figures::{Size, Zero};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::widgets::layers::Modal;
+use cushy::widgets::scroll::ScrollBarThickness;
 use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
@@ -24,8 +25,10 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px, UPx};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::{self};
-use cushy::styles::{ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, ThemePair};
+use cushy::styles::components::{self, FontFamily, FontWeight};
+use cushy::styles::{
+    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList, ThemePair, Weight,
+};
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
 
@@ -449,7 +452,9 @@ fn main() -> anyhow::Result<()> {
     cmd_reg
         .view
         .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
-    cmd_reg.view.insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
+    cmd_reg
+        .view
+        .insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
@@ -502,7 +507,12 @@ fn main() -> anyhow::Result<()> {
         .and(modal.clone())
         .into_layers()
         .themed(theme)
-        .with(&components::TextSize, Lp::points(10))
+        .with(&components::BaseTextSize, Lp::points(11))
+        .with(&components::FontWeight, Weight::LIGHT)
+        .with(
+            &components::FontFamily,
+            FontFamilyList::from(FamilyOwned::Name("Segoe UI".to_string())),
+        )
         .with(
             &components::CornerRadius,
             CornerRadii::from(Dimension::Lp(Lp::points(0))),

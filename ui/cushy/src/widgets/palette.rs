@@ -14,6 +14,7 @@ use cushy::widget::{
 
 use cushy::context;
 use cushy::widgets::layers::Modal;
+use cushy::widgets::scroll::ScrollBarThickness;
 use cushy::widgets::{Custom, Scroll};
 use cushy::window::KeyEvent;
 use ndoc::Document;
@@ -22,6 +23,7 @@ use crate::shortcut::{event_match, Shortcut};
 
 use super::filtered_list::{Filter, FilteredList};
 use super::scroll::ContextScroller;
+use super::scroll::WidgetScrollableExt;
 use super::text_editor::TextEditor;
 
 #[derive(Clone)]
@@ -72,12 +74,18 @@ impl Palette {
                 .description
                 .clone()
                 .and(
-                    Custom::new(Scroll::horizontal(TextEditor::as_input(input.clone())))
-                        .on_mounted(move |c| c.focus()),
+                    Custom::new(
+                        TextEditor::as_input(input.clone())
+                            .make_widget()
+                            .scrollable_horizontally()
+                            .with(&ScrollBarThickness, Lp::points(0)),
+                    )
+                    .on_mounted(move |c| c.focus()),
                 )
                 .and(
-                    Scroll::vertical(filtered_list.make_with_tag(filter_tag))
-                        //TODO .with_scrollbars_visible()
+                    filtered_list
+                        .make_with_tag(filter_tag)
+                        .scrollable_vertically()
                         .expand(),
                 )
                 .into_rows()

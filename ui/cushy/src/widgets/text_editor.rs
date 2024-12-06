@@ -23,6 +23,7 @@ use cushy::widget::{
     HANDLED, IGNORED,
 };
 use cushy::widgets::layers::Modal;
+use cushy::widgets::scroll::ScrollBarThickness;
 
 use super::palette::PaletteState;
 use super::scroll::{ScrollController, WidgetScrollableExt};
@@ -1504,6 +1505,7 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
             Custom::new(
                 TextEditor::as_input(text_editor.search_term.clone())
                     .make_with_tag(search_tag)
+                    .scrollable_horizontally().with(&ScrollBarThickness, Lp::points(0))
                     .width(Lp::cm(5)),
             )
             .on_keyboard_input(move |_, k, _, _| {
