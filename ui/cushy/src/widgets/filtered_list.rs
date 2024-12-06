@@ -188,7 +188,6 @@ impl Widget for FilteredList {
             .into_px(context.gfx.scale())
             .round();
 
-        context.apply_current_font_settings();
         context.redraw_when_changed(&self.filter);
 
         let surface_color = context.get(&components::WidgetBackground);
@@ -255,7 +254,6 @@ impl Widget for FilteredList {
 
             y += h;
         }
-
         // let line_height = context.gfx.line_height().into_px(context.gfx.scale());
         // if let Some(idx) = self.filter.get().selected_idx.get() {
         //     let y = line_height * Px::new(idx as i32);
@@ -281,15 +279,18 @@ impl Widget for FilteredList {
             .into_upx(context.gfx.scale())
             .round()
             * 2;
-        context.apply_current_font_settings();
 
-        let mut y = UPx::ZERO;
         let mut w = UPx::ZERO;
+        let line_height = context.gfx.line_height().into_upx(context.gfx.scale());
+        let nb_item = self.filter.get().filtered_items.get().len();
+        let height = UPx::new(nb_item as u32) * line_height + padding;
+
+        // TODO: cache the width
         for item in self.filter.get().filtered_items.get().iter() {
             //let text = format!("{}*", item.text);
             let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
             let h = context.gfx.measure_text(text).line_height;
-            y += h;
+
             if context.gfx.measure_text(text).size.width > w {
                 w = context.gfx.measure_text(text).size.width;
             }
@@ -299,7 +300,7 @@ impl Widget for FilteredList {
         } else {
             w
         };
-        Size::new(w, y + padding)
+        Size::new(w, height + padding)
     }
     fn hit_test(
         &mut self,

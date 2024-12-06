@@ -83,20 +83,18 @@ impl Palette {
                     .on_mounted(move |c| c.focus()),
                 )
                 .and(
-                    filtered_list
+                    filtered_list.width(Lp::new(550))
                         .make_with_tag(filter_tag)
                         .scrollable_vertically()
-                        .expand(),
+                        .expand_vertically()
+                        .height(Lp::new(500))
+                        ,
                 )
                 .into_rows()
                 .width(Lp::new(550))
-                .height(Lp::new(250)), //Lp::ZERO..)
+                //.height(Lp::new(250)..Lp::new(500)), //Lp::ZERO..)
         )
         .on_redraw(|c| {
-            c.apply_current_font_settings();
-
-            c.gfx.set_font_family(cushy::styles::FamilyOwned::SansSerif);
-            c.gfx.set_font_size(Px::new(12));
             let bg_color = c.get(&cushy::styles::components::SurfaceColor);
             c.gfx.fill(bg_color);
         })
