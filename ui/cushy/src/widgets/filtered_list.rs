@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use cushy::{
     figures::{
@@ -75,9 +75,10 @@ impl Filter {
                             .get()
                             .iter()
                             .filter(|i| !i.excluded)
+                            .enumerate()
                             .nth(initial_selected_idx)
                         {
-                            *selected_idx.lock() = Some(i.index);
+                            *selected_idx.lock() = Some(i.0);
                         } else {
                             *selected_idx.lock() = None;
                         }
@@ -95,11 +96,10 @@ impl Filter {
             })
             .into_reader();
 
-        let selected_item = items
-            .with_clone(|items| {
-                selected_idx.map_each(move |selected_idx| {
-                    selected_idx.and_then(|s| Some(items.get()[s].clone()))
-                })
+        let selected_item = selected_idx
+            .map_each({
+                let filtered_items = filtered_items.clone();
+                move |selected_idx| selected_idx.and_then(|s| Some(filtered_items.get()[s].clone()))
             })
             .into_reader();
 
@@ -112,33 +112,26 @@ impl Filter {
     }
 
     pub fn next(&mut self) {
-        let items = self.items.get();
+        let items = self.filtered_items.get();
         let mut idx = self.selected_idx.get();
         if idx.is_none() {
             return;
         }
-        loop {
-            let i = idx.unwrap();
-            idx = Some((i + 1) % items.len());
-            if !items[idx.unwrap()].excluded {
-                break;
-            }
-        }
+
+        let i = idx.unwrap();
+        idx = Some((i + 1) % items.len());
+
         *self.selected_idx.lock() = idx;
     }
     pub fn prev(&mut self) {
-        let items = self.items.get();
+        let items = self.filtered_items.get();
         let idx = self.selected_idx.clone();
         if idx.get().is_none() {
             return;
         }
-        loop {
-            let i = idx.get().unwrap();
-            *idx.lock() = Some((i + items.len() - 1) % items.len());
-            if !items[idx.get().unwrap()].excluded {
-                break;
-            }
-        }
+
+        let i = idx.get().unwrap();
+        *idx.lock() = Some((i + items.len() - 1) % items.len());
     }
 }
 
@@ -223,8 +216,8 @@ impl Widget for FilteredList {
             )
         }
 
-        for item in self.filter.get().filtered_items.get().iter() {
-            if selected_idx == Some(item.index) {
+        for (i,item) in self.filter.get().filtered_items.get().iter().enumerate() {
+            if selected_idx == Some(i) {
                 context.gfx.draw_shape(
                     Shape::filled_rect(
                         Rect::new(
@@ -239,7 +232,7 @@ impl Widget for FilteredList {
                     .translate_by(Point::new(padding, y + padding)),
                 )
             }
-            let color = if selected_idx == Some(item.index) {
+            let color = if selected_idx == Some(i) {
                 fg_selected_color
             } else if self.hovered_idx.get() == Some(item.index) {
                 fg_hovered_color
