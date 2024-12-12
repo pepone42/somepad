@@ -313,6 +313,22 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
     },
 };
 
+const CHANGE_LANGUAGE: ViewCommand = ViewCommand {
+    name: "Change Language",
+    id: "editor.change_language",
+    action: |_id, v, c| {
+        let languages: Vec<String> = ndoc::syntax::SYNTAXSET.syntaxes().iter().map(|l| l.name.clone() ).collect();
+        let doc = v.doc.clone();
+        v.palette()
+            .description("Choose language")
+            .items(languages)
+            .accept(move |_, _, val| {
+                doc.lock().update_language(&val);
+            })
+            .show();
+    },
+};
+
 const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
     name: "Show All Commands",
     id: "window.show_all_commands",
@@ -456,6 +472,7 @@ fn main() -> anyhow::Result<()> {
         .view
         .insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
     cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
+    cmd_reg.view.insert(CHANGE_LANGUAGE.id, CHANGE_LANGUAGE);
     cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
 
     for (command_id, shortcut) in settings

@@ -365,6 +365,13 @@ impl Document {
         }
     }
 
+    pub fn update_language(&mut self, language: &str) {
+        if let Some(s) = SYNTAXSET.find_syntax_by_name(language) {
+            self.file_info.syntax = s;
+            self.update_highlight_from(0);
+        }
+    }
+
     /// Update the theme of the document
     pub fn update_theme(&self, theme: &str) {
         if let Some(tx) = self.message_sender.as_ref() {
