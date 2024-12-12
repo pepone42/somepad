@@ -876,6 +876,8 @@ impl Widget for TextEditor {
         _available_space: Size<cushy::ConstraintLimit>,
         context: &mut cushy::context::LayoutContext<'_, '_, '_, '_>,
     ) -> Size<UPx> {
+        context.invalidate_when_changed(&self.doc);
+
         let padding = context
             .get(&components::IntrinsicPadding)
             .into_upx(context.gfx.scale())

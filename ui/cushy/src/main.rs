@@ -19,6 +19,8 @@ use widgets::status_bar::StatusBar;
 use widgets::text_editor::{CodeEditor, TextEditor};
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use cushy::figures::units::{Lp, Px, UPx};
@@ -26,7 +28,8 @@ use cushy::figures::units::{Lp, Px, UPx};
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components;
 use cushy::styles::{
-    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList, ThemePair, Weight,
+    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList,
+    ThemePair, Weight,
 };
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
@@ -316,7 +319,11 @@ const CHANGE_LANGUAGE: ViewCommand = ViewCommand {
     name: "Change Language",
     id: "editor.change_language",
     action: |_id, v, _c| {
-        let languages: Vec<String> = ndoc::syntax::SYNTAXSET.syntaxes().iter().map(|l| l.name.clone() ).collect();
+        let languages: Vec<String> = ndoc::syntax::SYNTAXSET
+            .syntaxes()
+            .iter()
+            .map(|l| l.name.clone())
+            .collect();
         let doc = v.doc.clone();
         v.palette()
             .description("Choose language")
@@ -499,6 +506,9 @@ fn main() -> anyhow::Result<()> {
 
     ndoc::Document::init_highlighter();
     let doc = Dynamic::new(if let Some(path) = std::env::args().nth(1) {
+        if !Path::new(&path).exists() {
+            File::create_new(&path)?;
+        }
         ndoc::Document::from_file(path)?
     } else {
         ndoc::Document::default()
