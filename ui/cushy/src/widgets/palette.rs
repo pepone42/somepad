@@ -15,7 +15,7 @@ use cushy::widget::{
 use cushy::context;
 use cushy::widgets::layers::Modal;
 use cushy::widgets::scroll::ScrollBarThickness;
-use cushy::widgets::{Custom, Scroll};
+use cushy::widgets::Custom;
 use cushy::window::KeyEvent;
 use ndoc::Document;
 

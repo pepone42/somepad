@@ -10,7 +10,6 @@ use cushy::figures::{Size, Zero};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
 use cushy::widgets::layers::Modal;
-use cushy::widgets::scroll::ScrollBarThickness;
 use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
@@ -25,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px, UPx};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components::{self, FontFamily, FontWeight};
+use cushy::styles::components;
 use cushy::styles::{
     ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList, ThemePair, Weight,
 };
@@ -316,7 +315,7 @@ const CHANGE_THEME: WindowCommand = WindowCommand {
 const CHANGE_LANGUAGE: ViewCommand = ViewCommand {
     name: "Change Language",
     id: "editor.change_language",
-    action: |_id, v, c| {
+    action: |_id, v, _c| {
         let languages: Vec<String> = ndoc::syntax::SYNTAXSET.syntaxes().iter().map(|l| l.name.clone() ).collect();
         let doc = v.doc.clone();
         v.palette()

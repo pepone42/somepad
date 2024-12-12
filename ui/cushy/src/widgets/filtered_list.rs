@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::fmt::Debug;
 
 use cushy::{
     figures::{
@@ -26,7 +26,6 @@ pub struct FilterItem {
 
 #[derive(Debug, Clone)]
 pub struct Filter {
-    items: Dynamic<Vec<FilterItem>>,
     pub selected_idx: Dynamic<Option<usize>>,
     pub selected_item: DynamicReader<Option<FilterItem>>,
     pub filtered_items: DynamicReader<Vec<FilterItem>>,
@@ -104,7 +103,6 @@ impl Filter {
             .into_reader();
 
         Filter {
-            items,
             selected_idx,
             selected_item,
             filtered_items,
@@ -280,9 +278,7 @@ impl Widget for FilteredList {
 
         // TODO: cache the width
         for item in self.filter.get().filtered_items.get().iter() {
-            //let text = format!("{}*", item.text);
             let text = Text::<UPx>::new(&item.text, cushy::kludgine::Color::WHITE);
-            let h = context.gfx.measure_text(text).line_height;
 
             if context.gfx.measure_text(text).size.width > w {
                 w = context.gfx.measure_text(text).size.width;

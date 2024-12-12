@@ -1,7 +1,6 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt::format,
     fs,
     io::{Read, Result, Write},
     path::{Path, PathBuf},
@@ -115,7 +114,6 @@ fn new_doc_id() {
 }
 
 enum BackgroundWorkerMessage {
-    Stop,
     RegisterDocument(usize, Box<dyn Send + Fn()>),
     UpdateBuffer(
         usize,
@@ -132,7 +130,6 @@ enum BackgroundWorkerMessage {
 }
 
 struct HighlighterState<'a> {
-    doc_id: usize,
     syntax: &'a SyntaxReference,
     state_cache: StateCache,
     current_index: usize,
@@ -143,9 +140,8 @@ struct HighlighterState<'a> {
 }
 
 impl<'a> HighlighterState<'a> {
-    fn new(doc_id: usize) -> Self {
+    fn new() -> Self {
         Self {
-            doc_id,
             syntax: SYNTAXSET.find_syntax_plain_text(),
             state_cache: StateCache::new(),
             current_index: 0,
@@ -290,7 +286,7 @@ impl Document {
                         )) => {
                             let state = highlight_state
                                 .entry(id)
-                                .or_insert(HighlighterState::new(id));
+                                .or_insert(HighlighterState::new());
 
                             state.rope = r;
                             state.tab_len = tab_len;
@@ -310,7 +306,6 @@ impl Document {
                                 state.update_theme(&theme);
                             }
                         }
-                        Ok(BackgroundWorkerMessage::Stop) => return,
                         _ => (),
                     }
                     if highlight_state
@@ -583,7 +578,7 @@ impl Document {
     }
 
     fn insert_at_selection(&mut self, input: &str, selection: Selection) {
-        self.insert_at_position(&input, selection.start(), selection.end());
+        self.insert_at_position(input, selection.start(), selection.end());
     }
 
     /// Modification of the document content are not saved to disk
@@ -1678,10 +1673,6 @@ fn line_len_char(rope: &RopeSlice, line_idx: usize) -> usize {
     r.len() - linefeed_len
 }
 
-fn line_len_char_full(rope: &RopeSlice, line_idx: usize) -> usize {
-    rope.line_to_char(line_idx + 1) - rope.line_to_char(line_idx)
-}
-
 fn position_to_char(slice: &RopeSlice, position: Position) -> usize {
     let l = slice.line_to_char(position.line);
     l + grapheme_to_char(&slice.line(position.line), position.column)
@@ -1733,11 +1724,6 @@ fn char_to_position(rope: &RopeSlice, char_idx: usize) -> Position {
 fn line_len_grapheme(rope: &RopeSlice, line_idx: usize) -> usize {
     //line_len_char(rope, line_idx)
     char_to_grapheme(&rope.line(line_idx), line_len_char(rope, line_idx))
-}
-
-fn line_len_grapheme_full(rope: &RopeSlice, line_idx: usize) -> usize {
-    //line_len_char(rope, line_idx)
-    char_to_grapheme(&rope.line(line_idx), line_len_char_full(rope, line_idx))
 }
 
 // #[test]
