@@ -98,7 +98,7 @@ impl Filter {
         let selected_item = selected_idx
             .map_each({
                 let filtered_items = filtered_items.clone();
-                move |selected_idx| selected_idx.and_then(|s| Some(filtered_items.get()[s].clone()))
+                move |selected_idx| selected_idx.and_then(|s| filtered_items.get().get(s).cloned())
             })
             .into_reader();
 
