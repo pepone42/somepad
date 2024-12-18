@@ -927,10 +927,17 @@ impl Widget for TextEditor {
         ));
 
         reset_text_attr(context);
+        if self.kind == TextEditorKind::Code {
+        Size::new(
+            UPx::new(10000) + padding,
+            UPx::new(height.ceil() as _).max(context.gfx.clip_rect().size.height) + padding,
+        )
+    } else {
         Size::new(
             UPx::new(10000) + padding,
             UPx::new(height.ceil() as _) + padding,
         )
+    }
     }
 
     fn accept_focus(&mut self, _context: &mut cushy::context::EventContext<'_>) -> bool {
