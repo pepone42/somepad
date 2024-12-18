@@ -745,10 +745,11 @@ impl Widget for TextEditor {
         context.redraw_when_changed(&self.current_words_found);
 
         if self.kind == TextEditorKind::Input && self.focused.get() {
+            let translation = context.gfx.translation();
             let focus_ring_color = context.get(&components::HighlightColor);
             let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size).into_signed();
             context.gfx.draw_shape(
-                Shape::stroked_rect(clip_rect, focus_ring_color).translate_by(Point::ZERO),
+                Shape::stroked_rect(clip_rect, focus_ring_color).translate_by(Point::new(-translation.x, Px::ZERO)),
             );
         }
 
