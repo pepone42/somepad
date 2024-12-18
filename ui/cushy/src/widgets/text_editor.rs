@@ -48,6 +48,7 @@ pub struct CodeEditorColors {
     bg_gutter: Color,
     bg_find_hightlight: Color,
     fg_find_hightlight: Option<Color>,
+    current_ling_highlight: Color,
 }
 
 impl CodeEditorColors {
@@ -101,6 +102,11 @@ impl CodeEditorColors {
                     .settings
                     .find_highlight_foreground
                     .map(|c| Color::new(c.r, c.g, c.b, c.a)),
+                current_ling_highlight: theme
+                    .settings
+                    .line_highlight
+                    .map(|c| Color::new(c.r, c.g, c.b, c.a))
+                    .unwrap_or(context.get(&SelectionBackgroundColor)),
             }
         } else {
             CodeEditorColors {
@@ -113,6 +119,7 @@ impl CodeEditorColors {
                 bg_gutter: Color::WHITE,
                 bg_find_hightlight: context.get(&components::HighlightColor),
                 fg_find_hightlight: Some(context.get(&components::TextColor)),
+                current_ling_highlight: context.get(&components::HighlightColor),
             }
         }
     }
@@ -761,6 +768,23 @@ impl Widget for TextEditor {
         context.fill(colors.bg);
         let doc = self.doc.get();
 
+        // highlight current line
+        if self.kind == TextEditorKind::Code && doc.selections.len() == 1 {
+            let line = doc.selections[0].head.line;
+            let y = units::Px::new(line as _) * self.line_height;
+            let rect = Rect::new(
+                Point::new(Px::ZERO, y),
+                Size::new(
+                    context.gfx.clip_rect().size.width.into_signed(),
+                    self.line_height,
+                ),
+            );
+            context.gfx.draw_shape(
+                Shape::filled_rect(rect, colors.current_ling_highlight)
+                    .translate_by(Point::new(padding, padding)),
+            );
+        }
+
         // TODO: cache layouts
         let buffers = self
             .doc
@@ -868,6 +892,7 @@ impl Widget for TextEditor {
             //     Size::new(Px::new(35), self.line_height + 20),
             // ),Color::WHITE).translate_by(Point::ZERO));
         }
+
         reset_text_attr(context);
     }
 
@@ -1501,13 +1526,13 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
         });
     let action_enter = action_down.clone();
 
-    
     "Search: "
         .and(
             Custom::new(
                 TextEditor::as_input(text_editor.search_term.clone())
                     .make_with_tag(search_tag)
-                    .scrollable_horizontally().with(&ScrollBarThickness, Lp::points(0))
+                    .scrollable_horizontally()
+                    .with(&ScrollBarThickness, Lp::points(0))
                     .width(Lp::cm(5)),
             )
             .on_keyboard_input(move |_, k, _, _| {
