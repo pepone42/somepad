@@ -771,6 +771,7 @@ impl Widget for TextEditor {
         // highlight current line
         if self.kind == TextEditorKind::Code && doc.selections.len() == 1 {
             let line = doc.selections[0].head.line;
+            let translation = context.gfx.translation();
             let y = units::Px::new(line as _) * self.line_height;
             let rect = Rect::new(
                 Point::new(Px::ZERO, y),
@@ -781,7 +782,7 @@ impl Widget for TextEditor {
             );
             context.gfx.draw_shape(
                 Shape::filled_rect(rect, colors.current_ling_highlight)
-                    .translate_by(Point::new(padding, padding)),
+                    .translate_by(Point::new(padding - translation.x, padding)),
             );
         }
 
