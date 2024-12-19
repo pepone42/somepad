@@ -186,6 +186,27 @@ impl ClickInfo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SearchPanelOption {
+    text: Dynamic<Document>,
+    closed: Dynamic<bool>,
+    id: Option<WidgetId>,
+    matches: Dynamic<Vec<(Position, Position)>>,
+    selected_match: Dynamic<usize>,
+}
+
+impl SearchPanelOption {
+    pub fn new() -> Self {
+        Self {
+            text: Dynamic::new(Document::default()),
+            closed: Dynamic::new(true),
+            id: None,
+            matches: Dynamic::new(Vec::new()),
+            selected_match: Dynamic::new(0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextEditorKind {
     Code,
@@ -208,18 +229,18 @@ pub struct TextEditor {
     click_info: Dynamic<ClickInfo>,
     focused: Dynamic<bool>,
     kind: TextEditorKind,
-    search_term: Dynamic<Document>,
+    search_panel: SearchPanelOption,
+
     current_word: Dynamic<String>,
     foreach_handles: Vec<CallbackHandle>,
-    items_matches: Dynamic<Vec<(Position, Position)>>,
+
     current_words_found: Dynamic<Vec<(Position, Position)>>,
-    selected_match: Dynamic<usize>,
+
     should_refocus: Dynamic<bool>,
     page_len: usize,
-    search_panel_closed: Dynamic<bool>,
+
     modal: Modal,
     id: Option<WidgetId>,
-    search_bar_id: Option<WidgetId>,
 }
 
 impl TextEditor {
@@ -245,8 +266,8 @@ impl TextEditor {
             d.rope.slice(word_start..word_end).to_string()
         });
 
-        editor.items_matches = editor.doc.with_clone(|doc| {
-            editor.search_term.map_each(move |search_term| {
+        editor.search_panel.matches = editor.doc.with_clone(|doc| {
+            editor.search_panel.text.map_each(move |search_term| {
                 let mut items = Vec::new();
                 let mut idx = Position::new(0, 0);
                 let search_term = search_term.rope.to_string();
@@ -272,18 +293,24 @@ impl TextEditor {
         // });
 
         editor.foreach_handles.push(
-            (&editor.doc, &editor.items_matches, &editor.should_refocus).with_clone(
-                |(doc, items_found, should_refocus)| {
-                    editor.selected_match.for_each_cloned(move |seach_idx| {
-                        if items_found.get().is_empty() {
-                            return;
-                        }
-                        let (head, tail) = items_found.get()[seach_idx];
-                        doc.lock().set_main_selection(head, tail);
-                        should_refocus.replace(true);
-                    })
-                },
-            ),
+            (
+                &editor.doc,
+                &editor.search_panel.matches,
+                &editor.should_refocus,
+            )
+                .with_clone(|(doc, items_found, should_refocus)| {
+                    editor
+                        .search_panel
+                        .selected_match
+                        .for_each_cloned(move |seach_idx| {
+                            if items_found.get().is_empty() {
+                                return;
+                            }
+                            let (head, tail) = items_found.get()[seach_idx];
+                            doc.lock().set_main_selection(head, tail);
+                            should_refocus.replace(true);
+                        })
+                }),
         );
 
         editor
@@ -311,18 +338,19 @@ impl TextEditor {
             click_info: Dynamic::new(ClickInfo::default()),
             focused: Dynamic::new(false),
             kind: TextEditorKind::Code,
-            search_term: Dynamic::new(Document::default()),
+
             current_word: Dynamic::new(String::new()),
             foreach_handles: Vec::new(),
-            items_matches: Dynamic::new(Vec::new()),
+
             current_words_found: Dynamic::new(Vec::new()),
-            selected_match: Dynamic::new(0),
+
             should_refocus: Dynamic::new(false),
             page_len: 0,
-            search_panel_closed: Dynamic::new(true),
+
             modal,
             id: None,
-            search_bar_id: None,
+
+            search_panel: SearchPanelOption::new(),
         }
     }
 
@@ -404,19 +432,19 @@ impl TextEditor {
     }
 
     pub fn toggle_search_panel(&self, context: &mut EventContext) {
-        self.search_panel_closed.toggle();
-        if self.search_panel_closed.get() {
+        self.search_panel.closed.toggle();
+        if self.search_panel.closed.get() {
             context.for_other(&self.id.unwrap()).unwrap().focus();
         } else {
             context
-                .for_other(&self.search_bar_id.unwrap())
+                .for_other(&self.search_panel.id.unwrap())
                 .unwrap()
                 .focus();
         }
     }
 
     pub fn close_search_panel(&self, context: &mut EventContext) {
-        self.search_panel_closed.replace(true);
+        self.search_panel.closed.replace(true);
         context.for_other(&self.id.unwrap()).unwrap().focus();
     }
 
@@ -453,10 +481,11 @@ impl TextEditor {
         let mut buffer = Buffer::new(&mut FONT_SYSTEM.lock().unwrap(), self.font_metrics);
         let mut spans = Vec::new();
 
-        if colors.fg_find_hightlight.is_some() && !self.search_panel_closed.get() {
+        if colors.fg_find_hightlight.is_some() && !self.search_panel.closed.get() {
             let fg_find_hightlight = colors.fg_find_hightlight.unwrap();
             let find_aera = self
-                .items_matches
+                .search_panel
+                .matches
                 .get()
                 .iter()
                 .flat_map(|(start, end)| {
@@ -749,7 +778,8 @@ impl Widget for TextEditor {
             let focus_ring_color = context.get(&components::HighlightColor);
             let clip_rect = Rect::new(Point::ZERO, context.gfx.clip_rect().size).into_signed();
             context.gfx.draw_shape(
-                Shape::stroked_rect(clip_rect, focus_ring_color).translate_by(Point::new(-translation.x, Px::ZERO)),
+                Shape::stroked_rect(clip_rect, focus_ring_color)
+                    .translate_by(Point::new(-translation.x, Px::ZERO)),
             );
         }
 
@@ -770,7 +800,10 @@ impl Widget for TextEditor {
         let doc = self.doc.get();
 
         // highlight current line
-        if self.kind == TextEditorKind::Code && doc.selections.len() == 1 && doc.selections[0].is_empty() {
+        if self.kind == TextEditorKind::Code
+            && doc.selections.len() == 1
+            && doc.selections[0].is_empty()
+        {
             let line = doc.selections[0].head.line;
             let translation = context.gfx.translation();
             let y = units::Px::new(line as _) * self.line_height;
@@ -815,8 +848,8 @@ impl Widget for TextEditor {
         }
 
         // draw search items
-        if !self.search_panel_closed.get() {
-            for path in self.get_items_shapes(self.items_matches.clone(), &buffers) {
+        if !self.search_panel.closed.get() {
+            for path in self.get_items_shapes(self.search_panel.matches.clone(), &buffers) {
                 let bg_color = colors.bg_find_hightlight;
 
                 context.gfx.draw_shape(
@@ -928,16 +961,16 @@ impl Widget for TextEditor {
 
         reset_text_attr(context);
         if self.kind == TextEditorKind::Code {
-        Size::new(
-            UPx::new(10000) + padding,
-            UPx::new(height.ceil() as _).max(context.gfx.clip_rect().size.height) + padding,
-        )
-    } else {
-        Size::new(
-            UPx::new(10000) + padding,
-            UPx::new(height.ceil() as _) + padding,
-        )
-    }
+            Size::new(
+                UPx::new(10000) + padding,
+                UPx::new(height.ceil() as _).max(context.gfx.clip_rect().size.height) + padding,
+            )
+        } else {
+            Size::new(
+                UPx::new(10000) + padding,
+                UPx::new(height.ceil() as _) + padding,
+            )
+        }
     }
 
     fn accept_focus(&mut self, _context: &mut cushy::context::EventContext<'_>) -> bool {
@@ -1081,7 +1114,7 @@ impl Widget for TextEditor {
             match input.logical_key {
                 Key::Named(NamedKey::Escape) => {
                     if self.kind == TextEditorKind::Code {
-                        if !self.search_panel_closed.get() {
+                        if !self.search_panel.closed.get() {
                             self.close_search_panel(context);
                             return HANDLED;
                         }
@@ -1475,7 +1508,7 @@ impl CodeEditor {
 
         let click_info = Dynamic::new(ClickInfo::default());
         let mut text_editor = TextEditor::new(doc.clone(), cmd_reg.clone(), click_info, modal);
-        let search_bar = search_bar(&mut text_editor);
+        let search_bar = search_bar(&mut text_editor.search_panel);
 
         let text_editor = text_editor.make_with_tag(editor_tag).scrollable();
         let scroller = text_editor.controller.clone();
@@ -1495,15 +1528,11 @@ impl CodeEditor {
     }
 }
 
-fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
+fn search_bar(option: &mut SearchPanelOption) -> cushy::widgets::Collapse {
     let (search_tag, search_bar_id) = WidgetTag::new();
-    text_editor.search_bar_id = Some(search_bar_id);
-    let match_count = (
-        &text_editor.search_term,
-        &text_editor.selected_match,
-        &text_editor.items_matches,
-    )
-        .map_each(|(s, a, b)| {
+    option.id = Some(search_bar_id);
+    let match_count =
+        (&option.text, &option.selected_match, &option.matches).map_each(|(s, a, b)| {
             if b.is_empty() {
                 "0/0".to_string()
             } else if s.rope.len_chars() > 0 {
@@ -1513,32 +1542,30 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
             }
         });
 
-    let search_match = text_editor.items_matches.map_each(|s| !s.is_empty());
+    let search_match = option.matches.map_each(|s| !s.is_empty());
 
-    let action_up =
-        (&text_editor.selected_match, &text_editor.items_matches).with_clone(|(idx, items)| {
-            move || {
-                if items.get().is_empty() {
-                    return;
-                }
-                *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
+    let action_up = (&option.selected_match, &option.matches).with_clone(|(idx, items)| {
+        move || {
+            if items.get().is_empty() {
+                return;
             }
-        });
-    let action_down =
-        (&text_editor.selected_match, &text_editor.items_matches).with_clone(|(idx, items)| {
-            move || {
-                if items.get().is_empty() {
-                    return;
-                }
-                *idx.lock() = (idx.get() + 1) % items.get().len();
+            *idx.lock() = (idx.get() + items.get().len() - 1) % items.get().len();
+        }
+    });
+    let action_down = (&option.selected_match, &option.matches).with_clone(|(idx, items)| {
+        move || {
+            if items.get().is_empty() {
+                return;
             }
-        });
+            *idx.lock() = (idx.get() + 1) % items.get().len();
+        }
+    });
     let action_enter = action_down.clone();
 
     "Search: "
         .and(
             Custom::new(
-                TextEditor::as_input(text_editor.search_term.clone())
+                TextEditor::as_input(option.text.clone())
                     .make_with_tag(search_tag)
                     .scrollable_horizontally()
                     .with(&ScrollBarThickness, Lp::points(0))
@@ -1571,7 +1598,7 @@ fn search_bar(text_editor: &mut TextEditor) -> cushy::widgets::Collapse {
                 .with_enabled(search_match.clone()),
         )
         .into_columns()
-        .collapse_vertically(text_editor.search_panel_closed.clone())
+        .collapse_vertically(option.closed.clone())
 }
 
 impl WrapperWidget for CodeEditor {
