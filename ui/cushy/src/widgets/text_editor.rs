@@ -27,7 +27,7 @@ use cushy::widgets::scroll::ScrollBarThickness;
 
 use super::palette::PaletteState;
 use super::scroll::{ScrollController, WidgetScrollableExt};
-use cushy::widgets::Custom;
+use cushy::widgets::{Custom, Space};
 use cushy::{context, define_components, ModifiersExt, WithClone};
 use ndoc::syntax::ThemeSetRegistry;
 use ndoc::{Document, Position, Selection};
@@ -193,6 +193,7 @@ pub struct SearchPanelOption {
     id: Option<WidgetId>,
     matches: Dynamic<Vec<(Position, Position)>>,
     selected_match: Dynamic<usize>,
+    case_sensitive: Dynamic<bool>,
 }
 
 impl SearchPanelOption {
@@ -203,6 +204,7 @@ impl SearchPanelOption {
             id: None,
             matches: Dynamic::new(Vec::new()),
             selected_match: Dynamic::new(0),
+            case_sensitive: Dynamic::new(false),
         }
     }
 }
@@ -265,18 +267,24 @@ impl TextEditor {
             let word_end = d.position_to_char(d.word_end(pos));
             d.rope.slice(word_start..word_end).to_string()
         });
-
         editor.search_panel.matches = editor.doc.with_clone(|doc| {
-            editor.search_panel.text.map_each(move |search_term| {
-                let mut items = Vec::new();
-                let mut idx = Position::new(0, 0);
-                let search_term = search_term.rope.to_string();
-                while let Some(i) = doc.get().find_from(&search_term, idx, false) {
-                    items.push(i);
-                    idx = i.1;
-                }
-                items
-            })
+            (
+                &editor.search_panel.case_sensitive.clone(),
+                &editor.search_panel.text,
+            )
+                .map_each(move |(case_insensitive, search_term)| {
+                    let mut items = Vec::new();
+                    let mut idx = Position::new(0, 0);
+                    let search_term = search_term.rope.to_string();
+                    while let Some(i) =
+                        doc.get()
+                            .find_from(&search_term, idx, false, *case_insensitive)
+                    {
+                        items.push(i);
+                        idx = i.1;
+                    }
+                    items
+                })
         });
 
         // TODO: not preformant. We need a way to cancel a foreach if the doc changes while we are still iterating
@@ -1531,16 +1539,18 @@ impl CodeEditor {
 fn search_bar(option: &mut SearchPanelOption) -> cushy::widgets::Collapse {
     let (search_tag, search_bar_id) = WidgetTag::new();
     option.id = Some(search_bar_id);
-    let match_count =
-        (&option.text, &option.selected_match, &option.matches).map_each(|(s, a, b)| {
-            if b.is_empty() {
+    let match_count = (&option.text, &option.selected_match).map_each({
+        let matches = option.matches.clone();
+        move |(s, a)| {
+            if matches.get().is_empty() {
                 "0/0".to_string()
             } else if s.rope.len_chars() > 0 {
-                format!("{}/{}", a + 1, b.len())
+                format!("{}/{}", a + 1, matches.get().len())
             } else {
                 "".to_string()
             }
-        });
+        }
+    });
 
     let search_match = option.matches.map_each(|s| !s.is_empty());
 
@@ -1569,7 +1579,8 @@ fn search_bar(option: &mut SearchPanelOption) -> cushy::widgets::Collapse {
                     .make_with_tag(search_tag)
                     .scrollable_horizontally()
                     .with(&ScrollBarThickness, Lp::points(0))
-                    .width(Lp::cm(5)),
+                    .width(Lp::cm(5))
+                    .centered(),
             )
             .on_keyboard_input(move |_, k, _, _| {
                 if k.state == ElementState::Pressed && k.logical_key == Key::Named(NamedKey::Enter)
@@ -1581,12 +1592,15 @@ fn search_bar(option: &mut SearchPanelOption) -> cushy::widgets::Collapse {
                 }
             }),
         )
-        .and(match_count)
+        .and("aA".into_checkbox(option.case_sensitive.clone()).centered())
+        .and(Space::clear().width(Lp::mm(1)))
+        .and(match_count.centered())
         .and(
             "↑"
                 .into_button()
                 .on_click(move |_| action_up())
-                .with_enabled(search_match.clone()),
+                .with_enabled(search_match.clone())
+                .centered(),
         )
         .and(
             "↓"
@@ -1595,7 +1609,8 @@ fn search_bar(option: &mut SearchPanelOption) -> cushy::widgets::Collapse {
                     action_down()
                     // TODO: refocus
                 })
-                .with_enabled(search_match.clone()),
+                .with_enabled(search_match.clone())
+                .centered(),
         )
         .into_columns()
         .collapse_vertically(option.closed.clone())

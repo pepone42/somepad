@@ -501,6 +501,7 @@ impl Document {
         input: &str,
         position: Position,
         cycling: bool,
+        case_insensitive: bool,
     ) -> Option<(Position, Position)> {
         if input.is_empty() {
             return None;
@@ -511,7 +512,7 @@ impl Document {
         for i in char_idx..self.rope.len_chars() {
             let doc = self.rope.slice(i..).chars();
             let search = input.chars();
-            if search.zip(doc).all(|(ic, c)| ic == c) {
+            if search.zip(doc).all(|(ic, c)| if case_insensitive{  ic.eq_ignore_ascii_case(&c) } else {ic == c }) {
                 return Some((
                     self.char_to_position(i),
                     self.char_to_position(i + input.len()),
@@ -1175,7 +1176,7 @@ impl Document {
             .max_by_key(|s| s.generation)
             .unwrap()
             .duplicate();
-        let next = self.find_from(&content, s.end(), true);
+        let next = self.find_from(&content, s.end(), true, true);
         if let Some((start, end)) = next {
             s.tail = start;
             s.head = end;
@@ -1749,9 +1750,9 @@ mod test {
         let mut doc = Document::default();
         doc.insert("hello world \n hell \n hello");
         let s = "hello";
-        let idx = doc.find_from(s, doc.char_to_position(0), false).unwrap();
+        let idx = doc.find_from(s, doc.char_to_position(0), false, true).unwrap();
         assert_eq!(idx, (doc.char_to_position(0), doc.char_to_position(5)));
-        let idx = doc.find_from(s, idx.1, false).unwrap();
+        let idx = doc.find_from(s, idx.1, false, true).unwrap();
         assert_eq!(idx, (doc.char_to_position(21), doc.char_to_position(26)));
     }
 
@@ -1760,7 +1761,7 @@ mod test {
         let mut doc = Document::default();
         doc.insert("hello world \n hell \n hello");
         let s = "wrold";
-        let idx = doc.find_from(s, doc.char_to_position(0), false);
+        let idx = doc.find_from(s, doc.char_to_position(0), false, true);
         assert_eq!(idx, None);
     }
 }
