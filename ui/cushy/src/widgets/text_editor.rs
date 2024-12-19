@@ -48,7 +48,7 @@ pub struct CodeEditorColors {
     bg_gutter: Color,
     bg_find_hightlight: Color,
     fg_find_hightlight: Option<Color>,
-    current_ling_highlight: Color,
+    current_line_highlight: Color,
 }
 
 impl CodeEditorColors {
@@ -102,7 +102,7 @@ impl CodeEditorColors {
                     .settings
                     .find_highlight_foreground
                     .map(|c| Color::new(c.r, c.g, c.b, c.a)),
-                current_ling_highlight: theme
+                current_line_highlight: theme
                     .settings
                     .line_highlight
                     .map(|c| Color::new(c.r, c.g, c.b, c.a))
@@ -119,7 +119,7 @@ impl CodeEditorColors {
                 bg_gutter: Color::WHITE,
                 bg_find_hightlight: context.get(&components::HighlightColor),
                 fg_find_hightlight: Some(context.get(&components::TextColor)),
-                current_ling_highlight: context.get(&components::HighlightColor),
+                current_line_highlight: context.get(&components::HighlightColor),
             }
         }
     }
@@ -770,7 +770,7 @@ impl Widget for TextEditor {
         let doc = self.doc.get();
 
         // highlight current line
-        if self.kind == TextEditorKind::Code && doc.selections.len() == 1 {
+        if self.kind == TextEditorKind::Code && doc.selections.len() == 1 && doc.selections[0].is_empty() {
             let line = doc.selections[0].head.line;
             let translation = context.gfx.translation();
             let y = units::Px::new(line as _) * self.line_height;
@@ -782,7 +782,7 @@ impl Widget for TextEditor {
                 ),
             );
             context.gfx.draw_shape(
-                Shape::filled_rect(rect, colors.current_ling_highlight)
+                Shape::filled_rect(rect, colors.current_line_highlight)
                     .translate_by(Point::new(padding - translation.x, padding)),
             );
         }
