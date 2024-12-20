@@ -189,10 +189,11 @@ impl Widget for FilteredList {
         let mut y = Px::ZERO;
         let selected_idx = self.filter.get().selected_idx.get();
         let line_height = context.gfx.line_height().into_upx(scale);
-        let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
-        let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
-        let fg_selected_color = context.get(&components::DefaultActiveForegroundColor);
-        let fg_hovered_color = context.get(&components::DefaultHoveredForegroundColor);
+        let bg_selected_color = context.get(&components::DefaultHoveredBackgroundColor);
+        let fg_selected_color = context.get(&components::DefaultHoveredForegroundColor);
+
+        let bg_hovered_color = context.get(&components::DefaultActiveBackgroundColor);
+        let fg_hovered_color = context.get(&components::DefaultActiveForegroundColor);
         let fg_color = context.get(&components::TextColor);
 
         if let Some(idx) = self.hovered_idx.get() {

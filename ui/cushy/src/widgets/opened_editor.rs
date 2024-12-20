@@ -39,12 +39,15 @@ impl Widget for OpenedEditor {
         let padding = Point::new(padding, padding);
 
         context.redraw_when_changed(&self.hovered_idx);
-        let bg_hovered_color = context.get(&components::DefaultHoveredBackgroundColor);
-        let bg_selected_color = context.get(&components::DefaultActiveBackgroundColor);
-        let fg_selected_color = context.get(&components::DefaultActiveForegroundColor);
-        let fg_hovered_color = context.get(&components::DefaultHoveredForegroundColor);
+        let bg_hovered_color = context.get(&components::DefaultActiveBackgroundColor);
+        let fg_hovered_color = context.get(&components::DefaultActiveForegroundColor);
+
+        let bg_selected_color = context.get(&components::DefaultHoveredBackgroundColor);
+        let fg_selected_color = context.get(&components::DefaultHoveredForegroundColor);
+        
         let fg_color = context.get(&components::TextColor);
         let bg_color = context.get(&components::WidgetBackground);
+
         let scale = context.gfx.scale();
         let size = context.gfx.size();
         let line_height = context.gfx.line_height().into_upx(scale);
