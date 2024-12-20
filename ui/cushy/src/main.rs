@@ -26,10 +26,10 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px, UPx};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::{components, ColorScheme};
+use cushy::styles::components;
 use cushy::styles::{
     ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList,
-    ThemePair, Weight,
+    ThemePair
 };
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
