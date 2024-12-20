@@ -39,8 +39,8 @@ impl StatusBar {
                     let eol = eol.clone();
                     let encoding = encoding.clone();
                     let syntax = syntax.clone();
-                    d[*c]
-                        .for_each(move |doc| {
+                    if let Some(doc) = d.get(*c) {
+                        doc.for_each(move |doc| {
                             filename.replace(format!(
                                 "{}{}",
                                 doc.file_name
@@ -71,6 +71,7 @@ impl StatusBar {
                             syntax.replace(doc.file_info.syntax.name.clone());
                         })
                         .persist();
+                    }
                 }
             })
             .persist();
