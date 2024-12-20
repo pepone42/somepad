@@ -11,8 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.82"
-#cushy = {git = "https://github.com/khonsulabs/cushy"}
-cushy = {git = "https://github.com/hydra/cushy", branch = "fix-compilation-failure-1"}
+cushy = {git = "https://github.com/khonsulabs/cushy"}
 ndoc = { version = "0.1.0", path = "../../ndoc" }
 serde = { version = "1.0.200", features = ["derive"] }
 smol_str = "0.2.1"

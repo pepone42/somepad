@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 use cushy::figures::units::{Lp, Px, UPx};
 
 use cushy::kludgine::cosmic_text::FontSystem;
-use cushy::styles::components;
+use cushy::styles::{components, ColorScheme};
 use cushy::styles::{
     ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList,
     ThemePair, Weight,
@@ -444,62 +444,80 @@ impl Default for CommandsRegistry {
     }
 }
 
+impl CommandsRegistry {
+    pub fn register() -> Self {
+        let mut cmd_reg = CommandsRegistry::new();
+
+        cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
+        cmd_reg.window.insert(NEXT_DOC.id, NEXT_DOC);
+        cmd_reg.window.insert(PREV_DOC.id, PREV_DOC);
+
+        cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
+        cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
+        cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
+
+        cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
+        cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
+        cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);
+        cmd_reg.window.insert(SELECT_DOC.id, SELECT_DOC);
+        cmd_reg
+            .view
+            .insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
+        cmd_reg
+            .view
+            .insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
+        cmd_reg
+            .view
+            .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
+        cmd_reg
+            .view
+            .insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
+        cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
+        cmd_reg.view.insert(CHANGE_LANGUAGE.id, CHANGE_LANGUAGE);
+        cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
+        cmd_reg
+    }
+
+    fn bind_shortcuts(&mut self, settings: Settings) {
+        for (command_id, shortcut) in settings
+            .shortcuts
+            .iter()
+            .filter(|(id, _)| id.starts_with("editor."))
+        {
+            if let Some(cmd) = self.view.get(command_id.as_str()) {
+                self.view_shortcut.insert(shortcut.clone(), *cmd);
+            }
+        }
+
+        for (command_id, shortcut) in settings
+            .shortcuts
+            .iter()
+            .filter(|(id, _)| id.starts_with("window."))
+        {
+            if let Some(cmd) = self.window.get(command_id.as_str()) {
+                self.window_shortcut.insert(shortcut.clone(), *cmd);
+            }
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
+    // #[cfg(target_os = "windows")]
+    // let ui_font = FamilyOwned::Name("Segoe UI".to_string());
+    // #[cfg(not(target_os = "windows"))]
+    let ui_font = FamilyOwned::SansSerif;
+
     let settings = get_settings(); // force load settings
-    let theme =
-        ThemePair::from_scheme(&ColorSchemeBuilder::new(ColorSource::new(177.3, 0.5)).build());
+    let theme = ThemePair::from_scheme(
+        &ColorSchemeBuilder::new(ColorSource::new(-96.8, 0.1))
+            .neutral(ColorSource::new(-126.9, 0.2))
+            .build(),
+    );
 
-    let mut cmd_reg = CommandsRegistry::new();
-
-    cmd_reg.window.insert(NEW_DOC.id, NEW_DOC);
-    cmd_reg.window.insert(NEXT_DOC.id, NEXT_DOC);
-    cmd_reg.window.insert(PREV_DOC.id, PREV_DOC);
-
-    cmd_reg.view.insert(GOTO_LINE.id, GOTO_LINE);
-    cmd_reg.view.insert(UNDO_CMD.id, UNDO_CMD);
-    cmd_reg.view.insert(REDO_CMD.id, REDO_CMD);
-
-    cmd_reg.view.insert(SAVE_DOC_CMD.id, SAVE_DOC_CMD);
-    cmd_reg.window.insert(OPEN_DOC.id, OPEN_DOC);
-    cmd_reg.window.insert(CLOSE_DOC.id, CLOSE_DOC);
-    cmd_reg.window.insert(SELECT_DOC.id, SELECT_DOC);
-    cmd_reg
-        .view
-        .insert(DUPLICATE_SELECTION_DOWN.id, DUPLICATE_SELECTION_DOWN);
-    cmd_reg
-        .view
-        .insert(DUPLICATE_SELECTION_UP.id, DUPLICATE_SELECTION_UP);
-    cmd_reg
-        .view
-        .insert(DUPLICATE_SELECTION.id, DUPLICATE_SELECTION);
-    cmd_reg
-        .view
-        .insert(TOGGLE_SEARCH_PANEL.id, TOGGLE_SEARCH_PANEL);
-    cmd_reg.window.insert(CHANGE_THEME.id, CHANGE_THEME);
-    cmd_reg.view.insert(CHANGE_LANGUAGE.id, CHANGE_LANGUAGE);
-    cmd_reg.window.insert(SHOW_ALL_COMMAND.id, SHOW_ALL_COMMAND);
-
-    for (command_id, shortcut) in settings
-        .shortcuts
-        .iter()
-        .filter(|(id, _)| id.starts_with("editor."))
-    {
-        if let Some(cmd) = cmd_reg.view.get(command_id.as_str()) {
-            cmd_reg.view_shortcut.insert(shortcut.clone(), *cmd);
-        }
-    }
-
-    for (command_id, shortcut) in get_settings()
-        .shortcuts
-        .iter()
-        .filter(|(id, _)| id.starts_with("window."))
-    {
-        if let Some(cmd) = cmd_reg.window.get(command_id.as_str()) {
-            cmd_reg.window_shortcut.insert(shortcut.clone(), *cmd);
-        }
-    }
+    let mut cmd_reg = CommandsRegistry::register();
+    cmd_reg.bind_shortcuts(settings);
 
     let cmd_reg = Dynamic::new(cmd_reg);
     let modal = Modal::new();
@@ -534,11 +552,7 @@ fn main() -> anyhow::Result<()> {
         .into_layers()
         .themed(theme)
         .with(&components::BaseTextSize, Lp::points(11))
-        .with(&components::FontWeight, Weight::LIGHT)
-        .with(
-            &components::FontFamily,
-            FontFamilyList::from(FamilyOwned::Name("Segoe UI".to_string())),
-        )
+        .with(&components::FontFamily, FontFamilyList::from(ui_font))
         .with(
             &components::CornerRadius,
             CornerRadii::from(Dimension::Lp(Lp::points(0))),
