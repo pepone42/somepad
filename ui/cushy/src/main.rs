@@ -578,7 +578,7 @@ fn main() -> anyhow::Result<()> {
             false
         });
 
-    win.title = Value::Constant("SomePad".to_string());
+    win.title = Value::Constant("SomePad".into());
     let inner_size = Dynamic::new(Size::new(UPx::new(800), UPx::new(600)));
 
     win.inner_size(inner_size).run()?;
