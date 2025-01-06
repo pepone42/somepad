@@ -14,6 +14,7 @@ use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
+use widgets::input::Input;
 use widgets::palette::{Palette, PaletteState};
 use widgets::status_bar::StatusBar;
 use widgets::text_editor::{CodeEditor, TextEditor};
@@ -544,7 +545,8 @@ fn main() -> anyhow::Result<()> {
         .and(
             StatusBar::new(docs.clone(), cur_doc)
                 .centered()
-                .pad_by(Px::new(2)),
+                .pad_by(Px::new(2))
+                .and(Input::new(Dynamic::new("hello \n world".to_string())).height(Lp::cm(1))).into_rows(),
         )
         .into_rows()
         .gutter(Px::ZERO)
