@@ -551,7 +551,7 @@ fn main() -> anyhow::Result<()> {
         .and(modal.clone())
         .into_layers()
         .themed(theme)
-        .with(&components::BaseTextSize, Lp::points(11))
+        .with(&components::BaseTextSize, Lp::points(10))
         .with(&components::FontFamily, FontFamilyList::from(ui_font))
         .with(
             &components::CornerRadius,
