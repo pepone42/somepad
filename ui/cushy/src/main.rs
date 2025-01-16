@@ -484,9 +484,9 @@ impl CommandsRegistry {
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    // #[cfg(target_os = "windows")]
-    // let ui_font = FamilyOwned::Name("Segoe UI".to_string());
-    // #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "windows")]
+    let ui_font = FamilyOwned::Name("Segoe UI".to_string());
+    #[cfg(not(target_os = "windows"))]
     let ui_font = FamilyOwned::SansSerif;
 
     let settings = get_settings(); // force load settings
@@ -531,7 +531,7 @@ fn main() -> anyhow::Result<()> {
         .and(modal.clone())
         .into_layers()
         .themed(theme)
-        .with(&components::BaseTextSize, Lp::points(10))
+        .with(&components::BaseTextSize, Lp::points(9))
         .with(&components::FontFamily, FontFamilyList::from(ui_font))
         .with(
             &components::CornerRadius,
