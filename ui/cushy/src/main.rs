@@ -369,21 +369,16 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
             .accept(move |c, index, _| {
                 if items[index].0.starts_with("editor.") {
                     let text_editor_id = switcher.use_as(move |f: &EditorSwitcher| {
-                        f.current_editor().use_as(move |code_editor: &CodeEditor| {
-                            code_editor
-                                .editor
-                                .use_as(move |text_editor: &TextEditor| text_editor.id.unwrap())
-                        })
+                        f.current_editor()
+                            .use_as(move |text_editor: &TextEditor| text_editor.id.unwrap())
                     });
 
                     let mut editor_context = c.for_other(&text_editor_id).expect("editor context");
 
                     let cmd = *cmd_reg.get().view.get(items[index].0).unwrap();
                     switcher.use_as(|f: &EditorSwitcher| {
-                        f.current_editor().use_as(|code_editor: &CodeEditor| {
-                            code_editor.editor.use_as(|text_editor: &TextEditor| {
-                                (cmd.action)(text_editor_id, text_editor, &mut editor_context);
-                            })
+                        f.current_editor().use_as(|text_editor: &TextEditor| {
+                            (cmd.action)(text_editor_id, text_editor, &mut editor_context);
                         })
                     });
                 } else {

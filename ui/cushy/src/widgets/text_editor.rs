@@ -1506,8 +1506,7 @@ fn reset_text_attr(context: &mut GraphicsContext<'_, '_, '_, '_>) {
 #[derive(Debug)]
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
-    pub editor: WidgetInstance,
-    pub editor_id: WidgetId,
+    pub(super) editor: WidgetInstance,
 }
 
 impl CodeEditor {
@@ -1534,7 +1533,6 @@ impl CodeEditor {
         Self {
             child: child.into_ref(),
             editor,
-            editor_id,
         }
     }
 }
@@ -1639,7 +1637,7 @@ impl WrapperWidget for CodeEditor {
         context: &mut EventContext<'_>,
     ) -> EventHandling {
         // redirect all event to the editor
-        return context.for_other(&self.editor_id).unwrap().keyboard_input(
+        return context.for_other(&self.editor).unwrap().keyboard_input(
             device_id,
             input,
             is_synthetic,

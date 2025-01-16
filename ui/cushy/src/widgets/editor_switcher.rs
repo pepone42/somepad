@@ -34,10 +34,10 @@ impl EditorSwitcher {
             .get()
             .iter()
             .map(|d| {
-                let editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone())
-                    .make_widget();
-                let editor_instance = editor.clone();
-                let editor_ref = editor.into_ref();
+                let code_editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone());
+                let editor_instance = code_editor.editor.clone();
+                
+                let editor_ref = code_editor.make_widget().into_ref();
                 (d.get().id(), (editor_ref, editor_instance))
             })
             .collect();
