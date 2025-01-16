@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cushy::context::LayoutContext;
 use cushy::figures::Size;
 use cushy::value::{Dynamic, Source};
-use cushy::widget::{MakeWidget, WidgetRef, WrapperWidget};
+use cushy::widget::{MakeWidget, WidgetInstance, WidgetRef, WrapperWidget};
 use cushy::widgets::layers::Modal;
 use cushy::ConstraintLimit;
 use ndoc::Document;
@@ -18,7 +18,7 @@ pub struct EditorSwitcher {
     pub(super) current_doc: Dynamic<usize>,
 
     last_doc: usize,
-    pub editors: HashMap<usize, WidgetRef>,
+    pub editors: HashMap<usize, (WidgetRef, WidgetInstance)>,
     cmd_reg: Dynamic<CommandsRegistry>,
     modal: Modal,
 }
@@ -34,9 +34,11 @@ impl EditorSwitcher {
             .get()
             .iter()
             .map(|d| {
-                let editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone())
-                    .make_widget().into_ref();
-                (d.get().id(), editor)
+                let code_editor = CodeEditor::new(d.clone(), cmd_reg.clone(), modal.clone());
+                let editor_instance = code_editor.editor.clone();
+                
+                let editor_ref = code_editor.make_widget().into_ref();
+                (d.get().id(), (editor_ref, editor_instance))
             })
             .collect();
 
@@ -49,6 +51,10 @@ impl EditorSwitcher {
             modal,
         }
     }
+
+    pub fn current_editor(&self) -> WidgetInstance {
+        self.editors.get(&self.current_doc.get()).expect("a valid current document id").1.clone()
+    }
 }
 
 impl WrapperWidget for EditorSwitcher {
@@ -56,17 +62,17 @@ impl WrapperWidget for EditorSwitcher {
         let id = self.documents.get()[self.current_doc.get()].get().id();
 
         if let std::collections::hash_map::Entry::Vacant(e) = self.editors.entry(id) {
-            e.insert(
-                CodeEditor::new(
-                    self.documents.get()[self.current_doc.get()].clone(),
-                    self.cmd_reg.clone(),
-                    self.modal.clone(),
-                )
-                .make_widget()
-                .into_ref());
+            let editor_instance = CodeEditor::new(
+                self.documents.get()[self.current_doc.get()].clone(),
+                self.cmd_reg.clone(),
+                self.modal.clone(),
+            )
+            .make_widget();
+            let editor_ref = editor_instance.clone().into_ref();
+            e.insert((editor_ref, editor_instance));
         }
         let e = self.editors.get_mut(&id).unwrap();
-        e
+        &mut e.0
     }
 
     fn adjust_child_constraints(

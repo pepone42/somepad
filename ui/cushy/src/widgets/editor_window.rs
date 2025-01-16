@@ -8,8 +8,7 @@ use cushy::kludgine::app::winit::event::ElementState;
 use cushy::kludgine::app::winit::keyboard::ModifiersState;
 use cushy::value::{Dynamic, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetRef, WidgetTag, WrapperWidget,
-    HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, WidgetId, WidgetInstance, WidgetRef, WidgetTag, WrapperWidget, HANDLED, IGNORED
 };
 
 use cushy::widgets::layers::Modal;
@@ -34,9 +33,9 @@ pub struct EditorWindow {
     pub cmd_reg: Dynamic<CommandsRegistry>,
     pub mru_documents: Dynamic<HashMap<usize, SystemTime>>,
     focused: Dynamic<bool>,
-    pub editor_switcher_id: WidgetId,
+    pub editor_switcher: WidgetInstance,
     modal: Modal,
-    id: Option<WidgetId>,
+    pub id: Option<WidgetId>,
 }
 
 impl EditorWindow {
@@ -64,17 +63,18 @@ impl EditorWindow {
             width.clone(),
         );
 
+        let editor_switcher = EditorSwitcher::new(
+            documents.clone(),
+            current_doc.clone(),
+            cmd_reg.clone(),
+            modal.clone(),
+        )
+        .make_with_tag(editor_tag);
+
         let child = Scroll::vertical(opened_editor)
             .expand_vertically()
             .and(ResizeHandle::new(width))
-            .and(
-                EditorSwitcher::new(
-                    documents.clone(),
-                    current_doc.clone(),
-                    cmd_reg.clone(),
-                    modal.clone(),
-                )
-                .make_with_tag(editor_tag),
+            .and(editor_switcher.clone()
             )
             .into_columns()
             .gutter(Px::ZERO)
@@ -90,7 +90,7 @@ impl EditorWindow {
             current_doc: current_doc.clone(),
             cmd_reg,
             focused: Dynamic::new(false),
-            editor_switcher_id: editor_id,
+            editor_switcher,
             modal,
             id: None,
         }

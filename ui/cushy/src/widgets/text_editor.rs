@@ -19,8 +19,7 @@ use cushy::kludgine::{Drawable, DrawableExt};
 use cushy::styles::{components, Color, Weight};
 use cushy::value::{Destination, Source};
 use cushy::widget::{
-    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetTag, WrapperWidget,
-    HANDLED, IGNORED,
+    EventHandling, MakeWidget, MakeWidgetWithTag, Widget, WidgetId, WidgetInstance, WidgetTag, WrapperWidget, HANDLED, IGNORED
 };
 use cushy::widgets::layers::Modal;
 use cushy::widgets::scroll::ScrollBarThickness;
@@ -242,7 +241,7 @@ pub struct TextEditor {
     page_len: usize,
 
     modal: Modal,
-    id: Option<WidgetId>,
+    pub id: Option<WidgetId>,
 }
 
 impl TextEditor {
@@ -1507,7 +1506,7 @@ fn reset_text_attr(context: &mut GraphicsContext<'_, '_, '_, '_>) {
 #[derive(Debug)]
 pub struct CodeEditor {
     child: cushy::widget::WidgetRef,
-    pub editor_id: WidgetId,
+    pub(super) editor: WidgetInstance,
 }
 
 impl CodeEditor {
@@ -1518,7 +1517,9 @@ impl CodeEditor {
         let mut text_editor = TextEditor::new(doc.clone(), cmd_reg.clone(), click_info, modal);
         let search_bar = search_bar(&mut text_editor.search_panel);
 
-        let text_editor = text_editor.make_with_tag(editor_tag).scrollable();
+        let text_editor = text_editor.make_with_tag(editor_tag);
+        let editor = text_editor.clone();
+        let text_editor = text_editor.scrollable();
         let scroller = text_editor.controller.clone();
         let gutter = Gutter::new(doc.clone(), editor_id, scroller);
 
@@ -1531,7 +1532,7 @@ impl CodeEditor {
         .into_rows();
         Self {
             child: child.into_ref(),
-            editor_id,
+            editor,
         }
     }
 }
@@ -1636,7 +1637,7 @@ impl WrapperWidget for CodeEditor {
         context: &mut EventContext<'_>,
     ) -> EventHandling {
         // redirect all event to the editor
-        return context.for_other(&self.editor_id).unwrap().keyboard_input(
+        return context.for_other(&self.editor).unwrap().keyboard_input(
             device_id,
             input,
             is_synthetic,

@@ -3,21 +3,24 @@
 #[macro_use]
 mod shortcut;
 mod settings;
+mod utils;
 mod widgets;
 
 use cushy::context::EventContext;
 use cushy::figures::{Size, Zero};
 #[cfg(windows)]
 use cushy::kludgine::app::winit::platform::windows::WindowExtWindows;
+use cushy::kludgine::wgpu::naga::proc::index::GuardedIndex;
 use cushy::widgets::layers::Modal;
 use ndoc::syntax::ThemeSetRegistry;
 use rfd::FileDialog;
 use widgets::editor_switcher::EditorSwitcher;
 use widgets::editor_window::EditorWindow;
 use widgets::input::Input;
+use utils::DowncastWidget;
 use widgets::palette::{Palette, PaletteState};
 use widgets::status_bar::StatusBar;
-use widgets::text_editor::{CodeEditor, TextEditor};
+use widgets::text_editor::{self, CodeEditor, TextEditor};
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -29,8 +32,7 @@ use cushy::figures::units::{Lp, Px, UPx};
 use cushy::kludgine::cosmic_text::FontSystem;
 use cushy::styles::components;
 use cushy::styles::{
-    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList,
-    ThemePair
+    ColorSchemeBuilder, ColorSource, CornerRadii, Dimension, FamilyOwned, FontFamilyList, ThemePair,
 };
 use cushy::value::{Dynamic, Source, Value};
 use cushy::widget::{MakeWidget, MakeWidgetWithTag, WidgetId, WidgetTag};
@@ -359,54 +361,32 @@ const SHOW_ALL_COMMAND: WindowCommand = WindowCommand {
 
         let cmd_reg = w.cmd_reg.clone();
 
+        let switcher = w.editor_switcher.clone();
+        let editor_window = _c.widget().instance().clone();
+
         w.palette()
             .description("All Commands")
             .items(i)
             .accept(move |c, index, _| {
                 if items[index].0.starts_with("editor.") {
-                    let editor_id = {
-                        let (current_code_editor_id, doc_id) = {
-                            let wguard = c.widget().lock();
-                            let w = wguard.downcast_ref::<EditorWindow>().unwrap();
-                            (w.editor_switcher_id, w.current_doc().get().id())
-                        };
+                    let text_editor_id = switcher.use_as(move |f: &EditorSwitcher| {
+                        f.current_editor()
+                            .use_as(move |text_editor: &TextEditor| text_editor.id.unwrap())
+                    });
 
-                        let editor_switched_id = c
-                            .for_other(&current_code_editor_id)
-                            .unwrap()
-                            .widget()
-                            .lock()
-                            .downcast_ref::<EditorSwitcher>()
-                            .unwrap()
-                            .editors[&doc_id]
-                            .widget()
-                            .id();
-                        c.for_other(&editor_switched_id)
-                            .unwrap()
-                            .widget()
-                            .lock()
-                            .downcast_ref::<CodeEditor>()
-                            .unwrap()
-                            .editor_id
-                    };
+                    let mut editor_context = c.for_other(&text_editor_id).expect("editor context");
 
-                    let mut editor_context = c.for_other(&editor_id).unwrap();
-                    let t = unsafe {
-                        let wguard = editor_context.widget().lock();
-                        let t = wguard.downcast_ref::<TextEditor>().unwrap() as *const TextEditor;
-                        t.as_ref().unwrap()
-                    };
                     let cmd = *cmd_reg.get().view.get(items[index].0).unwrap();
-                    (cmd.action)(editor_id, t, &mut editor_context);
+                    switcher.use_as(|f: &EditorSwitcher| {
+                        f.current_editor().use_as(|text_editor: &TextEditor| {
+                            (cmd.action)(text_editor_id, text_editor, &mut editor_context);
+                        })
+                    });
                 } else {
-                    let w = unsafe {
-                        let wguard = c.widget().lock();
-                        let w =
-                            wguard.downcast_ref::<EditorWindow>().unwrap() as *const EditorWindow;
-                        w.as_ref().unwrap()
-                    };
                     let cmd = *cmd_reg.get().window.get(items[index].0).unwrap();
-                    (cmd.action)(c.widget().id(), w, c);
+                    editor_window.use_as(|w: &EditorWindow| {
+                        (cmd.action)(w.id.unwrap(), w, c);
+                    });
                 }
             })
             .show();
@@ -505,9 +485,9 @@ impl CommandsRegistry {
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    // #[cfg(target_os = "windows")]
-    // let ui_font = FamilyOwned::Name("Segoe UI".to_string());
-    // #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "windows")]
+    let ui_font = FamilyOwned::Name("Segoe UI".to_string());
+    #[cfg(not(target_os = "windows"))]
     let ui_font = FamilyOwned::SansSerif;
 
     let settings = get_settings(); // force load settings
@@ -553,7 +533,7 @@ fn main() -> anyhow::Result<()> {
         .and(modal.clone())
         .into_layers()
         .themed(theme)
-        .with(&components::BaseTextSize, Lp::points(11))
+        .with(&components::BaseTextSize, Lp::points(9))
         .with(&components::FontFamily, FontFamilyList::from(ui_font))
         .with(
             &components::CornerRadius,
@@ -580,7 +560,7 @@ fn main() -> anyhow::Result<()> {
             false
         });
 
-    win.title = Value::Constant("SomePad".to_string());
+    win.title = Value::Constant("SomePad".into());
     let inner_size = Dynamic::new(Size::new(UPx::new(800), UPx::new(600)));
 
     win.inner_size(inner_size).run()?;
