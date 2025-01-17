@@ -1,37 +1,51 @@
 use cushy::{
-    figures::{units::Px, FloatConversion, Point, Rect, ScreenScale, Size, Zero},
+    figures::{units::Px, FloatConversion, Point, Rect, ScreenScale, Size, Unit, Zero},
     kludgine::{
-        app::winit::keyboard::{Key, NamedKey},
-        cosmic_text::{rustybuzz::shape, Attrs, Buffer, Edit, Editor, Metrics, Shaping},
+        app::winit::{
+            event::ElementState,
+            keyboard::{Key, NamedKey},
+        },
+        cosmic_text::{rustybuzz::shape, Attrs, Buffer, Cursor, Edit, Editor, Metrics, Shaping},
         image::buffer,
         shapes::Shape,
         Drawable, DrawableExt, Kludgine,
     },
     styles::components,
-    value::{Dynamic, Source},
+    value::{Destination, Dynamic, Source},
     widget::{Widget, HANDLED, IGNORED},
 };
 
+use crate::shortcut::ModifiersCustomExt;
+
 #[derive(Debug)]
-pub struct Input {
+pub struct Input<'buffer> {
     text: Dynamic<String>,
-    cursor: cushy::kludgine::cosmic_text::Cursor,
-    editor: Editor,
+    redraw: Dynamic<bool>,
+    editor: Editor<'buffer>,
 }
 
-impl Input {
+impl<'buffer> Input<'buffer> {
     pub fn new(text: Dynamic<String>) -> Self {
-        let buffer = Buffer::new_empty(Metrics::new(0.0, 0.0));
+        let buffer = Buffer::new_empty(Metrics::new(9.0, 9.0));
+
+        let mut editor = Editor::new(buffer);
+        editor.set_cursor(Cursor::new(0, 0));
         Input {
             text,
-            cursor: cushy::kludgine::cosmic_text::Cursor::new(1, 4),
-            editor: Editor::new(buffer),
+            redraw: Dynamic::new(false),
+            editor,
         }
     }
 }
 
-impl Widget for Input {
+impl<'buffer: 'static> Widget for Input<'buffer> {
     fn redraw(&mut self, context: &mut cushy::context::GraphicsContext<'_, '_, '_, '_>) {
+        context.redraw_when_changed(&self.redraw);
+
+        if context.focused(true) {
+            context.draw_focus_ring();
+        }
+
         let scale = context.gfx.scale();
         let base_text_size = context
             .get(&components::BaseTextSize)
@@ -40,10 +54,41 @@ impl Widget for Input {
         let line_height = context.gfx.line_height().into_upx(scale).into_float();
         let size = context.gfx.size();
         let color_fg = context.get(&components::TextColor);
+        let color_cursor_fg = context.get(&components::HighlightColor);
 
         //let font_system = context.gfx.font_system();
         let metrics = Metrics::new(base_text_size, line_height);
-        self.editor.with_buffer(|buffer| {
+        let cursor = self.editor.cursor();
+        //dbg!(self.editor.cursor_position(), self.editor.selection());
+
+        let cursor_prosition = self.editor.cursor_position();
+        let selection = self.editor.selection_bounds();
+
+        self.editor.with_buffer_mut(|buffer| {
+            // draw selection
+            if let Some(selection) = selection {
+                for run in buffer.layout_runs() {
+                    let h = run.highlight(selection.0, selection.1);
+                    dbg!(h);
+                    if let Some(h) = h {
+                        let line_height = run.line_height.ceil() as i32;
+                        let start = Px::new(h.0.ceil() as i32);
+                        let end = Px::new(h.1.ceil() as i32);
+                        context.gfx.draw_shape(
+                            Shape::filled_rect(
+                                Rect::new(
+                                    Point::new(start, Px::new(run.line_top.ceil() as _)),
+                                    Size::new(end, Px::new(line_height)),
+                                ),
+                                color_cursor_fg,
+                            )
+                            .translate_by(Point::ZERO),
+                        )
+                    }
+                }
+            }
+
+            // draw text
             buffer.set_metrics(context.gfx.font_system(), metrics);
             buffer.set_text(
                 context.gfx.font_system(),
@@ -52,70 +97,43 @@ impl Widget for Input {
                 Shaping::Advanced,
             );
 
-            // self.buffer = Buffer::new(context.gfx.font_system(), metrics);
-            // self.buffer.set_text(
-            //     context.gfx.font_system(),
-            //     &self.text.get(),
-            //     Attrs::new(),
-            //     Shaping::Advanced,
-            // );
-            // self.buffer.set_size(
-            //     context.gfx.font_system(),
-            //     Some(size.width.into()),
-            //     Some(size.height.into()),
-            // );
-            // context.gfx.draw_text_buffer(
-            //     Drawable {
-            //         source: &self.buffer,
-            //         translation: Point::<Px>::default(),
-            //         opacity: None,
-            //         rotation: None,
-            //         scale: None,
-            //     },
-            //     color_fg,
-            //     cushy::kludgine::text::TextOrigin::TopLeft,
-            // );
+            buffer.set_size(
+                context.gfx.font_system(),
+                Some(size.width.into()),
+                Some(size.height.into()),
+            );
+            context.gfx.draw_text_buffer(
+                Drawable::<&Buffer, Px> {
+                    source: buffer,
+                    translation: Point::default(),
+                    opacity: None,
+                    rotation: None,
+                    scale: None,
+                },
+                color_fg,
+                cushy::kludgine::text::TextOrigin::TopLeft,
+            );
+
+            // draw cursor
+            let line_height = buffer
+                .layout_runs()
+                .filter(|lr| lr.line_i == cursor.line)
+                .map(|lr| lr.line_height.ceil() as i32)
+                .max()
+                .unwrap_or(0);
+            if let Some(cp) = cursor_prosition {
+                context.gfx.draw_shape(
+                    Shape::filled_rect(
+                        Rect::new(
+                            Point::new(Px::new(cp.0), Px::new(cp.1)),
+                            Size::new(Px::new(1), Px::new(line_height)),
+                        ),
+                        color_cursor_fg,
+                    )
+                    .translate_by(Point::ZERO),
+                )
+            }
         });
-        self.editor.draw(font_system, cache, text_color, cursor_color, selection_color, selected_text_color, f);
-        // let c = self
-        //     .buffer
-        //     .layout_cursor(context.gfx.font_system(), self.cursor);
-
-        // for lr in self.buffer.layout_runs() {
-        //     dbg!(lr.line_top);
-        //     dbg!(lr.glyphs[0].x_offset);
-        // }
-
-        // if let Some(c) = c {
-        //     let line = &self.buffer.lines[c.line];
-        //     let linetop = self
-        //         .buffer
-        //         .layout_runs()
-        //         .filter(|lr| lr.line_i == c.line)
-        //         .map(|lr| (lr.line_top, lr.line_height))
-        //         .collect::<Vec<_>>();
-        //     if let Some(ref layout) = line.layout_opt() {
-        //         let glyph = &layout[c.layout].glyphs[c.glyph];
-
-        //         dbg!(
-        //             glyph,
-        //             &layout[c.layout].max_ascent,
-        //             &layout[c.layout].max_descent,
-        //             c.line as f32 * line_height
-        //         );
-        //         context.gfx.draw_shape(
-        //             Shape::filled_rect(
-        //                 Rect::new(
-        //                     Point::new(glyph.x.into(), linetop[c.layout].0.into()),
-        //                     Size::new(Px::new(1), (linetop[c.layout].1).into()),
-        //                 ),
-        //                 color_fg,
-        //             )
-        //             .translate_by(Point::ZERO),
-        //         );
-        //     }
-        //     dbg!(c);
-        // }
     }
 
     fn keyboard_input(
@@ -125,14 +143,55 @@ impl Widget for Input {
         is_synthetic: bool,
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
-        match input.logical_key {
-            Key::Named(NamedKey::ArrowLeft) => HANDLED,
-            _ => IGNORED,
+        if input.state.is_pressed() {
+            if input.modifiers.shift()
+                && matches!(
+                    self.editor.selection(),
+                    cushy::kludgine::cosmic_text::Selection::None
+                )
+            {
+                self.editor
+                    .set_selection(cushy::kludgine::cosmic_text::Selection::Normal(
+                        self.editor.cursor(),
+                    ));
+            }
+            if !input.modifiers.shift() {
+                self.editor
+                    .set_selection(cushy::kludgine::cosmic_text::Selection::None);
+            }
+
+            match input.logical_key {
+                Key::Named(NamedKey::ArrowLeft) => {
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::Previous,
+                        ),
+                    );
+                    dbg!("left");
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::ArrowRight) => {
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::Next,
+                        ),
+                    );
+                    dbg!("right");
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                _ => IGNORED,
+            }
+        } else {
+            IGNORED
         }
     }
 
     fn focus(&mut self, context: &mut cushy::context::EventContext<'_>) {
-        dbg!("focus");
+        self.redraw.toggle();
     }
 
     fn accept_focus(&mut self, context: &mut cushy::context::EventContext<'_>) -> bool {
