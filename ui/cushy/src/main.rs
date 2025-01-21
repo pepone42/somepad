@@ -526,7 +526,7 @@ fn main() -> anyhow::Result<()> {
             StatusBar::new(docs.clone(), cur_doc)
                 .centered()
                 .pad_by(Px::new(2))
-                .and(Input::new(Dynamic::new("hello \n world".to_string())).height(Lp::cm(1))).into_rows(),
+                .and(Input::new("hello\nworld").height(Lp::cm(1))).into_rows(),
         )
         .into_rows()
         .gutter(Px::ZERO)

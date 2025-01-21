@@ -2,10 +2,10 @@ use cushy::{
     figures::{units::Px, FloatConversion, Point, Rect, ScreenScale, Size, Unit, Zero},
     kludgine::{
         app::winit::{
-            event::ElementState,
+            event::{ElementState, Modifiers},
             keyboard::{Key, NamedKey},
         },
-        cosmic_text::{rustybuzz::shape, Attrs, Buffer, Cursor, Edit, Editor, Metrics, Shaping},
+        cosmic_text::{rustybuzz::shape, Attrs, Buffer, Cursor, Edit, Editor, Metrics, Selection, Shaping},
         image::buffer,
         shapes::Shape,
         Drawable, DrawableExt, Kludgine,
@@ -13,27 +13,46 @@ use cushy::{
     styles::components,
     value::{Destination, Dynamic, Source},
     widget::{Widget, HANDLED, IGNORED},
+    widgets::layers::No,
+    ModifiersExt,
 };
 
 use crate::shortcut::ModifiersCustomExt;
 
 #[derive(Debug)]
 pub struct Input<'buffer> {
-    text: Dynamic<String>,
     redraw: Dynamic<bool>,
     editor: Editor<'buffer>,
 }
 
 impl<'buffer> Input<'buffer> {
-    pub fn new(text: Dynamic<String>) -> Self {
+    pub fn new(inital_text: &str) -> Self {
         let buffer = Buffer::new_empty(Metrics::new(9.0, 9.0));
 
         let mut editor = Editor::new(buffer);
         editor.set_cursor(Cursor::new(0, 0));
+        editor.insert_string(inital_text, None);
         Input {
-            text,
             redraw: Dynamic::new(false),
             editor,
+        }
+    }
+
+    fn toggle_selection_on_shift(&mut self, modifiers: Modifiers) {
+        if modifiers.shift()
+            && matches!(
+                self.editor.selection(),
+                cushy::kludgine::cosmic_text::Selection::None
+            )
+        {
+            self.editor
+                .set_selection(cushy::kludgine::cosmic_text::Selection::Normal(
+                    self.editor.cursor(),
+                ));
+        }
+        if !modifiers.shift() {
+            self.editor
+                .set_selection(cushy::kludgine::cosmic_text::Selection::None);
         }
     }
 }
@@ -69,7 +88,7 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
             if let Some(selection) = selection {
                 for run in buffer.layout_runs() {
                     let h = run.highlight(selection.0, selection.1);
-                    dbg!(h);
+
                     if let Some(h) = h {
                         let line_height = run.line_height.ceil() as i32;
                         let start = Px::new(h.0.ceil() as i32);
@@ -90,12 +109,12 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
 
             // draw text
             buffer.set_metrics(context.gfx.font_system(), metrics);
-            buffer.set_text(
-                context.gfx.font_system(),
-                &self.text.get(),
-                Attrs::new(),
-                Shaping::Advanced,
-            );
+            // buffer.set_text(
+            //     context.gfx.font_system(),
+            //     &self.text.get(),
+            //     Attrs::new(),
+            //     Shaping::Advanced,
+            // );
 
             buffer.set_size(
                 context.gfx.font_system(),
@@ -126,7 +145,7 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                     Shape::filled_rect(
                         Rect::new(
                             Point::new(Px::new(cp.0), Px::new(cp.1)),
-                            Size::new(Px::new(1), Px::new(line_height)),
+                            Size::new(Px::new(2), Px::new(line_height)),
                         ),
                         color_cursor_fg,
                     )
@@ -144,46 +163,109 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
         if input.state.is_pressed() {
-            if input.modifiers.shift()
-                && matches!(
-                    self.editor.selection(),
-                    cushy::kludgine::cosmic_text::Selection::None
-                )
-            {
-                self.editor
-                    .set_selection(cushy::kludgine::cosmic_text::Selection::Normal(
-                        self.editor.cursor(),
-                    ));
-            }
-            if !input.modifiers.shift() {
-                self.editor
-                    .set_selection(cushy::kludgine::cosmic_text::Selection::None);
-            }
-
             match input.logical_key {
                 Key::Named(NamedKey::ArrowLeft) => {
+                    self.toggle_selection_on_shift(input.modifiers);
                     self.editor.action(
                         context.kludgine.font_system(),
                         cushy::kludgine::cosmic_text::Action::Motion(
                             cushy::kludgine::cosmic_text::Motion::Previous,
                         ),
                     );
-                    dbg!("left");
                     self.redraw.toggle();
                     HANDLED
                 }
                 Key::Named(NamedKey::ArrowRight) => {
+                    self.toggle_selection_on_shift(input.modifiers);
                     self.editor.action(
                         context.kludgine.font_system(),
                         cushy::kludgine::cosmic_text::Action::Motion(
                             cushy::kludgine::cosmic_text::Motion::Next,
                         ),
                     );
-                    dbg!("right");
                     self.redraw.toggle();
                     HANDLED
                 }
-                _ => IGNORED,
+                Key::Named(NamedKey::ArrowUp) => {
+                    self.toggle_selection_on_shift(input.modifiers);
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::Up,
+                        ),
+                    );
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::ArrowDown) => {
+                    self.toggle_selection_on_shift(input.modifiers);
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::Down,
+                        ),
+                    );
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::Home) => {
+                    self.toggle_selection_on_shift(input.modifiers);
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::Home,
+                        ),
+                    );
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::End) => {
+                    self.toggle_selection_on_shift(input.modifiers);
+                    self.editor.action(
+                        context.kludgine.font_system(),
+                        cushy::kludgine::cosmic_text::Action::Motion(
+                            cushy::kludgine::cosmic_text::Motion::End,
+                        ),
+                    );
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    if !self.editor.delete_selection() {
+                        self.editor.action(
+                            context.kludgine.font_system(),
+                            cushy::kludgine::cosmic_text::Action::Backspace,
+                        );
+                    }
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), false);
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                Key::Named(NamedKey::Delete) => {
+                    if !self.editor.delete_selection() {
+                        self.editor.action(
+                            context.kludgine.font_system(),
+                            cushy::kludgine::cosmic_text::Action::Delete,
+                        );
+                    }
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), false);
+                    self.redraw.toggle();
+                    HANDLED
+                }
+                _ => {
+                    if input.text.is_some() && !input.modifiers.possible_shortcut() {
+                        self.editor.delete_selection();
+                        self.editor.insert_string(&input.text.unwrap(), None);
+                        self.editor
+                            .shape_as_needed(context.kludgine.font_system(), false);
+                        self.redraw.toggle();
+                        HANDLED
+                    } else {
+                        IGNORED
+                    }
+                }
             }
         } else {
             IGNORED
@@ -213,6 +295,30 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
         context: &mut cushy::context::EventContext<'_>,
     ) -> cushy::widget::EventHandling {
         context.focus();
+        if let Some(cursor) = self
+            .editor
+            .with_buffer(|b| b.hit(location.x.into_float(), location.y.into_float()))
+        {
+            self.editor.set_cursor(cursor);
+            self.editor.set_selection(Selection::None);
+            self.redraw.toggle();
+        }
         HANDLED
+    }
+
+    fn mouse_drag(
+            &mut self,
+            location: Point<Px>,
+            device_id: cushy::window::DeviceId,
+            button: cushy::kludgine::app::winit::event::MouseButton,
+            context: &mut cushy::context::EventContext<'_>,
+        ) {
+            if let Some(cursor) = self
+            .editor
+            .with_buffer(|b| b.hit(location.x.into_float(), location.y.into_float()))
+        {
+            self.editor.set_selection(Selection::Normal(cursor));
+            self.redraw.toggle();
+        }
     }
 }
