@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use cushy::{
     figures::{units::Px, FloatConversion, Point, Rect, ScreenScale, Size, Unit, Zero},
     kludgine::{
@@ -25,13 +27,17 @@ pub struct Input<'buffer> {
     editor: Editor<'buffer>,
 }
 
+
+
 impl<'buffer> Input<'buffer> {
     pub fn new(inital_text: &str) -> Self {
         let buffer = Buffer::new_empty(Metrics::new(9.0, 9.0));
 
-        let mut editor = Editor::new(buffer);
+        let mut editor = Editor::new(buffer.clone());
         editor.set_cursor(Cursor::new(0, 0));
         editor.insert_string(inital_text, None);
+        
+       
         Input {
             redraw: Dynamic::new(false),
             editor,
@@ -172,6 +178,8 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                             cushy::kludgine::cosmic_text::Motion::Previous,
                         ),
                     );
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), true);
                     self.redraw.toggle();
                     HANDLED
                 }
@@ -183,6 +191,8 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                             cushy::kludgine::cosmic_text::Motion::Next,
                         ),
                     );
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), true);
                     self.redraw.toggle();
                     HANDLED
                 }
@@ -194,6 +204,8 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                             cushy::kludgine::cosmic_text::Motion::Up,
                         ),
                     );
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), true);
                     self.redraw.toggle();
                     HANDLED
                 }
@@ -205,6 +217,8 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                             cushy::kludgine::cosmic_text::Motion::Down,
                         ),
                     );
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), true);
                     self.redraw.toggle();
                     HANDLED
                 }
@@ -252,6 +266,16 @@ impl<'buffer: 'static> Widget for Input<'buffer> {
                     self.editor
                         .shape_as_needed(context.kludgine.font_system(), false);
                     self.redraw.toggle();
+                    HANDLED
+                }
+                // Enter
+                Key::Named(NamedKey::Enter) => {
+                    self.editor.delete_selection();
+                    self.editor.insert_string("\n", None);
+                    self.editor
+                        .shape_as_needed(context.kludgine.font_system(), true);
+                    self.redraw.toggle();
+                
                     HANDLED
                 }
                 _ => {
