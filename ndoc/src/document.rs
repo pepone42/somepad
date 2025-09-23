@@ -1109,6 +1109,11 @@ impl Document {
         }]
     }
 
+    /// get the main selection
+    pub fn get_main_selection(&self) -> Selection {
+        *self.selections.first().expect("there is allways at least 1 selection")
+    }
+
     /// Specify the main selection. Also cancel multi-cursor
     pub fn set_main_selection(&mut self, head: Position, tail: Position) {
         self.selections = vec![Selection {
@@ -1117,6 +1122,14 @@ impl Document {
             is_clone: false,
             generation: 0,
         }]
+    }
+
+    pub fn set_main_head(&mut self, head: Position) {
+        self.selections.first_mut().expect("there is allways at least 1 selection").head = head;
+    }
+
+    pub fn set_main_tail(&mut self, tail: Position) {
+        self.selections.first_mut().expect("there is allways at least 1 selection").tail = tail;
     }
 
     pub fn cancel_multi_cursor(&mut self) {
@@ -1337,17 +1350,30 @@ impl Document {
 
     /// return the byte index of the visible column index
     pub fn vcol_to_byte(&self, line_idx: usize, vcol_idx: usize) -> usize {
-        let rope = Rope::from_str(&self.get_visible_line(line_idx));
-        let char_idx = rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
-            .nth(vcol_idx)
-            .unwrap();
-        rope.char_to_byte(char_idx)
+        let char_idx = self.vcol_to_char(line_idx,vcol_idx);
+        self.rope.char_to_byte(char_idx)
     }
 
     /// return the visible column index of the byte index
     pub fn byte_to_vcol(&self, line_idx: usize, byte_idx: usize) -> usize {
         let rope = Rope::from_str(&self.get_visible_line(line_idx));
         let char_idx = rope.byte_to_char(byte_idx);
+        rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
+            .take_while(|i| *i < char_idx)
+            .count()
+    }
+
+    /// return the char index of the visible column index
+    pub fn vcol_to_char(&self, line_idx: usize, vcol_idx: usize) -> usize {
+        let rope = Rope::from_str(&self.get_visible_line(line_idx));
+        rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
+            .nth(vcol_idx)
+            .unwrap()
+    }
+
+    /// return the visible column index of the char index
+    pub fn char_to_vcol(&self, line_idx: usize, char_idx: usize) -> usize {
+        let rope = Rope::from_str(&self.get_visible_line(line_idx));
         rope_utils::NextGraphemeIdxIterator::new(&rope.slice(..))
             .take_while(|i| *i < char_idx)
             .count()
@@ -1360,6 +1386,16 @@ impl Document {
 
     pub fn byte_to_col(&self, line_idx: usize, byte_idx: usize) -> usize {
         let vcol_idx = self.byte_to_vcol(line_idx, byte_idx);
+        self.vcol_to_col(line_idx, vcol_idx)
+    }
+
+    pub fn col_to_char(&self, line_idx: usize, col_idx: usize) -> usize {
+        let vcol_idx = self.col_to_vcol(line_idx, col_idx);
+        self.vcol_to_char(line_idx, vcol_idx)
+    }
+
+    pub fn char_to_col(&self, line_idx: usize, char_idx: usize) -> usize {
+        let vcol_idx = self.char_to_vcol(line_idx, char_idx);
         self.vcol_to_col(line_idx, vcol_idx)
     }
 
