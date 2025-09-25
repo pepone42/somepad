@@ -1048,6 +1048,9 @@ impl Document {
 
     /// Expand the selections to the line pointed by the given [position](Position)
     pub fn expand_selection_by_line(&mut self, position: Position) {
+        if position.line>= self.rope.len_lines() {
+            return;
+        }
         match position {
             p if p < self.selections[0].tail => {
                 let end = self.selections[0].end();
@@ -1088,6 +1091,9 @@ impl Document {
     }
 
     pub fn select_line(&mut self, line: usize) {
+        if line>= self.rope.len_lines() {
+            return;
+        }
         let tail = self.line_start(line);
         let head = self.line_end_full(line);
         self.selections = vec![Selection {
